@@ -1,0 +1,34 @@
+option java_package = "com.chesnok.contract.account";
+option optimize_for = SPEED;
+
+message Event {
+    message AccountOpened {
+        required string accountId = 1;
+    }
+    message HoldPlaced {
+        required string accountId = 1;
+        required string transactionId = 2;
+        required uint32 amount = 3;
+    }
+    message HoldCancelled {
+        required string accountId = 1;
+        required string transactionId = 2;
+    }
+    message HoldCleared {
+        required string accountId = 1;
+        required string transactionId = 2;
+        required uint32 amount = 3;
+    }
+    message AccountCredited {
+        required string accountId = 1;
+        required string transactionId = 2;
+        required uint32 amount = 3;
+    }
+    oneof payload {
+        AccountOpened accountOpened = 1;
+        HoldPlaced holdPlaced = 2;
+        HoldCancelled holdCancelled = 3;
+        HoldCleared holdCleared = 4;
+        AccountCredited accountCredited = 5;
+    }
+}

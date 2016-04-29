@@ -1,0 +1,21 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>utf-8</charset>
+            <pattern>%-20d{dd/MM/YYYY HH:mm:ss.SSS} %-5level %logger - %msg %X{JoinedMdc}%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="DEBUG">
+        <appender-ref ref="STDOUT" />
+    </root>
+    <logger name="org.apache.kafka.clients.consumer.KafkaConsumer" level="WARN" />
+    <logger name="akka.kafka.internal.CommittableConsumerStage" level="WARN" />
+    <logger name="akka.kafka.internal.PlainConsumerStage" level="WARN" />
+    <logger name="akka.cluster.sharding.PersistentShardCoordinator" level="WARN" />
+    <logger name="akka.cluster.sharding.ShardRegion" level="WARN" />
+    <logger name="akka.cluster.sharding.PersistentShard" level="WARN" />
+    <logger name="org.apache.kafka.clients.consumer.internals.AbstractCoordinator" level="WARN" />
+    <logger name="com.datastax.driver.core.Connection" level="WARN" />
+    <logger name="com.websudos.phantom" level="WARN" />
+</configuration>

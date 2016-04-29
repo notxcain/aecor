@@ -1,0 +1,9 @@
+{
+  "AuthorizePayment": {
+    "cardAuthorizationId": "9",
+    "accountId": "DMITRY",
+    "amount": 5000,
+    "acquireId": 1,
+    "terminalId": 1
+  }
+}

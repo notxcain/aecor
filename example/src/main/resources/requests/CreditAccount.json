@@ -1,0 +1,7 @@
+{
+  "CreditAccount": {
+    "accountId": "DMITRY",
+    "transactionId": "credit-evian-1",
+    "amount": "1000000"
+  }
+}

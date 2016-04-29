@@ -1,0 +1,14 @@
+option java_package = "io.aecor.message.protobuf";
+option optimize_for = SPEED;
+
+message DomainEvent {
+  required string id = 1;
+  required bytes payload = 4;
+  required Timestamp timestamp = 5;
+  required string causedBy = 6;
+}
+
+message Timestamp {
+  //UTC timestamp
+  required uint64 millis = 1;
+}
