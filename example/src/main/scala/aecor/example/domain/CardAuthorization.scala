@@ -62,9 +62,9 @@ object CardAuthorization {
     }
     case Created(id) => {
       case e: AcceptCardAuthorization =>
-        CommandHandlerResult.accept(CardAuthorizationAccepted(id))
+        accept(CardAuthorizationAccepted(id))
       case e: DeclineCardAuthorization =>
-        CommandHandlerResult.accept(CardAuthorizationDeclined(id, e.reason))
+        accept(CardAuthorizationDeclined(id, e.reason))
       case e: CreateCardAuthorization =>
         reject(AlreadyExists)
     }
