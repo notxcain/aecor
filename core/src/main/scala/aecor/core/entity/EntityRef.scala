@@ -11,7 +11,7 @@ import scala.reflect.ClassTag
 
 abstract class EntityRef[Entity] {
   private [aecor] def actorRef: ActorRef
-  def ?[Command, Ack](c: Message[Command, Ack])(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, Command]): Future[Response[contract.Rejection, Ack]]
+  def handle[Command](id: String, command: Command)(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, Command]): Future[Result[contract.Rejection]]
 }
 
 class RemoteEntityRef[C: ClassTag, R](handler: C => Future[Result[R]])(implicit actorSystem: ActorSystem) {

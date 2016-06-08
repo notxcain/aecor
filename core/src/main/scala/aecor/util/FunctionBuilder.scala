@@ -12,11 +12,11 @@ object FunctionBuilder {
   private val syntax = new FunctionBuilderSyntax {}
 
   trait Apply[In] {
-    def apply[H, Out](f: FunctionBuilderSyntax => H)(implicit ev: FunctionBuilder[H, In, Out]): In => Out
+    def apply[H, Out](f: H)(implicit ev: FunctionBuilder[H, In, Out]): In => Out
   }
   def apply[In] = new Apply[In] {
-    override def apply[H, Out](f: (FunctionBuilderSyntax) => H)(implicit ev: FunctionBuilder[H, In, Out]): In => Out =
-      ev(f(syntax))
+    override def apply[H, Out](f: H)(implicit ev: FunctionBuilder[H, In, Out]): In => Out =
+      ev(f)
   }
 
   implicit def hNil[Out]: FunctionBuilder[HNil, CNil, Out] = new FunctionBuilder[HNil, CNil, Out] {

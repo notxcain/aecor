@@ -2,7 +2,7 @@ package aecor.core
 
 import aecor.core.EventBus.PublishMessage
 import akka.actor.{Actor, ActorLogging, ActorRef, Stash}
-import akka.kafka.ProducerSettings
+import akka.kafka.{ProducerMessage, ProducerSettings}
 import akka.kafka.scaladsl.Producer
 import akka.pattern.pipe
 import akka.stream.QueueOfferResult.{Dropped, Enqueued, Failure, QueueClosed}
@@ -19,16 +19,16 @@ class EventBus(producerSettings: ProducerSettings[String, DomainEvent], bufferSi
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system).withSupervisionStrategy(_ => Supervision.Restart))
   import materializer._
 
-  type Queue = SourceQueueWithComplete[Producer.Message[String, DomainEvent, (ActorRef, Any)]]
+  type Queue = SourceQueueWithComplete[ProducerMessage.Message[String, DomainEvent, (ActorRef, Any)]]
 
   def offering(queue: Queue): Receive = {
     case PublishMessage(topic, key, message, passThrough, replyTo) =>
       val record = new ProducerRecord(topic, key, message)
-      val producerMessage = Producer.Message(record, replyTo -> passThrough)
+      val producerMessage = ProducerMessage.Message(record, replyTo -> passThrough)
       queue.offer(producerMessage).pipeTo(self)
       context.become(waitingForOfferResult(producerMessage, queue))
   }
-  def waitingForOfferResult(producerMessage: Producer.Message[String, DomainEvent, (ActorRef, Any)], queue: Queue): Receive = {
+  def waitingForOfferResult(producerMessage: ProducerMessage.Message[String, DomainEvent, (ActorRef, Any)], queue: Queue): Receive = {
     case qor: QueueOfferResult => qor match {
       case Enqueued =>
         unstashAll()
@@ -54,7 +54,7 @@ class EventBus(producerSettings: ProducerSettings[String, DomainEvent], bufferSi
   }
 
   def createQueue = Source
-    .queue[Producer.Message[String, DomainEvent, (ActorRef, Any)]](bufferSize, OverflowStrategy.dropNew)
+    .queue[ProducerMessage.Message[String, DomainEvent, (ActorRef, Any)]](bufferSize, OverflowStrategy.dropNew)
     .viaMat(Producer.flow(producerSettings))(Keep.left)
     .map(_.message.passThrough)
     .to(Sink.foreach {

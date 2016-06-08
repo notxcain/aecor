@@ -1,9 +1,9 @@
 package aecor.core.process
 
-import akka.actor.{Actor, ActorLogging, ActorRef, Props}
-import akka.kafka.scaladsl.Consumer.{Committable, CommittableMessage, PartitionOffset}
 import aecor.core.message.{Message, MessageId}
 import aecor.core.process.ProcessEventAdapter.{Ack, Forward, Forwarded, Init}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props}
+import akka.kafka.ConsumerMessage.{Committable, CommittableMessage, PartitionOffset}
 import io.aecor.message.protobuf.Messages.DomainEvent
 
 trait Identifier[A] {
@@ -31,14 +31,14 @@ class ProcessEventAdapter[T](recipient: ActorRef, f: (String, DomainEvent) => Op
           recipient ! Message(MessageId(value.id), t, Ack(cm.partitionOffset))
         case None =>
           log.debug("Ignoring message [{}] with offset [{}]", value, offset)
-          offset.commit.onComplete { commitResult =>
+          offset.commitScaladsl.onComplete { commitResult =>
             log.debug("Commit result [{}]", commitResult)
           }
       }
       sender ! Forwarded
     case Ack(offset) =>
       map.get(offset).foreach { c =>
-        c.commit.onComplete { commitResult =>
+        c.commitScaladsl().onComplete { commitResult =>
           log.debug("Commit result [{}]", commitResult)
         }
         map.remove(offset)

@@ -1,10 +1,11 @@
 package aecor.core.entity
 
-import aecor.core.entity.EntityActor.Response
-import aecor.core.message.{Correlation, Message}
+import aecor.core.entity.EntityActor.{Response, Result}
+import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
 import aecor.core.serialization.Encoder
+import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem, Props}
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.pattern._
 import akka.util.Timeout
 
@@ -32,12 +33,22 @@ object EntityActorRegion {
           typeName = entityName.value,
           entityProps = props,
           settings = ClusterShardingSettings(actorSystem),
-          extractEntityId = Correlation.extractEntityId[Command],
-          extractShardId = Correlation.extractShardId[Command](numberOfShards)
+          extractEntityId = extractEntityId,
+          extractShardId = extractShardId
         )
 
-        override def ?[C, Ack](c: Message[C, Ack])(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, C]): Future[Response[contract.Rejection, Ack]] =
-          (actorRef ? c).mapTo[Response[contract.Rejection, Ack]]
+        def extractEntityId: ShardRegion.ExtractEntityId = {
+          case m @ Message(_, c: Command, _) ⇒ (correlation(c), m)
+          case m @ Message(_, c: MarkEventAsPublished, _) => (c.entityId, c)
+        }
+
+        def extractShardId: ShardRegion.ExtractShardId = {
+          case m @ Message(_, c: Command, _) => ExtractShardId(correlation(c), numberOfShards)
+          case m @ Message(_, c: MarkEventAsPublished, _) => ExtractShardId(c.entityId, numberOfShards)
+        }
+
+        override def handle[C](id: String, command: C)(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, C]): Future[Result[contract.Rejection]] =
+          (actorRef ? Message(MessageId(id), command, NotUsed)).mapTo[Response[contract.Rejection, NotUsed]].map(_.result)
       }
     }
   }

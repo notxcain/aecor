@@ -11,8 +11,8 @@ import shapeless._
 object CardAuthorizationProcess extends ProcessSyntax {
   type Input = CardAuthorizationCreated :+: HoldPlaced :+: CNil
 
-  implicit val correlation: Correlation[Input] = Correlation.instance(
-    FunctionBuilder[Input] { syntax =>
+  val correlation: Correlation[Input] = Correlation.instance(
+    FunctionBuilder[Input] {
       at[CardAuthorizationCreated](_.transactionId) ::
       at[HoldPlaced](_.transactionId) ::
       HNil
@@ -31,7 +31,7 @@ object CardAuthorizationProcess extends ProcessSyntax {
     def declineAuthorization(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) =
       cardAuthorizations.deliver(DeclineCardAuthorization(cardAuthorizationId, reason)).ignoringRejection
 
-    FunctionBuilder[Input] { _ =>
+    FunctionBuilder[Input] {
       when[CardAuthorizationCreated] { case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, _, _, transactionId) =>
         accounts.deliver(PlaceHold(accountId, transactionId, amount)).handlingRejection {
           case Account.AccountDoesNotExist =>
