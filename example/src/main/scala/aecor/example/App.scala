@@ -16,8 +16,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.kafka.ProducerSettings
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
-import akka.stream.{ActorMaterializer, ThrottleMode}
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Sink
 import akka.util.Timeout
 import cats.data.Xor
 import com.typesafe.config.ConfigFactory
@@ -186,7 +186,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
 
   implicit val askTimeout: Timeout = Timeout(5.seconds)
-  
+
 
   val route = path("check") {
     get {
