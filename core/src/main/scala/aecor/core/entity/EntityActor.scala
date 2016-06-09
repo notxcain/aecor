@@ -8,7 +8,7 @@ import aecor.core.EventBus
 import aecor.core.entity.CommandHandlerResult.{Accept, Defer, Reject}
 import aecor.core.message.{Message, MessageId}
 import aecor.core.serialization.Encoder
-import akka.actor.{ActorRef, Stash}
+import akka.actor.{ActorRef, Props, Stash}
 import akka.pattern._
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted, SnapshotOffer}
 import com.google.protobuf.ByteString
@@ -26,6 +26,13 @@ private [aecor] object EntityActor {
   case object Accepted extends Result[Nothing]
   case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
   case object Stop
+  def props[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection]
+  (entityName: String,
+   initialState: State,
+   commandHandler: CommandHandler.Aux[State, Command, Event, Rejection],
+   eventProjector: EventProjector[State, Event],
+   messageQueue: ActorRef
+  ): Props = Props(new EntityActor(entityName, initialState, commandHandler, eventProjector, messageQueue))
 }
 
 private [aecor] object PublishState {
@@ -33,23 +40,23 @@ private [aecor] object PublishState {
 }
 
 private [aecor] case class PublishState[Event](publishedEventCounter: Long, eventNrToDeliveryId: Map[Long, Long], queue: Queue[EntityEventEnvelope[Event]]) {
-  def head: Option[EntityEventEnvelope[Event]] = queue.headOption
+  def outstandingEvent: Option[EntityEventEnvelope[Event]] = queue.headOption
   def enqueue(event: EntityEventEnvelope[Event]): PublishState[Event] =
     copy(queue = queue.enqueue(event))
 
   def withDeliveryId(eventNr: Long, deliveryId: Long): PublishState[Event] = copy(eventNrToDeliveryId = eventNrToDeliveryId.updated(eventNr, deliveryId))
   def deliveryId(eventNr: Long): Option[Long] = eventNrToDeliveryId.get(eventNr)
 
-  def markOutstandingAsPublished: PublishState[Event] =
+  def markOutstandingEventAsPublished: PublishState[Event] =
     queue.dequeueOption.map {
       case (_, newQueue) =>
         copy(publishedEventCounter = publishedEventCounter + 1, queue = newQueue, eventNrToDeliveryId = eventNrToDeliveryId - publishedEventCounter)
     }.getOrElse(this)
 }
+
 private [aecor] sealed trait EntityActorEvent
 private [aecor] case class EntityEventEnvelope[Event](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent
 private [aecor] case class EventPublished(eventNr: Long) extends EntityActorEvent
-
 private [aecor] case class MarkEventAsPublished(entityId: String, eventNr: Long)
 
 private [aecor] case class EntityActorInternalState[State, Event](entityState: State, processedCommands: Set[MessageId]) {
@@ -145,9 +152,9 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   def applyEventPublished(eventPublished: EventPublished): Unit = {
     val eventNr = eventPublished.eventNr
     publishState.deliveryId(eventNr).foreach { deliveryId =>
-      publishState = publishState.markOutstandingAsPublished
+      publishState = publishState.markOutstandingEventAsPublished
       confirmDelivery(deliveryId)
-      publishState.head.foreach { eee =>
+      publishState.outstandingEvent.foreach { eee =>
         publishEvent(eee)
       }
     }

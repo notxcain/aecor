@@ -1,5 +1,7 @@
 package aecor.example
 
+import java.util.UUID
+
 import aecor.core.EventBus
 import aecor.core.entity._
 import aecor.core.serialization.DomainEventSerialization
@@ -14,8 +16,8 @@ import akka.http.scaladsl.server.Directives._
 import akka.kafka.ProducerSettings
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
+import akka.stream.{ActorMaterializer, ThrottleMode}
+import akka.stream.scaladsl.{Sink, Source}
 import akka.util.Timeout
 import cats.data.Xor
 import com.typesafe.config.ConfigFactory
@@ -68,19 +70,23 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     from[Account, Account.Event].collect { case e: HoldPlaced => e } ::
     HNil
 
-  aecor.core.process.Process.startProcess[CardAuthorizationProcess.Input](
-    actorSystem = actorSystem,
-    kafkaServers = Set(s"$kafkaAddress:9092"),
-    name = "CardAuthorizationProcess",
-    schema = schema,
-    behavior = CardAuthorizationProcess.behavior(accountRegion, authorizationRegion),
-    correlation = CardAuthorizationProcess.correlation,
-    idleTimeout = 10.seconds
-  ).run()
+  val processControl = {
+    import materializer.executionContext
+    aecor.core.process.Process.startProcess[CardAuthorizationProcess.Input](
+      actorSystem = actorSystem,
+      kafkaServers = Set(s"$kafkaAddress:9092"),
+      name = "CardAuthorizationProcess",
+      schema = schema,
+      behavior = CardAuthorizationProcess.behavior(accountRegion, authorizationRegion),
+      correlation = CardAuthorizationProcess.correlation,
+      idleTimeout = 10.seconds,
+      numberOfShards = 100
+    ).run()
+  }
+
 
   val queries = PersistenceQuery(actorSystem).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
-  implicit val askTimeout: Timeout = Timeout(5.seconds)
 
   object AuthorizePaymentAPI {
     sealed trait Result extends Product with Serializable
@@ -108,7 +114,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
         log.debug("Sending command [{}]", command)
         val start = System.nanoTime()
         authorization
-          .handle("", command)
+          .handle(UUID.randomUUID.toString, command)
           .flatMap {
             case EntityActor.Rejected(rejection) =>
               log.debug("Command [{}] rejected [{}]", command.cardAuthorizationId, rejection)
@@ -163,7 +169,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     def creditAccount(dto: DTO.CreditAccount)(implicit ec: ExecutionContext): Future[String Xor Done] = dto match {
       case DTO.CreditAccount(accountId, transactionId, amount) =>
       account
-        .handle(s"CreditAccount-$transactionId", Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
+        .handle(UUID.randomUUID().toString, Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
         .flatMap {
           case EntityActor.Accepted =>
             log.debug("Command [{}] accepted", dto)
@@ -177,6 +183,11 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion)
   val accountApi = new AccountAPI(accountRegion)
+
+
+  implicit val askTimeout: Timeout = Timeout(5.seconds)
+  
+
   val route = path("check") {
     get {
       complete(StatusCodes.OK)

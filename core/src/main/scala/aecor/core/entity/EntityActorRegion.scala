@@ -4,7 +4,7 @@ import aecor.core.entity.EntityActor.{Response, Result}
 import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
 import aecor.core.serialization.Encoder
 import akka.NotUsed
-import akka.actor.{ActorRef, ActorSystem, Props}
+import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.pattern._
 import akka.util.Timeout
@@ -26,11 +26,11 @@ object EntityActorRegion {
      entityName: EntityName[Entity]
     ): EntityRef[Entity] = {
       new EntityRef[Entity] {
-        val props = Props(new EntityActor[State, Command, Event, Rejection](entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, messageQueue))
+        val props = EntityActor.props(entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, messageQueue)
         override private[aecor] val actorRef: ActorRef = ClusterSharding(actorSystem).start(
           typeName = entityName.value,
           entityProps = props,
-          settings = ClusterShardingSettings(actorSystem),
+          settings = ClusterShardingSettings(actorSystem).withRememberEntities(false),
           extractEntityId = extractEntityId,
           extractShardId = extractShardId
         )

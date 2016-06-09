@@ -23,8 +23,6 @@ lazy val commonSettings = Seq(
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value.filter(_ != "-Xfatal-warnings")
 ) ++ warnUnusedImport
 
-
-
 lazy val aecorSettings = buildSettings ++ commonSettings
 
 lazy val aecor = project.in(file("."))

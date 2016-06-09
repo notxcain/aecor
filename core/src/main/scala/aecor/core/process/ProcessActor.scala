@@ -7,6 +7,7 @@ import aecor.core.process.ProcessAction.{CompoundAction, _}
 import aecor.core.process.ProcessActor.CommandDelivered
 import aecor.core.process.ProcessActor.PersistentMessage.{CommandAccepted, CommandRejected, EventEnvelope}
 import aecor.util.{FunctionBuilder, FunctionBuilderSyntax}
+import akka.actor.Props
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor}
 
 import scala.concurrent.duration._
@@ -57,9 +58,10 @@ object ProcessActor {
     case class CommandRejected(rejection: Any, deliveryId: Long) extends PersistentMessage
     case class CommandAccepted(deliveryId: Long) extends PersistentMessage
   }
+  def props[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], idleTimeout: FiniteDuration): Props = Props(new ProcessActor[Input](name, initialBehavior, idleTimeout))
 }
 
-class ProcessActor[E: ClassTag](name: String, initial: E => ProcessAction[E], idleTimeout: FiniteDuration)
+class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], idleTimeout: FiniteDuration)
   extends PersistentActor
     with AtLeastOnceDelivery
     with Deduplication
@@ -70,10 +72,10 @@ class ProcessActor[E: ClassTag](name: String, initial: E => ProcessAction[E], id
 
   override def persistenceId: String = name + "-" + self.path.name
 
-  private var state = initial
+  private var state = initialBehavior
 
   override def receiveRecover: Receive =  {
-    case EventEnvelope(id, event: E) =>
+    case EventEnvelope(id, event: Input) =>
       val reaction = state(event)
       runReaction(reaction)
       confirmProcessed(id)
@@ -85,7 +87,7 @@ class ProcessActor[E: ClassTag](name: String, initial: E => ProcessAction[E], id
   }
 
   override def receiveCommand: Receive = receivePassivationMessages.orElse {
-    case Message(id, event: E, deliveryAck) =>
+    case Message(id, event: Input, deliveryAck) =>
       if (isProcessed(id)) {
         sender() ! deliveryAck
         log.debug("Received duplicate event [{}]", event)
@@ -114,7 +116,7 @@ class ProcessActor[E: ClassTag](name: String, initial: E => ProcessAction[E], id
     }
   }
 
-  private def runReaction(reaction: ProcessAction[E]): Unit = reaction match {
+  private def runReaction(reaction: ProcessAction[Input]): Unit = reaction match {
     case ChangeState(newState) =>
       state = newState
     case DeliverCommand(destination, command, rejectionHandler) =>
@@ -126,11 +128,11 @@ class ProcessActor[E: ClassTag](name: String, initial: E => ProcessAction[E], id
       ()
   }
 
-  type RejectionHandler = Any => ProcessAction[E]
+  type RejectionHandler = Any => ProcessAction[Input]
 
   val rejectionHandlers = scala.collection.mutable.Map.empty[Long, RejectionHandler]
 
-  def deliverCommand[A, C, R](destination: EntityRef[A], command: C, rejectionHandler: R => ProcessAction[E]): Unit = {
+  def deliverCommand[A, C, R](destination: EntityRef[A], command: C, rejectionHandler: R => ProcessAction[Input]): Unit = {
     deliver(destination.actorRef.path) { deliveryId =>
       rejectionHandlers.update(deliveryId, rejection => rejectionHandler(rejection.asInstanceOf[R]))
       Message(command, CommandDelivered(deliveryId))
