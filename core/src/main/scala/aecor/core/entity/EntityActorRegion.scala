@@ -15,20 +15,18 @@ import scala.reflect.ClassTag
 object EntityActorRegion {
   class StartRegion[Entity] {
     def apply[State, Command, Event, Rejection]
-    (actorSystem: ActorSystem, initialState: State, messageQueue: ActorRef, numberOfShards: Int)
+    (actorSystem: ActorSystem, messageQueue: ActorRef, numberOfShards: Int)
     (implicit
-     A: ClassTag[State],
-     C: ClassTag[Command],
+     State: ClassTag[State],
+     Command: ClassTag[Command],
      E: ClassTag[Event],
-     commandContract: CommandContract.Aux[Entity, Command, Rejection],
-     commandHandler: CommandHandler.Aux[Entity, State, Command, Event, Rejection],
-     encoderE: Encoder[Event],
-     eventProjector: EventProjector[Entity, State, Event],
+     behavior: EntityBehavior.Aux[Entity, State, Command, Event, Rejection],
+     eventEncoder: Encoder[Event],
      correlation: Correlation[Command],
      entityName: EntityName[Entity]
     ): EntityRef[Entity] = {
       new EntityRef[Entity] {
-        val props = Props(new EntityActor[Entity, State, Command, Event, Rejection](entityName.value, initialState, messageQueue))
+        val props = Props(new EntityActor[State, Command, Event, Rejection](entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, messageQueue))
         override private[aecor] val actorRef: ActorRef = ClusterSharding(actorSystem).start(
           typeName = entityName.value,
           entityProps = props,

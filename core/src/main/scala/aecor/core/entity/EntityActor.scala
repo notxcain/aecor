@@ -52,18 +52,21 @@ private [aecor] case class EventPublished(eventNr: Long) extends EntityActorEven
 
 private [aecor] case class MarkEventAsPublished(entityId: String, eventNr: Long)
 
-private [aecor] case class EntityActorInternalState[Entity, State, Event](entityState: State, processedCommands: Set[MessageId]) {
-  def applyEntityEvent(event: Event, causedBy: MessageId)(implicit projector: EventProjector[Entity, State, Event]): EntityActorInternalState[Entity, State, Event] =
+private [aecor] case class EntityActorInternalState[State, Event](entityState: State, processedCommands: Set[MessageId]) {
+  def applyEntityEvent(projector: EventProjector[State, Event])(event: Event, causedBy: MessageId): EntityActorInternalState[State, Event] =
     copy(entityState = projector(entityState, event), processedCommands = processedCommands + causedBy)
 }
 
-private [aecor] class EntityActor[Entity, State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection]
-(entityName: String, initialState: State, messageQueue: ActorRef)
-(implicit
- commandContract: CommandContract.Aux[Entity, Command, Rejection],
- commandHandler: CommandHandler.Aux[Entity, State, Command, Event, Rejection],
- eventProjector: EventProjector[Entity, State, Event]
-) extends PersistentActor with Stash with AtLeastOnceDelivery with PersistentActorLogging {
+private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection]
+(entityName: String,
+ initialState: State,
+ commandHandler: CommandHandler.Aux[State, Command, Event, Rejection],
+ eventProjector: EventProjector[State, Event],
+ messageQueue: ActorRef
+) extends PersistentActor
+  with Stash
+  with AtLeastOnceDelivery
+  with PersistentActorLogging {
   import context.dispatcher
 
   case class HandleCommandHandlerResult(result: CommandHandlerResult[Event, Rejection])
@@ -71,7 +74,7 @@ private [aecor] class EntityActor[Entity, State: ClassTag, Command: ClassTag, Ev
   private val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   override val persistenceId: String = s"$entityName-$entityId"
 
-  var state: EntityActorInternalState[Entity, State, Event] = EntityActorInternalState(initialState, Set.empty)
+  var state: EntityActorInternalState[State, Event] = EntityActorInternalState(initialState, Set.empty)
   var publishState = PublishState.empty[Event]
   def publishedEventCounter = publishState.publishedEventCounter
 
@@ -88,7 +91,7 @@ private [aecor] class EntityActor[Entity, State: ClassTag, Command: ClassTag, Ev
     case ep: EventPublished =>
       applyEventPublished(ep)
 
-    case SnapshotOffer(metadata, stateSnapshot: EntityActorInternalState[Entity, State, Event]) =>
+    case SnapshotOffer(metadata, stateSnapshot: EntityActorInternalState[State, Event]) =>
       state = stateSnapshot
 
     case RecoveryCompleted =>
@@ -131,7 +134,7 @@ private [aecor] class EntityActor[Entity, State: ClassTag, Command: ClassTag, Ev
   }
 
   def applyEventEnvelope(entityEventEnvelope: EntityEventEnvelope[Event]): Unit = {
-    state = state.applyEntityEvent(entityEventEnvelope.event, entityEventEnvelope.causedBy)
+    state = state.applyEntityEvent(eventProjector)(entityEventEnvelope.event, entityEventEnvelope.causedBy)
     if (numberOfUnconfirmed == 0) {
       publishEvent(entityEventEnvelope)
     } else {

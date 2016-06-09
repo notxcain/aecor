@@ -42,8 +42,7 @@ object Account {
   case object Initial extends State
   case class Open(id: AccountId, balance: Amount, holds: Map[TransactionId, Amount]) extends State
 
-  implicit val commandContract: CommandContract.Aux[Account, Command, Rejection] = CommandContract.instance
-  implicit val commandHandler: CommandHandler.Aux[Account, State, Command, Event, Rejection] = CommandHandler.instance {
+  def commandHandler: CommandHandler.Aux[State, Command, Event, Rejection] = CommandHandler.instance {
     case Initial => {
       case OpenAccount(accountId) => accept(AccountOpened(accountId))
       case _ => reject(AccountDoesNotExist)
@@ -75,7 +74,7 @@ object Account {
     }
   }
 
-  implicit val eventProjector: EventProjector[Account, State, Event] = EventProjector.instance {
+  def eventProjector: EventProjector[State, Event] = EventProjector.instance {
     case Initial => {
       case AccountOpened(accountId) => Open(accountId, Amount(0), Map.empty)
       case other => throw new IllegalArgumentException(s"Unexpected event $other")
@@ -89,12 +88,18 @@ object Account {
     }
   }
 
-
   implicit def correlation: Correlation[Command] =
     Correlation.instance(_.accountId.value)
 
   implicit val entityCategory: EntityName[Account] =
     EntityName.instance("Account")
+
+  implicit val commandContract: CommandContract.Aux[Account, Command, Rejection] =
+    CommandContract.instance
+
+  implicit val behavior: EntityBehavior.Aux[Account, State, Command, Event, Rejection] =
+    EntityBehavior.instance(Initial, commandHandler, eventProjector)
+
 }
 
 sealed trait Account

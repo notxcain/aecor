@@ -47,11 +47,13 @@ object CardAuthorization {
   case class Accepted(id: CardAuthorizationId) extends State
   case class Declined(id: CardAuthorizationId) extends State
 
+  implicit def commandContract[Rejection]: CommandContract.Aux[CardAuthorization, Command[Rejection], Rejection] = CommandContract.instance
   implicit def correlation[Rejection]: Correlation[Command[Rejection]] = Correlation.instance(_.cardAuthorizationId.value)
   implicit val name: EntityName[CardAuthorization] = EntityName.instance("CardAuthorization")
+  implicit def behavior[Rejection]: EntityBehavior.Aux[CardAuthorization, State, Command[Rejection], Event, Rejection] =
+    EntityBehavior.instance(Initial, commandHandler, eventProjector)
 
-  implicit def commandContract[Rejection]: CommandContract.Aux[CardAuthorization, Command[Rejection], Rejection] = CommandContract.instance
-  implicit def commandHandler[Rejection]: CommandHandler.Aux[CardAuthorization, State, Command[Rejection], Event, Rejection] = CommandHandler.instance {
+  def commandHandler[Rejection]: CommandHandler.Aux[State, Command[Rejection], Event, Rejection] = CommandHandler.instance {
     case Initial => {
       case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
         accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
@@ -80,7 +82,7 @@ object CardAuthorization {
     }
   }
 
-  implicit val eventProjector: EventProjector[CardAuthorization, State, Event] = EventProjector.instance {
+  val eventProjector: EventProjector[State, Event] = EventProjector.instance {
     case Initial => {
       case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
         Created(cardAuthorizationId)

@@ -58,10 +58,10 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
   }
 
   val authorizationRegion: EntityRef[CardAuthorization] =
-    EntityActorRegion.start[CardAuthorization](actorSystem, CardAuthorization.State.initial, publisherActor, 100)
+    EntityActorRegion.start[CardAuthorization](actorSystem, publisherActor, 100)
 
   val accountRegion: EntityRef[Account] =
-    EntityActorRegion.start[Account](actorSystem, Account.State.initial, publisherActor, 100)
+    EntityActorRegion.start[Account](actorSystem, publisherActor, 100)
 
   val schema =
     from[CardAuthorization, CardAuthorization.Event].collect { case e: CardAuthorizationCreated => e } ::

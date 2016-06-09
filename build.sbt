@@ -23,7 +23,7 @@ lazy val commonSettings = Seq(
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value.filter(_ != "-Xfatal-warnings")
 ) ++ warnUnusedImport
 
-lazy val scalacheckVersion = "1.13.0"
+
 
 lazy val aecorSettings = buildSettings ++ commonSettings
 
@@ -56,21 +56,23 @@ lazy val example = project.dependsOn(core)
 val circeVersion = "0.4.1"
 val akkaVersion = "2.4.7"
 val akkaStreamKafka = "0.11-M3"
-val akkaPersistenceCassandra = "0.15"
+val akkaPersistenceCassandra = "0.16"
 val catsVersion = "0.5.0"
 val akkaHttpJson = "1.6.0"
-val phantomVersion = "1.25.4"
 val kamonVersion = "0.6.1"
+val scalacheckVersion = "1.13.0"
+
+def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
 
 lazy val coreSettings = Seq(
-  libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-http-experimental",
-    "com.typesafe.akka" %% "akka-cluster-sharding",
-    "com.typesafe.akka" %% "akka-persistence",
-    "com.typesafe.akka" %% "akka-slf4j",
-    "com.typesafe.akka" %% "akka-contrib",
-    "com.typesafe.akka" %% "akka-persistence-query-experimental"
-  ).map(_ % akkaVersion),
+  libraryDependencies ++= dependency("com.typesafe.akka")(
+    "akka-http-experimental",
+    "akka-cluster-sharding",
+    "akka-persistence",
+    "akka-slf4j",
+    "akka-contrib",
+    "akka-persistence-query-experimental"
+  )(akkaVersion),
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "com.typesafe.akka" %% "akka-stream-kafka" % akkaStreamKafka,
@@ -92,7 +94,6 @@ lazy val coreSettings = Seq(
   ).map(_ % circeVersion),
   libraryDependencies += "org.typelevel" %% "cats" % catsVersion,
   libraryDependencies += "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson,
-  libraryDependencies += "com.websudos"  %% "phantom-dsl" % phantomVersion,
   PB.flatPackage in PB.protobufConfig := true
 ) ++ PB.protobufSettings
 
