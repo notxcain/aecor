@@ -55,8 +55,9 @@ private [aecor] case class PublishState[Event](publishedEventCounter: Long, even
 }
 
 private [aecor] sealed trait EntityActorEvent
-private [aecor] case class EntityEventEnvelope[Event](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent
+private [aecor] case class EntityEventEnvelope[Event](id: MessageId, entityName: String, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent
 private [aecor] case class EventPublished(eventNr: Long) extends EntityActorEvent
+
 private [aecor] case class MarkEventAsPublished(entityId: String, eventNr: Long)
 
 private [aecor] case class EntityActorInternalState[State, Event](entityState: State, processedCommands: Set[MessageId]) {
@@ -92,7 +93,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   }
 
   override def receiveRecover: Receive = {
-    case eee @ EntityEventEnvelope(_, event: Event, _, causedBy) =>
+    case eee @ EntityEventEnvelope(_, _, event: Event, _, causedBy) =>
       applyEventEnvelope(eee.asInstanceOf[EntityEventEnvelope[Event]])
 
     case ep: EventPublished =>
@@ -123,7 +124,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
 
   def runReaction(causedBy: MessageId, ack: Any)(commandHandlerResult: CommandHandlerResult[Event, Rejection]): Unit = commandHandlerResult match {
     case Accept(event: Event) =>
-      persist(EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), event, Instant.now, causedBy)) { eventEnvelope =>
+      persist(EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), entityName, event, Instant.now, causedBy)) { eventEnvelope =>
         applyEventEnvelope(eventEnvelope)
         sender() ! Response(ack, Accepted)
       }

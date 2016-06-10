@@ -1,6 +1,6 @@
 {
   "AuthorizePayment": {
-    "cardAuthorizationId": "10",
+    "cardAuthorizationId": "1",
     "accountId": "DMITRY",
     "amount": 5000,
     "acquireId": 1,

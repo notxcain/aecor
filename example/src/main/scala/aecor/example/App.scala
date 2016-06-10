@@ -1,40 +1,47 @@
 package aecor.example
 
 import java.util.UUID
+import java.util.concurrent.TimeoutException
 
 import aecor.core.EventBus
 import aecor.core.entity._
+import aecor.core.process.ComposeConfig
 import aecor.core.serialization.DomainEventSerialization
 import aecor.example.domain.Account.HoldPlaced
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationCreated, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
-import akka.Done
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
-import akka.kafka.ProducerSettings
+import akka.kafka.{ConsumerSettings, ProducerSettings}
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
+import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.{ActorMaterializer, Materializer}
 import akka.util.Timeout
+import akka.Done
 import cats.data.Xor
 import com.typesafe.config.ConfigFactory
 import de.heikoseeberger.akkahttpcirce.CirceSupport
 import io.circe.Decoder
 import kamon.Kamon
-import org.apache.kafka.common.serialization.StringSerializer
+import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
 import shapeless.HNil
 import io.circe.generic.auto._
 import aecor.core.process.CompositeConsumerSettingsSyntax._
+import aecor.example.EventStream.{ObserverControl, ObserverId}
+import aecor.example.EventStreamObserverRegistry._
+import akka.kafka.scaladsl.Consumer
+import akka.kafka.scaladsl.Consumer.Control
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 object App extends App {
   Kamon.start()
-  val actorSystem = ActorSystem("playground")
+  val config = ConfigFactory.load()
+  val actorSystem = ActorSystem(config.getString("cluster.system-name"))
   actorSystem.actorOf(RootActor.props, "root")
   actorSystem.registerOnTermination {
     System.exit(1)
@@ -99,7 +106,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     }
   }
 
-  class AuthorizePaymentAPI(authorization: EntityRef[CardAuthorization]) {
+  class AuthorizePaymentAPI(authorization: EntityRef[CardAuthorization], eventStream: EventStream[CardAuthorization.Event]) {
     import AuthorizePaymentAPI._
     import DTO._
     def authorizePayment(dto: AuthorizePayment)(implicit ec: ExecutionContext): Future[Xor[CardAuthorization.CreateCardAuthorizationRejection, Result]] = dto match {
@@ -113,31 +120,22 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
         )
         log.debug("Sending command [{}]", command)
         val start = System.nanoTime()
-        authorization
-          .handle(UUID.randomUUID.toString, command)
-          .flatMap {
-            case EntityActor.Rejected(rejection) =>
-              log.debug("Command [{}] rejected [{}]", command.cardAuthorizationId, rejection)
-              Future.successful(Xor.left(rejection))
-            case EntityActor.Accepted =>
-              log.debug("Command [{}] accepted", command.cardAuthorizationId)
-              val persistenceId = EntityName[CardAuthorization].value + "-" + cardAuthorizationId
-              queries.eventsByPersistenceId(persistenceId, 0, Long.MaxValue)
-                .map(_.event)
-                  .collect {
-                    case EntityEventEnvelope(_, event: CardAuthorization.Event, _, _) => event
-                  }
-                .collect {
-                  case e: CardAuthorizationDeclined => Declined(e.reason.toString)
-                  case e: CardAuthorizationAccepted => Authorized
-                }
-                .take(1)
-                .runWith(Sink.head)
-                .map(Xor.right).map { x =>
-                  log.debug("Command processed [{}] in [{}]", command, (System.nanoTime() - start)/1000000)
-                x
-              }
-          }
+        val id = UUID.randomUUID.toString
+        eventStream.registerObserver(id) {
+          case e: CardAuthorizationDeclined if e.cardAuthorizationId.value == cardAuthorizationId => Declined(e.reason.toString)
+          case e: CardAuthorizationAccepted if e.cardAuthorizationId.value == cardAuthorizationId => Authorized
+        }.flatMap { control =>
+          authorization
+            .handle(id, command)
+            .flatMap {
+              case EntityActor.Rejected(rejection) => Future.successful(Xor.left(rejection))
+              case EntityActor.Accepted => control.result.map(Xor.right)
+            }.map { x =>
+              log.debug("Command [{}] processed with result [{}] in [{}]", command, x, (System.nanoTime() - start)/1000000)
+              x
+            }
+        }
+        
     }
 
 
@@ -157,7 +155,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     def openAccount(dto: DTO.OpenAccount)(implicit ec: ExecutionContext): Future[String Xor Done] = dto match {
       case DTO.OpenAccount(accountId) =>
         account
-          .handle(s"OpenAccount-$accountId", Account.OpenAccount(AccountId(accountId)))
+          .handle(UUID.randomUUID.toString, Account.OpenAccount(AccountId(accountId)))
           .flatMap {
             case EntityActor.Accepted =>
               log.debug("Command [{}] accepted", dto)
@@ -178,10 +176,22 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
             Future.successful(Xor.Left(rejection.toString))
         }
     }
-
   }
 
-  val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion)
+  val cardAuthorizationEventStreamSource = {
+    val groupId = "CardAuthorization-API"
+    val domainEventSerialization = new DomainEventSerialization
+    val consumerSettings = ConsumerSettings(actorSystem, new StringDeserializer, domainEventSerialization, Set("CardAuthorization"))
+      .withBootstrapServers(s"$kafkaAddress:9092")
+      .withGroupId(s"$groupId-${UUID.randomUUID()}")
+
+    val config = ComposeConfig(from[CardAuthorization, CardAuthorization.Event])
+    val filter = config("CardAuthorization")
+    val source = Consumer.plainSource(consumerSettings).map(_.value).map { case (topic, event) => filter(event.payload.toByteArray) }.collect { case Some(e) => e }
+    new SourcedEventStream[CardAuthorization.Event](actorSystem, source)
+  }
+
+  val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion, cardAuthorizationEventStreamSource)
   val accountApi = new AccountAPI(accountRegion)
 
 
@@ -241,3 +251,75 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
 }
 
+
+object EventStream {
+  case class ObserverControl[A](id: String, result: Future[A])
+  type ObserverId = String
+}
+
+trait EventStream[Event] {
+  def registerObserver[A](id: ObserverId)(f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]]
+}
+
+class SourcedEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Control])(implicit materializer: Materializer) extends EventStream[Event] {
+  import akka.pattern.ask
+  val actor = actorSystem.actorOf(Props(new EventStreamObserverRegistry[Event]), "event-stream-observer-registry")
+  source.map(event => ObserveEvent(event)).runWith(Sink.actorRefWithAck(actor, Init, EventObserved, ShutDown))
+  override def registerObserver[A](id: ObserverId)(f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]] = {
+    import materializer.executionContext
+    (actor ? RegisterObserver(id, f)).mapTo[ObserverRegistered[A]].map(_.control)
+  }
+}
+
+object EventStreamObserverRegistry {
+  sealed trait Command[+Event]
+  case object Init extends Command[Nothing]
+  case class RegisterObserver[Event, A](id: String, f: PartialFunction[Event, A]) extends Command[Event]
+  case class ObserveEvent[Event](event: Event) extends Command[Event]
+  case object ShutDown extends Command[Nothing]
+
+  sealed trait Response
+  case class ObserverRegistered[A](control: ObserverControl[A]) extends Response
+  sealed trait EventObserved extends Response
+  case object EventObserved extends EventObserved
+}
+
+class EventStreamObserverRegistry[Event] extends Actor with ActorLogging {
+  import EventStreamObserverRegistry._
+
+  case class Observer(id: String, f: PartialFunction[Event, Any], promise: Promise[Any]) {
+    def handleEvent(event: Event): Boolean = {
+      val handled = f.isDefinedAt(event)
+      if (handled) {
+        promise.success(f(event))
+      }
+      handled
+    }
+  }
+  var observers = Map.empty[String, Observer]
+  override def receive: Receive = {
+    case command: Command[Event] => handleCommand(command)
+    case other => log.error("\n\n\n\n\n\n What the fuck is that [{}]??? \n\n\n\n\n", other)
+  }
+
+  def handleCommand(command: Command[Event]): Unit = command match {
+    case Init =>
+      sender() ! EventObserved
+    case RegisterObserver(id, f) =>
+      observers.get(id) match {
+        case Some(observer) =>
+          sender() ! ObserverRegistered(ObserverControl(id, observer.promise.future))
+        case None =>
+          val promise = Promise[Any]
+          observers = observers.updated(id,  Observer(id, f.asInstanceOf[PartialFunction[Event, Any]], promise))
+          sender() ! ObserverRegistered(ObserverControl(id, promise.future))
+      }
+    case ObserveEvent(event) =>
+      observers = observers.filterNot {
+        case (id, observer) => observer.handleEvent(event)
+      }
+      sender() ! EventObserved
+    case ShutDown =>
+      observers.values.foreach(_.promise.failure(new TimeoutException()))
+  }
+}
