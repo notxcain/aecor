@@ -33,7 +33,7 @@ lazy val aecor = project.in(file("."))
 
 lazy val core = project
   .settings(moduleName := "aecor-core")
-  .settings(aecorSettings:_*)
+  .settings(aecorSettings)
   .settings(coreSettings)
   .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test")
 

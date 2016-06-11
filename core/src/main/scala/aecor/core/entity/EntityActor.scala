@@ -4,20 +4,19 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 
-import aecor.core.EventBus
+import aecor.core.bus.EventBusPublisher
 import aecor.core.entity.CommandHandlerResult.{Accept, Defer, Reject}
+import aecor.core.entity.EntityActor._
+import aecor.core.entity.EventBusPublisherActor.PublishEvent
+import aecor.core.logging.PersistentActorLogging
 import aecor.core.message.{Message, MessageId}
 import aecor.core.serialization.Encoder
-import akka.actor.{ActorRef, Props, Stash}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash}
 import akka.pattern._
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted, SnapshotOffer}
-import com.google.protobuf.ByteString
-import io.aecor.message.protobuf.Messages.{DomainEvent, Timestamp}
 
 import scala.collection.immutable.Queue
 import scala.reflect.ClassTag
-import EntityActor._
-import aecor.core.logging.PersistentActorLogging
 
 private [aecor] object EntityActor {
 
@@ -26,13 +25,13 @@ private [aecor] object EntityActor {
   case object Accepted extends Result[Nothing]
   case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
   case object Stop
-  def props[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection]
+  def props[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection, EventBus]
   (entityName: String,
    initialState: State,
    commandHandler: CommandHandler.Aux[State, Command, Event, Rejection],
    eventProjector: EventProjector[State, Event],
-   messageQueue: ActorRef
-  ): Props = Props(new EntityActor(entityName, initialState, commandHandler, eventProjector, messageQueue))
+   eventBus: EventBus
+  )(implicit eventBusPublisher: EventBusPublisher[EventBus, Event]): Props = Props(new EntityActor(entityName, initialState, commandHandler, eventProjector, eventBus))
 }
 
 private [aecor] object PublishState {
@@ -65,13 +64,13 @@ private [aecor] case class EntityActorInternalState[State, Event](entityState: S
     copy(entityState = projector(entityState, event), processedCommands = processedCommands + causedBy)
 }
 
-private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection]
+private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection, EventBus]
 (entityName: String,
  initialState: State,
- commandHandler: CommandHandler.Aux[State, Command, Event, Rejection],
+ commandHandler: CommandHandler[State, Command, Event, Rejection],
  eventProjector: EventProjector[State, Event],
- messageQueue: ActorRef
-) extends PersistentActor
+ eventBus: EventBus
+)(implicit eventBusPublisher: EventBusPublisher[EventBus, Event]) extends PersistentActor
   with Stash
   with AtLeastOnceDelivery
   with PersistentActorLogging {
@@ -85,7 +84,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   var state: EntityActorInternalState[State, Event] = EntityActorInternalState(initialState, Set.empty)
   var publishState = PublishState.empty[Event]
   def publishedEventCounter = publishState.publishedEventCounter
-
+  val eventBusActor = context.actorOf(Props(new EventBusPublisherActor[EventBus, Event](entityName, entityId, eventBus)))
 
   override def preStart(): Unit = {
     log.debug("[{}] Starting...", persistenceId)
@@ -123,7 +122,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   }
 
   def runReaction(causedBy: MessageId, ack: Any)(commandHandlerResult: CommandHandlerResult[Event, Rejection]): Unit = commandHandlerResult match {
-    case Accept(event: Event) =>
+    case Accept(event) =>
       persist(EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), entityName, event, Instant.now, causedBy)) { eventEnvelope =>
         applyEventEnvelope(eventEnvelope)
         sender() ! Response(ack, Accepted)
@@ -162,17 +161,36 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   }
 
   def publishEvent(entityEventEnvelope: EntityEventEnvelope[Event]): Unit = {
-    deliver(messageQueue.path) { deliveryId =>
+    deliver(eventBusActor.path) { deliveryId =>
       publishState = publishState.withDeliveryId(publishedEventCounter, deliveryId)
-      val domainEvent = DomainEvent(
-        entityEventEnvelope.id.value,
-        ByteString.copyFrom(implicitly[Encoder[Event]].encode(entityEventEnvelope.event)),
-        Timestamp(entityEventEnvelope.timestamp.toEpochMilli),
-        entityEventEnvelope.causedBy.value
+      PublishEvent(
+        entityEventEnvelope.id,
+        entityEventEnvelope.event,
+        entityEventEnvelope.timestamp,
+        entityEventEnvelope.causedBy,
+        Message("not-used", MarkEventAsPublished(entityId, publishedEventCounter)),
+        context.parent
       )
-      EventBus.PublishMessage(entityName, entityId, domainEvent, Message("not-used", MarkEventAsPublished(entityId, publishedEventCounter)) , context.parent)
     }
   }
 
   override def receiveCommand: Receive = handlingCommand
+}
+
+
+object EventBusPublisherActor {
+  case class PublishEvent[Event, Reply](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId, replyWith: Reply, replyTo: ActorRef)
+}
+
+
+class EventBusPublisherActor[EventBus, Event: ClassTag](entityName: String, entityId: String, eventBus: EventBus)(implicit eventBusPublisher: EventBusPublisher[EventBus, Event]) extends Actor with ActorLogging {
+  import context.dispatcher
+  override def receive: Receive = {
+    case PublishEvent(id, event: Event, timestamp: Instant, causedBy: MessageId, replyWith: Any, replyTo: ActorRef) =>
+      eventBusPublisher
+        .publish(eventBus)(entityName, entityId, EventBusPublisher.DomainEventEnvelope(id, event, timestamp, causedBy))
+        .map(_ => replyWith)
+        .pipeTo(replyTo)
+      ()
+  }
 }

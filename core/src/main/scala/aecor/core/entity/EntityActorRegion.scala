@@ -1,5 +1,6 @@
 package aecor.core.entity
 
+import aecor.core.bus.EventBusPublisher
 import aecor.core.entity.EntityActor.{Response, Result}
 import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
 import aecor.core.serialization.Encoder
@@ -13,9 +14,11 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
 object EntityActorRegion {
+  type Topic = String
+  type PartitionKey = String
   class StartRegion[Entity] {
-    def apply[State, Command, Event, Rejection]
-    (actorSystem: ActorSystem, messageQueue: ActorRef, numberOfShards: Int)
+    def apply[State, Command, Event, Rejection, EventBus]
+    (actorSystem: ActorSystem, eventBus: EventBus, numberOfShards: Int)
     (implicit
      State: ClassTag[State],
      Command: ClassTag[Command],
@@ -23,10 +26,11 @@ object EntityActorRegion {
      behavior: EntityBehavior.Aux[Entity, State, Command, Event, Rejection],
      eventEncoder: Encoder[Event],
      correlation: Correlation[Command],
-     entityName: EntityName[Entity]
+     entityName: EntityName[Entity],
+     eventBusPublisher: EventBusPublisher[EventBus, Event]
     ): EntityRef[Entity] = {
       new EntityRef[Entity] {
-        val props = EntityActor.props(entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, messageQueue)
+        val props = EntityActor.props(entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, eventBus)
         override private[aecor] val actorRef: ActorRef = ClusterSharding(actorSystem).start(
           typeName = entityName.value,
           entityProps = props,

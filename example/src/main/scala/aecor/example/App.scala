@@ -3,10 +3,10 @@ package aecor.example
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 
-import aecor.core.EventBus
+import aecor.core.bus.kafka.KafkaEventBus
 import aecor.core.entity._
 import aecor.core.process.ComposeConfig
-import aecor.core.serialization.DomainEventSerialization
+import aecor.core.serialization.{DomainEventSerialization, Encoder}
 import aecor.example.domain.Account.HoldPlaced
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationCreated, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
@@ -59,18 +59,19 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
   val kafkaAddress = "localhost"
 
-  val publisherActor = {
-    val settings = ProducerSettings(actorSystem, new StringSerializer, new DomainEventSerialization)
-      .withBootstrapServers(s"$kafkaAddress:9092")
-    val props = Props(new EventBus(settings, 1000))
-    actorSystem.actorOf(props, "kafka-publisher")
-  }
+  def eventBus[Event: Encoder] = KafkaEventBus[Event](
+    actorSystem = actorSystem,
+    producerSettings = ProducerSettings(actorSystem, new StringSerializer, new DomainEventSerialization)
+      .withBootstrapServers(s"$kafkaAddress:9092"),
+    bufferSize = 1000,
+    offerTimeout = 3.seconds
+  )
 
   val authorizationRegion: EntityRef[CardAuthorization] =
-    EntityActorRegion.start[CardAuthorization](actorSystem, publisherActor, 100)
+    EntityActorRegion.start[CardAuthorization](actorSystem, eventBus[CardAuthorization.Event], 100)
 
   val accountRegion: EntityRef[Account] =
-    EntityActorRegion.start[Account](actorSystem, publisherActor, 100)
+    EntityActorRegion.start[Account](actorSystem, eventBus[Account.Event], 100)
 
   val schema =
     from[CardAuthorization, CardAuthorization.Event].collect { case e: CardAuthorizationCreated => e } ::
@@ -79,7 +80,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
   val processControl = {
     import materializer.executionContext
-    aecor.core.process.Process.startProcess[CardAuthorizationProcess.Input](
+    aecor.core.process.Process.start[CardAuthorizationProcess.Input](
       actorSystem = actorSystem,
       kafkaServers = Set(s"$kafkaAddress:9092"),
       name = "CardAuthorizationProcess",

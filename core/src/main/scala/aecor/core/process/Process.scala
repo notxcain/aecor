@@ -34,7 +34,7 @@ object Process {
     (implicit composeConfig: ComposeConfig.Aux[Schema, Input], Input: ClassTag[Input], ec: ExecutionContext): RunnableGraph[Control]
   }
 
-  def startProcess[Input]: StartProcess[Input] = new StartProcess[Input] {
+  def start[Input]: StartProcess[Input] = new StartProcess[Input] {
     override def apply[Schema]
     (actorSystem: ActorSystem, kafkaServers: Set[String], name: String, schema: Schema, behavior: ProcessBehavior[Input], correlation: Correlation[Input], idleTimeout: FiniteDuration, numberOfShards: Int)
     (implicit composeConfig: Aux[Schema, Input], Input: ClassTag[Input], ec: ExecutionContext): RunnableGraph[Control] = {

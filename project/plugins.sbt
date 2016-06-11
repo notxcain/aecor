@@ -1,6 +1,5 @@
 logLevel := Level.Warn
 
-addSbtPlugin("io.get-coursier" % "sbt-coursier" % "1.0.0-M12")
 addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.1.0-RC1")
 addSbtPlugin("com.trueaccord.scalapb" % "sbt-scalapb" % "0.5.26")
 addSbtPlugin("com.eed3si9n"         % "sbt-unidoc"            % "0.3.2")
