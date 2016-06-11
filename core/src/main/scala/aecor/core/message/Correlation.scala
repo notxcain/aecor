@@ -17,5 +17,5 @@ trait Correlation[A] {
 }
 
 object ExtractShardId {
-  def apply(id: String, numberOfShards: Int): String =  (MurmurHash3.stringHash(id) % numberOfShards).toString
+  def apply(id: String, numberOfShards: Int): String = scala.math.abs(MurmurHash3.stringHash(id) % numberOfShards).toString
 }
