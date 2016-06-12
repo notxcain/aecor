@@ -125,12 +125,12 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
         eventStream.registerObserver(id) {
           case e: CardAuthorizationDeclined if e.cardAuthorizationId.value == cardAuthorizationId => Declined(e.reason.toString)
           case e: CardAuthorizationAccepted if e.cardAuthorizationId.value == cardAuthorizationId => Authorized
-        }.flatMap { control =>
+        }.flatMap { observer =>
           authorization
             .handle(id, command)
             .flatMap {
               case EntityActor.Rejected(rejection) => Future.successful(Xor.left(rejection))
-              case EntityActor.Accepted => control.result.map(Xor.right)
+              case EntityActor.Accepted => observer.result.map(Xor.right)
             }.map { x =>
               log.debug("Command [{}] processed with result [{}] in [{}]", command, x, (System.nanoTime() - start)/1000000)
               x

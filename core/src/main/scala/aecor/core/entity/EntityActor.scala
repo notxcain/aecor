@@ -13,6 +13,7 @@ import aecor.core.message.{Message, MessageId}
 import aecor.core.serialization.Encoder
 import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash}
 import akka.pattern._
+import akka.persistence.journal.Tagged
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted, SnapshotOffer}
 
 import scala.collection.immutable.Queue
@@ -53,8 +54,9 @@ private [aecor] case class PublishState[Event](publishedEventCounter: Long, even
     }.getOrElse(this)
 }
 
+
 private [aecor] sealed trait EntityActorEvent
-private [aecor] case class EntityEventEnvelope[Event](id: MessageId, entityName: String, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent
+case class EntityEventEnvelope[Event](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent
 private [aecor] case class EventPublished(eventNr: Long) extends EntityActorEvent
 
 private [aecor] case class MarkEventAsPublished(entityId: String, eventNr: Long)
@@ -92,7 +94,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   }
 
   override def receiveRecover: Receive = {
-    case eee @ EntityEventEnvelope(_, _, event: Event, _, causedBy) =>
+    case eee @ EntityEventEnvelope(_, event: Event, _, causedBy) =>
       applyEventEnvelope(eee.asInstanceOf[EntityEventEnvelope[Event]])
 
     case ep: EventPublished =>
@@ -115,7 +117,8 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
       }
     case MarkEventAsPublished(_, eventNr) =>
       publishState.deliveryId(eventNr).foreach { _ =>
-        persistAsync(EventPublished(eventNr))(applyEventPublished)
+        val published = EventPublished(eventNr)
+        persistAsync(Tagged(published, Set(entityName)))(_ => applyEventPublished(published))
       }
     case other =>
       log.warning("[{}] Unknown message [{}]", persistenceId, other)
@@ -123,8 +126,9 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
 
   def runReaction(causedBy: MessageId, ack: Any)(commandHandlerResult: CommandHandlerResult[Event, Rejection]): Unit = commandHandlerResult match {
     case Accept(event) =>
-      persist(EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), entityName, event, Instant.now, causedBy)) { eventEnvelope =>
-        applyEventEnvelope(eventEnvelope)
+      val envelope = EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), event, Instant.now, causedBy)
+      persist(Tagged(envelope, Set(entityName))) { _ =>
+        applyEventEnvelope(envelope)
         sender() ! Response(ack, Accepted)
       }
     case Reject(rejection) =>

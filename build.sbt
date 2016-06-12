@@ -45,11 +45,12 @@ lazy val bench = project.dependsOn(core, example)
 lazy val tests = project.dependsOn(core, example)
   .settings(moduleName := "aecor-tests")
   .settings(aecorSettings)
-  .settings(testingDependencies: _*)
+  .settings(testingDependencies)
 
 lazy val example = project.dependsOn(core)
   .settings(moduleName := "aecor-example")
   .settings(aecorSettings)
+  .settings(exampleDependencies)
 
 val circeVersion = "0.4.1"
 val akkaVersion = "2.4.7"
@@ -85,15 +86,20 @@ lazy val coreSettings = Seq(
     "io.kamon" %% "kamon-akka-remote_akka-2.4",
     "io.kamon" %% "kamon-autoweave"
   ).map(_ % kamonVersion),
-  libraryDependencies ++= Seq(
-    "io.circe" %% "circe-core",
-    "io.circe" %% "circe-generic",
-    "io.circe" %% "circe-parser"
-  ).map(_ % circeVersion),
+
+  libraryDependencies ++= dependency("io.circe")(
+    "circe-core",
+    "circe-generic",
+    "circe-parser"
+  )(circeVersion),
+
   libraryDependencies += "org.typelevel" %% "cats" % catsVersion,
-  libraryDependencies += "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson,
   PB.flatPackage in PB.protobufConfig := true
 ) ++ PB.protobufSettings
+
+lazy val exampleDependencies = Seq(
+  libraryDependencies += "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
+)
 
 lazy val testingDependencies = Seq(
   libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion,
