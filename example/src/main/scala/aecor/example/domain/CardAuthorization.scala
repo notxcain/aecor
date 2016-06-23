@@ -53,7 +53,7 @@ object CardAuthorization {
   implicit def behavior[Rejection]: EntityBehavior.Aux[CardAuthorization, State, Command[Rejection], Event, Rejection] =
     EntityBehavior.instance(Initial, commandHandler, eventProjector)
 
-  def commandHandler[Rejection]: CommandHandler.Aux[State, Command[Rejection], Event, Rejection] = CommandHandler.instance {
+  def commandHandler[Rejection]: CommandHandler[State, Command[Rejection], Event, Rejection] = CommandHandler.instance {
     case Initial => {
       case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
         accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))

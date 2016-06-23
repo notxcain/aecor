@@ -7,7 +7,7 @@ object EntityBehavior {
     type Event = Event0
     type Rejection = Rejection0
   }
-  def instance[Entity, State0, Command0, Event0, Rejection0](initialState0: State0, commandHandler0: CommandHandler.Aux[State0, Command0, Event0, Rejection0], eventProjector0: EventProjector[State0, Event0]): Aux[Entity, State0, Command0, Event0, Rejection0] =
+  def instance[Entity, State0, Command0, Event0, Rejection0](initialState0: State0, commandHandler0: CommandHandler[State0, Command0, Event0, Rejection0], eventProjector0: EventProjector[State0, Event0]): Aux[Entity, State0, Command0, Event0, Rejection0] =
     new EntityBehavior[Entity] {
       override type State = State0
 
@@ -29,6 +29,6 @@ trait EntityBehavior[Entity] {
   type Event
   type Rejection
   def initialState: State
-  def commandHandler: CommandHandler.Aux[State, Command, Event, Rejection]
+  def commandHandler: CommandHandler[State, Command, Event, Rejection]
   def eventProjector: EventProjector[State, Event]
 }

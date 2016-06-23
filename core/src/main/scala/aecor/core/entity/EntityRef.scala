@@ -1,7 +1,7 @@
 package aecor.core.entity
 
 import aecor.core.entity.EntityActor.{Response, Result}
-import aecor.core.message.Message
+import aecor.core.message.{Message, MessageId}
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern._
 import akka.util.Timeout
@@ -14,19 +14,19 @@ abstract class EntityRef[Entity] {
   def handle[Command](id: String, command: Command)(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, Command]): Future[Result[contract.Rejection]]
 }
 
-class RemoteEntityRef[C: ClassTag, R](handler: C => Future[Result[R]])(implicit actorSystem: ActorSystem) {
+class RemoteEntityRef[C: ClassTag, R](handler: (MessageId, C) => Future[Result[R]])(implicit actorSystem: ActorSystem) {
     private [aecor] val actorRef = actorSystem.actorOf(RemoteEntityRefActor.props(handler))
 }
 
 object RemoteEntityRefActor {
-  def props[C: ClassTag, R](handler: C => Future[Result[R]]): Props = Props(new RemoteEntityRefActor(handler))
+  def props[C: ClassTag, R](handler: (MessageId, C) => Future[Result[R]]): Props = Props(new RemoteEntityRefActor(handler))
 }
 
-class RemoteEntityRefActor[C: ClassTag, R](handler: C => Future[Result[R]]) extends Actor {
+class RemoteEntityRefActor[C: ClassTag, R](handler: (MessageId, C) => Future[Result[R]]) extends Actor {
   import context.dispatcher
   override def receive: Receive = {
-    case Message(_, c: C, ack) =>
-      handler(c).map(result => Response(ack, result)).pipeTo(sender())
+    case Message(id, c: C, ack) =>
+      handler(id, c).map(result => Response(ack, result)).pipeTo(sender())
       ()
   }
 }

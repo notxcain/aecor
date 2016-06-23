@@ -1,6 +1,6 @@
 package aecor.core.entity
 
-import aecor.core.bus.EventBusPublisher
+import aecor.core.bus.PublishEntityEvent
 import aecor.core.entity.EntityActor.{Response, Result}
 import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
 import aecor.core.serialization.Encoder
@@ -27,10 +27,10 @@ object EntityActorRegion {
      eventEncoder: Encoder[Event],
      correlation: Correlation[Command],
      entityName: EntityName[Entity],
-     eventBusPublisher: EventBusPublisher[EventBus, Event]
+     eventBusPublisher: PublishEntityEvent[EventBus, Event]
     ): EntityRef[Entity] = {
       new EntityRef[Entity] {
-        val props = EntityActor.props(entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, eventBus)
+        val props = EntityActor.props(entityName.value, behavior.initialState, behavior.commandHandler, behavior.eventProjector, eventBus, true)
         override private[aecor] val actorRef: ActorRef = ClusterSharding(actorSystem).start(
           typeName = entityName.value,
           entityProps = props,

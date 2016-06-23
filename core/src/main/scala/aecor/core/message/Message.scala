@@ -15,7 +15,6 @@ case class MessageId(value: String) extends AnyVal
 case class Message[Payload, Ack](id: MessageId, payload: Payload, ack: Ack)
 
 object Message {
-  def apply[Payload](payload: Payload): Message[Payload, NotUsed] = Message(MessageId.generate, payload, NotUsed)
   def apply[Payload, Ack](payload: Payload, deliveryAck: Ack): Message[Payload, Ack] = Message(MessageId.generate, payload, deliveryAck)
   def apply[Payload](id: String, payload: Payload): Message[Payload, NotUsed] = Message(MessageId(id), payload, NotUsed)
 }

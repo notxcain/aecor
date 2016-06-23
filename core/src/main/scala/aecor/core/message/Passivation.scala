@@ -11,11 +11,11 @@ object Passivation {
 }
 
 trait Passivation { this: Actor =>
-  def passivationThreshold: FiniteDuration
+  def idleTimeout: FiniteDuration
   def shouldPassivate: Boolean
 
   final protected def schedulePassivation(): Unit =
-    context.setReceiveTimeout(passivationThreshold)
+    context.setReceiveTimeout(idleTimeout)
 
   final protected def receivePassivationMessages: Receive = {
     case ReceiveTimeout ⇒

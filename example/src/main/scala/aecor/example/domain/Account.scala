@@ -42,7 +42,7 @@ object Account {
   case object Initial extends State
   case class Open(id: AccountId, balance: Amount, holds: Map[TransactionId, Amount]) extends State
 
-  def commandHandler: CommandHandler.Aux[State, Command, Event, Rejection] = CommandHandler.instance {
+  def commandHandler: CommandHandler[State, Command, Event, Rejection] = CommandHandler.instance {
     case Initial => {
       case OpenAccount(accountId) => accept(AccountOpened(accountId))
       case _ => reject(AccountDoesNotExist)

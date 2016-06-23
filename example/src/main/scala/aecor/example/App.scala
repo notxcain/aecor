@@ -1,8 +1,10 @@
 package aecor.example
 
+import java.time.LocalDateTime
 import java.util.UUID
 import java.util.concurrent.TimeoutException
 
+import aecor.core.bus.PublishEntityEvent
 import aecor.core.bus.kafka.KafkaEventBus
 import aecor.core.entity._
 import aecor.core.process.ComposeConfig
@@ -15,8 +17,6 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.kafka.{ConsumerSettings, ProducerSettings}
-import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.PersistenceQuery
 import akka.stream.scaladsl.{Sink, Source}
 import akka.stream.{ActorMaterializer, Materializer}
 import akka.util.Timeout
@@ -30,13 +30,19 @@ import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializ
 import shapeless.HNil
 import io.circe.generic.auto._
 import aecor.core.process.CompositeConsumerSettingsSyntax._
-import aecor.example.EventStream.{ObserverControl, ObserverId}
+import aecor.example.EventStream.ObserverControl
 import aecor.example.EventStreamObserverRegistry._
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.scaladsl.Consumer.Control
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import aecor.core.process._
+import aecor.core.scheduler.ScheduleActor.PublicEvent
+import aecor.core.scheduler.{ScheduleActor, ScheduleActorSupervisor}
+import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.event.LoggingAdapter
+import akka.http.scaladsl.util.FastFuture
 
 object App extends App {
   Kamon.start()
@@ -61,8 +67,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
   def eventBus[Event: Encoder] = KafkaEventBus[Event](
     actorSystem = actorSystem,
-    producerSettings = ProducerSettings(actorSystem, new StringSerializer, new DomainEventSerialization)
-      .withBootstrapServers(s"$kafkaAddress:9092"),
+    producerSettings = ProducerSettings(actorSystem, new StringSerializer, new DomainEventSerialization).withBootstrapServers(s"$kafkaAddress:9092"),
     bufferSize = 1000,
     offerTimeout = 3.seconds
   )
@@ -73,14 +78,13 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
   val accountRegion: EntityRef[Account] =
     EntityActorRegion.start[Account](actorSystem, eventBus[Account.Event], 100)
 
-  val schema =
-    from[CardAuthorization, CardAuthorization.Event].collect { case e: CardAuthorizationCreated => e } ::
-    from[Account, Account.Event].collect { case e: HoldPlaced => e } ::
-    HNil
-
-  val processControl = {
+  val cardAuthorizationProcess = {
     import materializer.executionContext
-    aecor.core.process.Process.start[CardAuthorizationProcess.Input](
+    val schema =
+      from[CardAuthorization, CardAuthorization.Event].collect { case e: CardAuthorizationCreated => e } ::
+        from[Account, Account.Event].collect { case e: HoldPlaced => e } ::
+        HNil
+    Process.start[CardAuthorizationProcess.Input](
       actorSystem = actorSystem,
       kafkaServers = Set(s"$kafkaAddress:9092"),
       name = "CardAuthorizationProcess",
@@ -92,8 +96,40 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     ).run()
   }
 
+  implicit val loggingEventBusPublish: PublishEntityEvent[LoggingAdapter, ScheduleActor.PublicEvent] =
+    new PublishEntityEvent[LoggingAdapter, ScheduleActor.PublicEvent] {
+      override def publish(log: LoggingAdapter)(entityName: String, entityId: String, eventEnvelope: EntityEventEnvelope[PublicEvent]): Future[Done] = {
+        log.info("Message published [{}] [{}] [{}]", entityName, entityId, eventEnvelope)
+        FastFuture.successful(Done)
+      }
+    }
 
-  val queries = PersistenceQuery(actorSystem).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+  val scheduleRegion = ClusterSharding(actorSystem).start(
+    typeName = "Schedule2",
+    entityProps = ScheduleActorSupervisor.props(log),
+    settings = ClusterShardingSettings(actorSystem).withRememberEntities(true),
+    extractEntityId = ScheduleActorSupervisor.extractEntityId,
+    extractShardId = ScheduleActorSupervisor.extractShardId
+  )
+
+  def schedule(dateTime: LocalDateTime): Unit = {
+    scheduleRegion ! ScheduleActor.AddScheduleEntry("subscription-payment", dateTime, dateTime.toString)
+      log.info("Schedule entry added for [{}]", dateTime)
+    }
+
+
+//  schedule(LocalDateTime.now().plusMinutes(5))
+//  schedule(LocalDateTime.now().plusMinutes(3))
+//  schedule(LocalDateTime.now().plusMinutes(1))
+//  schedule(LocalDateTime.now().plusMinutes(30))
+//  schedule(LocalDateTime.now().plusSeconds(20))
+//  schedule(LocalDateTime.now().plusSeconds(22))
+//  schedule(LocalDateTime.now().plusSeconds(24))
+//  schedule(LocalDateTime.now().plusSeconds(26))
+//  schedule(LocalDateTime.now().plusSeconds(28))
+//  schedule(LocalDateTime.now().plusMinutes(1))
+//  schedule(LocalDateTime.now().plusMinutes(2))
+//  schedule(LocalDateTime.now().plusMinutes(10))
 
 
   object AuthorizePaymentAPI {
@@ -122,7 +158,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
         log.debug("Sending command [{}]", command)
         val start = System.nanoTime()
         val id = UUID.randomUUID.toString
-        eventStream.registerObserver(id) {
+        eventStream.registerObserver {
           case e: CardAuthorizationDeclined if e.cardAuthorizationId.value == cardAuthorizationId => Declined(e.reason.toString)
           case e: CardAuthorizationAccepted if e.cardAuthorizationId.value == cardAuthorizationId => Authorized
         }.flatMap { observer =>
@@ -136,7 +172,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
               x
             }
         }
-        
+
     }
 
 
@@ -189,12 +225,11 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     val config = ComposeConfig(from[CardAuthorization, CardAuthorization.Event])
     val filter = config("CardAuthorization")
     val source = Consumer.plainSource(consumerSettings).map(_.value).map { case (topic, event) => filter(event.payload.toByteArray) }.collect { case Some(e) => e }
-    new SourcedEventStream[CardAuthorization.Event](actorSystem, source)
+    new DefaultEventStream[CardAuthorization.Event](actorSystem, source)
   }
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion, cardAuthorizationEventStreamSource)
   val accountApi = new AccountAPI(accountRegion)
-
 
   implicit val askTimeout: Timeout = Timeout(5.seconds)
 
@@ -254,41 +289,42 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
 
 
 object EventStream {
-  case class ObserverControl[A](id: String, result: Future[A])
+  case class ObserverControl[A](id: ObserverId, result: Future[A])
   type ObserverId = String
 }
 
 trait EventStream[Event] {
-  def registerObserver[A](id: ObserverId)(f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]]
+  def registerObserver[A](f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]]
 }
 
-class SourcedEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Control])(implicit materializer: Materializer) extends EventStream[Event] {
+class DefaultEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Control])(implicit materializer: Materializer) extends EventStream[Event] {
   import akka.pattern.ask
   val actor = actorSystem.actorOf(Props(new EventStreamObserverRegistry[Event]), "event-stream-observer-registry")
-  source.map(event => ObserveEvent(event)).runWith(Sink.actorRefWithAck(actor, Init, EventObserved, ShutDown))
-  override def registerObserver[A](id: ObserverId)(f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]] = {
+  source.map(event => ObserveEvent(event)).runWith(Sink.actorRefWithAck(actor, Init, Done, ShutDown))
+  override def registerObserver[A](f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]] = {
     import materializer.executionContext
-    (actor ? RegisterObserver(id, f)).mapTo[ObserverRegistered[A]].map(_.control)
+    (actor ? RegisterObserver(f, timeout)).mapTo[ObserverRegistered[A]].map(_.control)
   }
 }
 
 object EventStreamObserverRegistry {
   sealed trait Command[+Event]
   case object Init extends Command[Nothing]
-  case class RegisterObserver[Event, A](id: String, f: PartialFunction[Event, A]) extends Command[Event]
+  case class RegisterObserver[Event, A](f: PartialFunction[Event, A], timeout: Timeout) extends Command[Event]
+  case class DeregisterObserver(id: String) extends Command[Nothing]
   case class ObserveEvent[Event](event: Event) extends Command[Event]
   case object ShutDown extends Command[Nothing]
 
-  sealed trait Response
-  case class ObserverRegistered[A](control: ObserverControl[A]) extends Response
-  sealed trait EventObserved extends Response
-  case object EventObserved extends EventObserved
+  case class ObserverRegistered[A](control: ObserverControl[A])
 }
 
 class EventStreamObserverRegistry[Event] extends Actor with ActorLogging {
   import EventStreamObserverRegistry._
 
-  case class Observer(id: String, f: PartialFunction[Event, Any], promise: Promise[Any]) {
+  def scheduler = context.system.scheduler
+  implicit def executionContext = context.dispatcher
+
+  case class Observer(f: PartialFunction[Event, Any], promise: Promise[Any]) {
     def handleEvent(event: Event): Boolean = {
       val handled = f.isDefinedAt(event)
       if (handled) {
@@ -297,30 +333,36 @@ class EventStreamObserverRegistry[Event] extends Actor with ActorLogging {
       handled
     }
   }
+
   var observers = Map.empty[String, Observer]
+
   override def receive: Receive = {
     case command: Command[Event] => handleCommand(command)
-    case other => log.error("\n\n\n\n\n\n What the fuck is that [{}]??? \n\n\n\n\n", other)
   }
 
   def handleCommand(command: Command[Event]): Unit = command match {
     case Init =>
-      sender() ! EventObserved
-    case RegisterObserver(id, f) =>
-      observers.get(id) match {
-        case Some(observer) =>
-          sender() ! ObserverRegistered(ObserverControl(id, observer.promise.future))
-        case None =>
-          val promise = Promise[Any]
-          observers = observers.updated(id,  Observer(id, f.asInstanceOf[PartialFunction[Event, Any]], promise))
-          sender() ! ObserverRegistered(ObserverControl(id, promise.future))
+      sender() ! Done
+    case RegisterObserver(f, timeout) =>
+      val id = UUID.randomUUID().toString
+      val promise = Promise[Any]
+      observers = observers.updated(id,  Observer(f.asInstanceOf[PartialFunction[Event, Any]], promise))
+      scheduler.scheduleOnce(timeout.duration) {
+        if (!promise.isCompleted) {
+          promise.failure(new TimeoutException())
+          self ! DeregisterObserver(id)
+        }
       }
+      sender() ! ObserverRegistered(ObserverControl(id, promise.future))
     case ObserveEvent(event) =>
       observers = observers.filterNot {
         case (id, observer) => observer.handleEvent(event)
       }
-      sender() ! EventObserved
+      sender() ! Done
+    case DeregisterObserver(id) =>
+      observers = observers - id
     case ShutDown =>
       observers.values.foreach(_.promise.failure(new TimeoutException()))
+      sender() ! Done
   }
 }

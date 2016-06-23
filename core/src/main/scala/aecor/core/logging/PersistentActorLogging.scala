@@ -2,13 +2,13 @@ package aecor.core.logging
 
 import akka.actor.{Actor, ActorLogging, ActorSystem}
 import akka.event.{LogSource, LoggingAdapter}
-import akka.persistence.{PersistenceIdentity, PersistentActor}
+import akka.persistence.PersistenceIdentity
 
-trait PersistentActorLogging extends ActorLogging { this: PersistentActor =>
-  implicit def logSource[A <: Actor with PersistenceIdentity]: LogSource[A] = new LogSource[A] {
+trait PersistentActorLogging extends ActorLogging { this: Actor with PersistenceIdentity =>
+  implicit def logSource: LogSource[Actor with PersistenceIdentity] = new LogSource[Actor with PersistenceIdentity] {
     import LogSource._
-    def genString(a: A) = s"${fromActorRef.genString(a.self)} [${a.persistenceId}]"
-    override def genString(a: A, system: ActorSystem) = s"${fromActorRef.genString(a.self, system)} [${a.persistenceId}]"
+    def genString(a: Actor with PersistenceIdentity) = s"${fromActor.genString(a)} [${a.persistenceId}]"
+    override def genString(a: Actor with PersistenceIdentity, system: ActorSystem) = s"${fromActor.genString(a, system)} [${a.persistenceId}]"
   }
   private var _log: LoggingAdapter = _
 

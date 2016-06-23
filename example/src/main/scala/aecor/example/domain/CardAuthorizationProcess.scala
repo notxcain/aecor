@@ -7,8 +7,9 @@ import aecor.core.message.Correlation
 import aecor.core.process._
 import aecor.util.FunctionBuilder
 import shapeless._
+import ProcessSyntax._
 
-object CardAuthorizationProcess extends ProcessSyntax {
+object CardAuthorizationProcess {
   type Input = CardAuthorizationCreated :+: HoldPlaced :+: CNil
 
   val correlation: Correlation[Input] = Correlation.instance(

@@ -8,7 +8,7 @@ import aecor.core.process.ProcessActor.CommandDelivered
 import aecor.core.process.ProcessActor.PersistentMessage.{CommandAccepted, CommandRejected, EventEnvelope}
 import aecor.util.{FunctionBuilder, FunctionBuilderSyntax}
 import akka.actor.Props
-import akka.persistence.{AtLeastOnceDelivery, PersistentActor}
+import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted}
 
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
@@ -26,17 +26,26 @@ object ProcessAction {
 }
 
 trait ProcessSyntax extends FunctionBuilderSyntax {
-  final def become[H, In](f: H)(implicit ev: FunctionBuilder[H, In, ProcessAction[In]]): ProcessAction[In] = ChangeState(ev(f))
+  implicit def toChangeState[H, In](f: H)(implicit ev: FunctionBuilder[H, In, ProcessAction[In]]): In => ProcessAction[In] = ev(f)
+  final def become[In](f: In => ProcessAction[In]): ProcessAction[In] = ChangeState(f)
+
   trait DeliverCommand[R] {
-    def handlingRejection[In](f: R => ProcessAction[In]): ProcessAction[In]
-    def ignoringRejection[In]: ProcessAction[In]
+    trait HandlingRejection[A] { outer =>
+      def map[B](f: A => B): HandlingRejection[B] = new HandlingRejection[B] {
+        override def apply[In](handler: (B) => ProcessAction[In]): ProcessAction[In] = outer.apply(x => handler(f(x)))
+      }
+      def apply[In](handler: A => ProcessAction[In]): ProcessAction[In]
+    }
+    def handlingRejection: HandlingRejection[R]
+    def ignoringRejection[In]: ProcessAction[In] = handlingRejection(_ => DoNothing)
   }
 
   implicit class EntityRefOps[Entity](er: EntityRef[Entity]) {
     final def deliver[Command](command: Command)(implicit contract: CommandContract[Entity, Command]) =
       new DeliverCommand[contract.Rejection] {
-        def handlingRejection[In](f: contract.Rejection => ProcessAction[In]): ProcessAction[In] = DeliverCommand(er, command, f)
-        def ignoringRejection[In]: ProcessAction[In] = DeliverCommand(er, command, {_: Any => DoNothing})
+        override def handlingRejection: HandlingRejection[contract.Rejection] = new HandlingRejection[contract.Rejection] {
+          override def apply[In](handler: (contract.Rejection) => ProcessAction[In]): ProcessAction[In] = DeliverCommand(er, command, handler)
+        }
       }
   }
 
@@ -46,6 +55,8 @@ trait ProcessSyntax extends FunctionBuilderSyntax {
   }
   def ignore[E]: Any => ProcessAction[E] = _ => doNothing
 }
+
+object ProcessSyntax extends ProcessSyntax
 
 object ProcessActor {
   type ProcessBehavior[E] = E => ProcessAction[E]
@@ -61,14 +72,12 @@ object ProcessActor {
   def props[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], idleTimeout: FiniteDuration): Props = Props(new ProcessActor[Input](name, initialBehavior, idleTimeout))
 }
 
-class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], idleTimeout: FiniteDuration)
+class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], val idleTimeout: FiniteDuration)
   extends PersistentActor
     with AtLeastOnceDelivery
     with Deduplication
     with Passivation
     with PersistentActorLogging {
-
-  context.setReceiveTimeout(idleTimeout)
 
   override def persistenceId: String = name + "-" + self.path.name
 
@@ -84,6 +93,8 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
     case CommandAccepted(deliveryId) =>
       confirmDelivery(deliveryId)
       ()
+    case RecoveryCompleted =>
+      schedulePassivation()
   }
 
   override def receiveCommand: Receive = receivePassivationMessages.orElse {
@@ -154,8 +165,6 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
     rejectionHandlers - deliveryId
     super.confirmDelivery(deliveryId)
   }
-
-  override def passivationThreshold: FiniteDuration = 60.seconds
 
   override def shouldPassivate: Boolean = numberOfUnconfirmed == 0
 }

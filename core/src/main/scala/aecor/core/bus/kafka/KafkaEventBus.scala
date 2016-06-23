@@ -1,7 +1,7 @@
 package aecor.core.bus.kafka
 
-import aecor.core.bus.EventBusPublisher
-import aecor.core.bus.EventBusPublisher.DomainEventEnvelope
+import aecor.core.bus.PublishEntityEvent
+import aecor.core.entity.EntityEventEnvelope
 import aecor.core.serialization.Encoder
 import akka.Done
 import akka.actor.ActorSystem
@@ -17,8 +17,8 @@ import org.apache.kafka.clients.producer.ProducerRecord
 import scala.concurrent.{Future, Promise}
 
 object KafkaEventBus {
-  implicit def publisher[Event]: EventBusPublisher[KafkaEventBus[Event], Event] = new EventBusPublisher[KafkaEventBus[Event], Event] {
-    override def publish(a: KafkaEventBus[Event])(entityName: String, entityId: String, eventEnvelope: DomainEventEnvelope[Event]): Future[Done] =
+  implicit def publisher[Event]: PublishEntityEvent[KafkaEventBus[Event], Event] = new PublishEntityEvent[KafkaEventBus[Event], Event] {
+    override def publish(a: KafkaEventBus[Event])(entityName: String, entityId: String, eventEnvelope: EntityEventEnvelope[Event]): Future[Done] =
       a.publish(entityName, entityId, eventEnvelope)
   }
   def apply[Event: Encoder](actorSystem: ActorSystem, producerSettings: ProducerSettings[String, DomainEvent], bufferSize: Int, offerTimeout: Timeout) =
@@ -35,7 +35,7 @@ class KafkaEventBus[Event: Encoder](actorSystem: ActorSystem, producerSettings: 
     .toMat(Sink.ignore)(Keep.left)
     .run
 
-  def publish(entityName: String, entityId: String, eventEnvelope: DomainEventEnvelope[Event]): Future[Done] = {
+  def publish(entityName: String, entityId: String, eventEnvelope: EntityEventEnvelope[Event]): Future[Done] = {
     val domainEvent = DomainEvent(
       eventEnvelope.id.value,
       ByteString.copyFrom(Encoder[Event].encode(eventEnvelope.event)),

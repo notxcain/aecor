@@ -4,18 +4,16 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.Instant
 
-import aecor.core.bus.EventBusPublisher
+import aecor.core.bus.PublishEntityEvent
 import aecor.core.entity.CommandHandlerResult.{Accept, Defer, Reject}
 import aecor.core.entity.EntityActor._
 import aecor.core.entity.EventBusPublisherActor.PublishEvent
 import aecor.core.logging.PersistentActorLogging
 import aecor.core.message.{Message, MessageId}
-import aecor.core.serialization.Encoder
-import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash}
+import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash, Status}
 import akka.pattern._
 import akka.persistence.journal.Tagged
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted, SnapshotOffer}
-
 import scala.collection.immutable.Queue
 import scala.reflect.ClassTag
 
@@ -26,53 +24,68 @@ private [aecor] object EntityActor {
   case object Accepted extends Result[Nothing]
   case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
   case object Stop
-  def props[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection, EventBus]
+  def props[State: ClassTag, Command: ClassTag, Event: ClassTag, Rejection, EventBus]
   (entityName: String,
    initialState: State,
-   commandHandler: CommandHandler.Aux[State, Command, Event, Rejection],
+   commandHandler: CommandHandler[State, Command, Event, Rejection],
    eventProjector: EventProjector[State, Event],
-   eventBus: EventBus
-  )(implicit eventBusPublisher: EventBusPublisher[EventBus, Event]): Props = Props(new EntityActor(entityName, initialState, commandHandler, eventProjector, eventBus))
+   eventBus: EventBus,
+   preserveEventOrderInEventBus: Boolean
+  )(implicit eventBusPublisher: PublishEntityEvent[EventBus, Event]): Props = Props(new EntityActor(entityName, initialState, commandHandler, eventProjector, eventBus, preserveEventOrderInEventBus))
 }
 
 private [aecor] object PublishState {
-  def empty[Event]: PublishState[Event] = PublishState(0, Map.empty, Queue.empty)
+  def empty[Event]: PublishState[Event] = PublishState(Map.empty, Queue.empty)
 }
 
-private [aecor] case class PublishState[Event](publishedEventCounter: Long, eventNrToDeliveryId: Map[Long, Long], queue: Queue[EntityEventEnvelope[Event]]) {
-  def outstandingEvent: Option[EntityEventEnvelope[Event]] = queue.headOption
-  def enqueue(event: EntityEventEnvelope[Event]): PublishState[Event] =
+private [aecor] case class PublishState[+Event](eventNrToDeliveryId: Map[Long, Long], queue: Queue[Event]) {
+  def outstandingEvent: Option[Event] = queue.headOption
+  def enqueue[E >: Event](event: E): PublishState[E] =
     copy(queue = queue.enqueue(event))
-
   def withDeliveryId(eventNr: Long, deliveryId: Long): PublishState[Event] = copy(eventNrToDeliveryId = eventNrToDeliveryId.updated(eventNr, deliveryId))
   def deliveryId(eventNr: Long): Option[Long] = eventNrToDeliveryId.get(eventNr)
 
-  def markOutstandingEventAsPublished: PublishState[Event] =
-    queue.dequeueOption.map {
-      case (_, newQueue) =>
-        copy(publishedEventCounter = publishedEventCounter + 1, queue = newQueue, eventNrToDeliveryId = eventNrToDeliveryId - publishedEventCounter)
-    }.getOrElse(this)
+  def markOutstandingEventAsPublished(eventNr: Long): PublishState[Event] =
+    copy(
+      eventNrToDeliveryId = eventNrToDeliveryId - eventNr,
+      queue = queue.dequeueOption.map(_._2).getOrElse(queue)
+    )
 }
 
 
 private [aecor] sealed trait EntityActorEvent
-case class EntityEventEnvelope[Event](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent
+case class EntityEventEnvelope[+Event](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent {
+  def cast[EE: ClassTag]: Option[EntityEventEnvelope[EE]] = event match {
+    case e: EE => Some(this.asInstanceOf[EntityEventEnvelope[EE]])
+    case other => None
+  }
+}
 private [aecor] case class EventPublished(eventNr: Long) extends EntityActorEvent
 
 private [aecor] case class MarkEventAsPublished(entityId: String, eventNr: Long)
 
-private [aecor] case class EntityActorInternalState[State, Event](entityState: State, processedCommands: Set[MessageId]) {
-  def applyEntityEvent(projector: EventProjector[State, Event])(event: Event, causedBy: MessageId): EntityActorInternalState[State, Event] =
+private [aecor] case class EntityActorState[State](entityState: State, processedCommands: Set[MessageId]) {
+  def cast[S: ClassTag]: Option[EntityActorState[S]] = this match {
+    case EntityActorState(es: S, _) => Some(this.asInstanceOf[EntityActorState[S]])
+    case _ => None
+  }
+
+  def hasProcessedCommandWithId(messageId: MessageId): Boolean = processedCommands(messageId)
+
+  def applyEntityEvent[Event](projector: EventProjector[State, Event])(event: Event, causedBy: MessageId): EntityActorState[State] =
     copy(entityState = projector(entityState, event), processedCommands = processedCommands + causedBy)
+  def handleEntityCommand[Command, Event, Rejection](commandHandler: CommandHandler[State, Command, Event, Rejection])(command: Command): CommandHandlerResult[Event, Rejection] =
+    commandHandler(entityState, command)
 }
 
-private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: ClassTag: Encoder, Rejection, EventBus]
+private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: ClassTag, Rejection, EventBus]
 (entityName: String,
  initialState: State,
  commandHandler: CommandHandler[State, Command, Event, Rejection],
  eventProjector: EventProjector[State, Event],
- eventBus: EventBus
-)(implicit eventBusPublisher: EventBusPublisher[EventBus, Event]) extends PersistentActor
+ eventBus: EventBus,
+ preserveEventOrderInEventBus: Boolean
+)(implicit eventBusPublisher: PublishEntityEvent[EventBus, Event]) extends PersistentActor
   with Stash
   with AtLeastOnceDelivery
   with PersistentActorLogging {
@@ -83,10 +96,10 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   private val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   override val persistenceId: String = s"$entityName-$entityId"
 
-  var state: EntityActorInternalState[State, Event] = EntityActorInternalState(initialState, Set.empty)
-  var publishState = PublishState.empty[Event]
-  def publishedEventCounter = publishState.publishedEventCounter
-  val eventBusActor = context.actorOf(Props(new EventBusPublisherActor[EventBus, Event](entityName, entityId, eventBus)))
+  var state: EntityActorState[State] = EntityActorState(initialState, Set.empty)
+  var publishState = PublishState.empty[EntityEventEnvelope[Event]]
+
+  val eventBusActor = context.actorOf(EventBusPublisherActor.props[EventBus, Event](entityName, entityId, eventBus), "eventBusPublisher")
 
   override def preStart(): Unit = {
     log.debug("[{}] Starting...", persistenceId)
@@ -94,14 +107,20 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   }
 
   override def receiveRecover: Receive = {
-    case eee @ EntityEventEnvelope(_, event: Event, _, causedBy) =>
-      applyEventEnvelope(eee.asInstanceOf[EntityEventEnvelope[Event]])
+    case e: EntityEventEnvelope[_] =>
+      e.cast[Event] match {
+        case Some(envelope) => applyEventEnvelope(envelope)
+        case None => throw new IllegalArgumentException(s"Unexpected event ${e.event}")
+      }
 
     case ep: EventPublished =>
       applyEventPublished(ep)
 
-    case SnapshotOffer(metadata, stateSnapshot: EntityActorInternalState[State, Event]) =>
-      state = stateSnapshot
+    case SnapshotOffer(metadata, stateSnapshot: EntityActorState[_]) =>
+      stateSnapshot.cast[State] match {
+        case Some(snapshot) => state = snapshot
+        case None => throw new IllegalArgumentException(s"Unexpected snapshot $stateSnapshot")
+      }
 
     case RecoveryCompleted =>
       log.debug("[{}] Recovery completed", persistenceId)
@@ -109,35 +128,44 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
 
   def handlingCommand: Receive = {
     case Message(id, command: Command, ack) =>
-      if (state.processedCommands contains id) {
+      if (state.hasProcessedCommandWithId(id)) {
         sender() ! Response(ack, Accepted)
       } else {
-        val reaction = commandHandler(state.entityState, command)
-        runReaction(id, ack)(reaction)
+        val reaction = state.handleEntityCommand(commandHandler)(command)
+        runResult(id, ack)(reaction)
       }
     case MarkEventAsPublished(_, eventNr) =>
       publishState.deliveryId(eventNr).foreach { _ =>
         val published = EventPublished(eventNr)
         persistAsync(Tagged(published, Set(entityName)))(_ => applyEventPublished(published))
       }
+    case Status.Failure(e) =>
+      log.error(e, "Failed to publish event")
     case other =>
       log.warning("[{}] Unknown message [{}]", persistenceId, other)
   }
 
-  def runReaction(causedBy: MessageId, ack: Any)(commandHandlerResult: CommandHandlerResult[Event, Rejection]): Unit = commandHandlerResult match {
+  def runResult(causedBy: MessageId, ack: Any)(result: CommandHandlerResult[Event, Rejection]): Unit = result match {
     case Accept(event) =>
       val envelope = EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), event, Instant.now, causedBy)
       persist(Tagged(envelope, Set(entityName))) { _ =>
         applyEventEnvelope(envelope)
         sender() ! Response(ack, Accepted)
       }
+      context.become(handlingCommand)
     case Reject(rejection) =>
       sender() ! Response(ack, Rejected(rejection))
+      context.become(handlingCommand)
     case Defer(deferred) =>
       deferred.map(HandleCommandHandlerResult(_)).asFuture.pipeTo(self)(sender)
       context.become {
-        case HandleCommandHandlerResult(value) =>
-          runReaction(causedBy, ack)(value)
+        case HandleCommandHandlerResult(defferedResult) =>
+          runResult(causedBy, ack)(defferedResult)
+          unstashAll()
+        case failure @ Status.Failure(e) =>
+          log.error(e, "Deferred reaction failed")
+          sender() ! failure
+          context.become(handlingCommand)
           unstashAll()
         case _ =>
           stash()
@@ -146,35 +174,34 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
 
   def applyEventEnvelope(entityEventEnvelope: EntityEventEnvelope[Event]): Unit = {
     state = state.applyEntityEvent(eventProjector)(entityEventEnvelope.event, entityEventEnvelope.causedBy)
-    if (numberOfUnconfirmed == 0) {
+    if (canPublish) {
       publishEvent(entityEventEnvelope)
     } else {
-      publishState = publishState.enqueue(entityEventEnvelope)
+      enqueueEvent(entityEventEnvelope)
     }
+  }
+
+  def canPublish = !preserveEventOrderInEventBus || (numberOfUnconfirmed == 0)
+
+  def publishEvent(entityEventEnvelope: EntityEventEnvelope[Event]): Unit = {
+    deliver(eventBusActor.path) { deliveryId =>
+      publishState = publishState.withDeliveryId(lastSequenceNr, deliveryId)
+      PublishEvent(entityEventEnvelope, Message("not-used", MarkEventAsPublished(entityId, lastSequenceNr)), context.parent)
+    }
+  }
+
+  def enqueueEvent(entityEventEnvelope: EntityEventEnvelope[Event]): Unit = {
+    publishState = publishState.enqueue(entityEventEnvelope)
   }
 
   def applyEventPublished(eventPublished: EventPublished): Unit = {
     val eventNr = eventPublished.eventNr
     publishState.deliveryId(eventNr).foreach { deliveryId =>
-      publishState = publishState.markOutstandingEventAsPublished
       confirmDelivery(deliveryId)
+      publishState = publishState.markOutstandingEventAsPublished(eventNr)
       publishState.outstandingEvent.foreach { eee =>
         publishEvent(eee)
       }
-    }
-  }
-
-  def publishEvent(entityEventEnvelope: EntityEventEnvelope[Event]): Unit = {
-    deliver(eventBusActor.path) { deliveryId =>
-      publishState = publishState.withDeliveryId(publishedEventCounter, deliveryId)
-      PublishEvent(
-        entityEventEnvelope.id,
-        entityEventEnvelope.event,
-        entityEventEnvelope.timestamp,
-        entityEventEnvelope.causedBy,
-        Message("not-used", MarkEventAsPublished(entityId, publishedEventCounter)),
-        context.parent
-      )
     }
   }
 
@@ -183,18 +210,25 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
 
 
 object EventBusPublisherActor {
-  case class PublishEvent[Event, Reply](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId, replyWith: Reply, replyTo: ActorRef)
+  case class PublishEvent[Event, Reply](eventEnvelope: EntityEventEnvelope[Event], replyWith: Reply, replyTo: ActorRef)
+  def props[EventBus, Event: ClassTag](entityName: String, entityId: String, eventBus: EventBus)(implicit ev: PublishEntityEvent[EventBus, Event]): Props =
+    Props(new EventBusPublisherActor[EventBus, Event](entityName, entityId, eventBus))
 }
 
-
-class EventBusPublisherActor[EventBus, Event: ClassTag](entityName: String, entityId: String, eventBus: EventBus)(implicit eventBusPublisher: EventBusPublisher[EventBus, Event]) extends Actor with ActorLogging {
+class EventBusPublisherActor[EventBus, Event: ClassTag](entityName: String, entityId: String, eventBus: EventBus)(implicit eventBusPublisher: PublishEntityEvent[EventBus, Event]) extends Actor with ActorLogging {
   import context.dispatcher
   override def receive: Receive = {
-    case PublishEvent(id, event: Event, timestamp: Instant, causedBy: MessageId, replyWith: Any, replyTo: ActorRef) =>
-      eventBusPublisher
-        .publish(eventBus)(entityName, entityId, EventBusPublisher.DomainEventEnvelope(id, event, timestamp, causedBy))
-        .map(_ => replyWith)
-        .pipeTo(replyTo)
-      ()
+    case PublishEvent(eventEnvelope, replyWith, replyTo) =>
+      eventEnvelope.cast[Event] match {
+        case Some(e) =>
+          eventBusPublisher
+            .publish(eventBus)(entityName, entityId, e)
+            .map(_ => replyWith)
+            .pipeTo(replyTo)
+          ()
+        case None =>
+          log.warning("Unexpected event envelope [{}]", eventEnvelope)
+          ()
+      }
   }
 }
