@@ -73,17 +73,17 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
   )
 
   val authorizationRegion: EntityRef[CardAuthorization] =
-    EntityActorRegion.start[CardAuthorization](actorSystem, eventBus[CardAuthorization.Event], 100)
+    EntityShardRegion.start[CardAuthorization](actorSystem, eventBus[CardAuthorization.Event], 100, CardAuthorization())
 
   val accountRegion: EntityRef[Account] =
-    EntityActorRegion.start[Account](actorSystem, eventBus[Account.Event], 100)
+    EntityShardRegion.start[Account](actorSystem, eventBus[Account.Event], 100, Account())
 
   val cardAuthorizationProcess = {
     import materializer.executionContext
     val schema =
       from[CardAuthorization, CardAuthorization.Event].collect { case e: CardAuthorizationCreated => e } ::
-        from[Account, Account.Event].collect { case e: HoldPlaced => e } ::
-        HNil
+      from[Account, Account.Event].collect { case e: HoldPlaced => e } ::
+      HNil
     Process.start[CardAuthorizationProcess.Input](
       actorSystem = actorSystem,
       kafkaServers = Set(s"$kafkaAddress:9092"),
@@ -165,8 +165,8 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
           authorization
             .handle(id, command)
             .flatMap {
-              case EntityActor.Rejected(rejection) => Future.successful(Xor.left(rejection))
-              case EntityActor.Accepted => observer.result.map(Xor.right)
+              case Rejected(rejection) => Future.successful(Xor.left(rejection))
+              case Accepted => observer.result.map(Xor.right)
             }.map { x =>
               log.debug("Command [{}] processed with result [{}] in [{}]", command, x, (System.nanoTime() - start)/1000000)
               x
@@ -194,10 +194,10 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
         account
           .handle(UUID.randomUUID.toString, Account.OpenAccount(AccountId(accountId)))
           .flatMap {
-            case EntityActor.Accepted =>
+            case Accepted =>
               log.debug("Command [{}] accepted", dto)
               Future.successful(Xor.Right(Done: Done))
-            case EntityActor.Rejected(rejection) =>
+            case Rejected(rejection) =>
               Future.successful(Xor.Left(rejection.toString))
           }
     }
@@ -206,10 +206,10 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
       account
         .handle(UUID.randomUUID().toString, Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
         .flatMap {
-          case EntityActor.Accepted =>
+          case Accepted =>
             log.debug("Command [{}] accepted", dto)
             Future.successful(Xor.Right(Done: Done))
-          case EntityActor.Rejected(rejection) =>
+          case Rejected(rejection) =>
             Future.successful(Xor.Left(rejection.toString))
         }
     }

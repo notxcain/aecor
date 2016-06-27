@@ -1,6 +1,5 @@
 package aecor.core.entity
 
-import aecor.core.entity.EntityActor.{Response, Result}
 import aecor.core.message.{Message, MessageId}
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern._
@@ -26,7 +25,7 @@ class RemoteEntityRefActor[C: ClassTag, R](handler: (MessageId, C) => Future[Res
   import context.dispatcher
   override def receive: Receive = {
     case Message(id, c: C, ack) =>
-      handler(id, c).map(result => Response(ack, result)).pipeTo(sender())
+      handler(id, c).map(result => EntityResponse(ack, result)).pipeTo(sender())
       ()
   }
 }

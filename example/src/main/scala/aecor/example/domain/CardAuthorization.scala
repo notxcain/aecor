@@ -39,72 +39,76 @@ object CardAuthorization {
   case object AlreadyAccepted extends DeclineCardAuthorizationRejection with AcceptCardAuthorizationRejection
 
   sealed trait State
-  object State {
-    def initial: State = Initial
-  }
   case object Initial extends State
   case class Created(id: CardAuthorizationId) extends State
   case class Accepted(id: CardAuthorizationId) extends State
   case class Declined(id: CardAuthorizationId) extends State
 
+  def initialState: State = Initial
+
   implicit def commandContract[Rejection]: CommandContract.Aux[CardAuthorization, Command[Rejection], Rejection] = CommandContract.instance
   implicit def correlation[Rejection]: Correlation[Command[Rejection]] = Correlation.instance(_.cardAuthorizationId.value)
   implicit val name: EntityName[CardAuthorization] = EntityName.instance("CardAuthorization")
-  implicit def behavior[Rejection]: EntityBehavior.Aux[CardAuthorization, State, Command[Rejection], Event, Rejection] =
-    EntityBehavior.instance(Initial, commandHandler, eventProjector)
 
-  def commandHandler[Rejection]: CommandHandler[State, Command[Rejection], Event, Rejection] = CommandHandler.instance {
-    case Initial => {
-      case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
-        accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
-      case c: AcceptCardAuthorization =>
-        reject(DoesNotExists)
-      case c: DeclineCardAuthorization =>
-        reject(DoesNotExists)
-    }
-    case Created(id) => {
-      case e: AcceptCardAuthorization =>
-        accept(CardAuthorizationAccepted(id))
-      case e: DeclineCardAuthorization =>
-        accept(CardAuthorizationDeclined(id, e.reason))
-      case e: CreateCardAuthorization =>
-        reject(AlreadyExists)
-    }
-    case Accepted(id) => {
-      case e: AcceptCardAuthorization => reject(AlreadyAccepted)
-      case e: DeclineCardAuthorization => reject(AlreadyAccepted)
-      case e: CreateCardAuthorization => reject(AlreadyExists)
-    }
-    case Declined(id) => {
-      case e: AcceptCardAuthorization => reject(AlreadyDeclined)
-      case e: DeclineCardAuthorization => reject(AlreadyDeclined)
-      case e: CreateCardAuthorization => reject(AlreadyExists)
-    }
-  }
+  implicit def behavior[Rejection]: EntityBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] = new EntityBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] {
+    override def initialState(entity: CardAuthorization): State = Initial
 
-  val eventProjector: EventProjector[State, Event] = EventProjector.instance {
-    case Initial => {
-      case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
-        Created(cardAuthorizationId)
-      case other =>
-        throw new IllegalArgumentException(s"Unexpected event $other")
-    }
-    case self: Created => {
-      case e: CardAuthorizationCreated => self
-      case e: CardAuthorizationAccepted => Accepted(self.id)
-      case e: CardAuthorizationDeclined => Declined(self.id)
-    }
-    case self: Accepted => {
-      case e: CardAuthorizationCreated => self
-      case e: CardAuthorizationAccepted => Accepted(self.id)
-      case e: CardAuthorizationDeclined => Declined(self.id)
-    }
-    case self: Declined => {
-      case e: CardAuthorizationCreated => self
-      case e: CardAuthorizationAccepted => Accepted(self.id)
-      case e: CardAuthorizationDeclined => Declined(self.id)
-    }
+    override def commandHandler(entity: CardAuthorization): CommandHandler[State, Command[Rejection], Event, Rejection] =
+      CommandHandler.instance {
+        case Initial => {
+          case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
+            accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
+          case c: AcceptCardAuthorization =>
+            reject(DoesNotExists)
+          case c: DeclineCardAuthorization =>
+            reject(DoesNotExists)
+        }
+        case Created(id) => {
+          case e: AcceptCardAuthorization =>
+            accept(CardAuthorizationAccepted(id))
+          case e: DeclineCardAuthorization =>
+            accept(CardAuthorizationDeclined(id, e.reason))
+          case e: CreateCardAuthorization =>
+            reject(AlreadyExists)
+        }
+        case Accepted(id) => {
+          case e: AcceptCardAuthorization => reject(AlreadyAccepted)
+          case e: DeclineCardAuthorization => reject(AlreadyAccepted)
+          case e: CreateCardAuthorization => reject(AlreadyExists)
+        }
+        case Declined(id) => {
+          case e: AcceptCardAuthorization => reject(AlreadyDeclined)
+          case e: DeclineCardAuthorization => reject(AlreadyDeclined)
+          case e: CreateCardAuthorization => reject(AlreadyExists)
+        }
+      }
+
+    override def eventProjector(entity: CardAuthorization): EventProjector[State, Event] =
+      EventProjector.instance {
+        case Initial => {
+          case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
+            Created(cardAuthorizationId)
+          case other =>
+            throw new IllegalArgumentException(s"Unexpected event $other")
+        }
+        case self: Created => {
+          case e: CardAuthorizationCreated => self
+          case e: CardAuthorizationAccepted => Accepted(self.id)
+          case e: CardAuthorizationDeclined => Declined(self.id)
+        }
+        case self: Accepted => {
+          case e: CardAuthorizationCreated => self
+          case e: CardAuthorizationAccepted => Accepted(self.id)
+          case e: CardAuthorizationDeclined => Declined(self.id)
+        }
+        case self: Declined => {
+          case e: CardAuthorizationCreated => self
+          case e: CardAuthorizationAccepted => Accepted(self.id)
+          case e: CardAuthorizationDeclined => Declined(self.id)
+        }
+      }
   }
+  def apply(): CardAuthorization = new CardAuthorization {}
 }
 case class CardAuthorizationId(value: String) extends AnyVal
 case class CardNumber(value: String) extends AnyVal

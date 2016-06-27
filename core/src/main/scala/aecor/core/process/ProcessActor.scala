@@ -1,6 +1,6 @@
 package aecor.core.process
 
-import aecor.core.entity.{CommandContract, EntityActor, EntityRef}
+import aecor.core.entity._
 import aecor.core.logging.PersistentActorLogging
 import aecor.core.message.{Deduplication, Message, MessageId, Passivation}
 import aecor.core.process.ProcessAction.{CompoundAction, _}
@@ -13,7 +13,8 @@ import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
-sealed trait ProcessAction[+In] {
+sealed trait
+ProcessAction[+In] {
   def and[In0 >: In](that: ProcessAction[In0]): ProcessAction[In0] = {
     CompoundAction(this, that)
   }
@@ -112,13 +113,13 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
         }
       }
 
-    case EntityActor.Response(CommandDelivered(deliveryId), result) => result match {
-      case EntityActor.Rejected(rejection) =>
+    case EntityResponse(CommandDelivered(deliveryId), result) => result match {
+      case Rejected(rejection) =>
         log.debug("Command [{}] rejected [{}]", deliveryId, rejection)
         persist(CommandRejected(rejection, deliveryId)) { _ =>
           commandRejected(rejection, deliveryId)
         }
-      case EntityActor.Accepted =>
+      case Accepted =>
         log.debug("Command [{}] accepted", deliveryId)
         persist(CommandAccepted(deliveryId)) { e =>
           confirmDelivery(deliveryId)

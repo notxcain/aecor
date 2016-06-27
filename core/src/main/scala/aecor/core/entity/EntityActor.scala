@@ -6,7 +6,6 @@ import java.time.Instant
 
 import aecor.core.bus.PublishEntityEvent
 import aecor.core.entity.CommandHandlerResult.{Accept, Defer, Reject}
-import aecor.core.entity.EntityActor._
 import aecor.core.entity.EventBusPublisherActor.PublishEvent
 import aecor.core.logging.PersistentActorLogging
 import aecor.core.message.{Message, MessageId}
@@ -14,15 +13,20 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash, Status}
 import akka.pattern._
 import akka.persistence.journal.Tagged
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted, SnapshotOffer}
+
 import scala.collection.immutable.Queue
 import scala.reflect.ClassTag
 
+
+case class EntityResponse[+Rejection, +Ack](ack: Ack, result: Result[Rejection])
+sealed trait Result[+Rejection]
+case object Accepted extends Result[Nothing]
+case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
+
 private [aecor] object EntityActor {
 
-  case class Response[+Rejection, +Ack](ack: Ack, result: Result[Rejection])
-  sealed trait Result[+Rejection]
-  case object Accepted extends Result[Nothing]
-  case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
+
+
   case object Stop
   def props[State: ClassTag, Command: ClassTag, Event: ClassTag, Rejection, EventBus]
   (entityName: String,
@@ -129,7 +133,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   def handlingCommand: Receive = {
     case Message(id, command: Command, ack) =>
       if (state.hasProcessedCommandWithId(id)) {
-        sender() ! Response(ack, Accepted)
+        sender() ! EntityResponse(ack, Accepted)
       } else {
         val reaction = state.handleEntityCommand(commandHandler)(command)
         runResult(id, ack)(reaction)
@@ -150,11 +154,11 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
       val envelope = EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), event, Instant.now, causedBy)
       persist(Tagged(envelope, Set(entityName))) { _ =>
         applyEventEnvelope(envelope)
-        sender() ! Response(ack, Accepted)
+        sender() ! EntityResponse(ack, Accepted)
       }
       context.become(handlingCommand)
     case Reject(rejection) =>
-      sender() ! Response(ack, Rejected(rejection))
+      sender() ! EntityResponse(ack, Rejected(rejection))
       context.become(handlingCommand)
     case Defer(deferred) =>
       deferred.map(HandleCommandHandlerResult(_)).asFuture.pipeTo(self)(sender)
