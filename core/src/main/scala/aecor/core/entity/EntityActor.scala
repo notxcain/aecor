@@ -13,7 +13,8 @@ import akka.actor.{Actor, ActorLogging, ActorRef, Props, Stash, Status}
 import akka.pattern._
 import akka.persistence.journal.Tagged
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted, SnapshotOffer}
-
+import cats.std.future._
+import aecor.core.concurrent._
 import scala.collection.immutable.Queue
 import scala.reflect.ClassTag
 
