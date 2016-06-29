@@ -73,10 +73,10 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
   )
 
   val authorizationRegion: EntityRef[CardAuthorization] =
-    EntityShardRegion.start[CardAuthorization](actorSystem, eventBus[CardAuthorization.Event], 100, CardAuthorization())
+    EntityShardRegion(actorSystem).start(CardAuthorization())(eventBus[CardAuthorization.Event], 30)
 
   val accountRegion: EntityRef[Account] =
-    EntityShardRegion.start[Account](actorSystem, eventBus[Account.Event], 100, Account())
+    EntityShardRegion(actorSystem).start(Account())(eventBus[Account.Event], 30)
 
   val cardAuthorizationProcess = {
     import materializer.executionContext

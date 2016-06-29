@@ -2,7 +2,6 @@ package aecor.core.entity
 
 import aecor.core.bus.PublishEntityEvent
 import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
-import aecor.core.serialization.Encoder
 import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.client.ClusterClientReceptionist
@@ -14,18 +13,19 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
 object EntityShardRegion {
-  type Topic = String
-  type PartitionKey = String
-  class StartRegion[Entity] {
+  def apply(actorSystem: ActorSystem): EntityShardRegion = new EntityShardRegion(actorSystem)
+}
+
+class EntityShardRegion(actorSystem: ActorSystem) {
+  class StartRegion[Entity](entity: Entity) {
     def apply[State, Command, Event, Rejection, EventBus]
-    (actorSystem: ActorSystem, eventBus: EventBus, numberOfShards: Int, entity: Entity)
+    (eventBus: EventBus, numberOfShards: Int)
     (implicit
-      contract: CommandContract.Aux[Entity, Command, Rejection],
+     contract: CommandContract.Aux[Entity, Command, Rejection],
      behavior: EntityBehavior[Entity, State, Command, Event, Rejection],
      State: ClassTag[State],
      Command: ClassTag[Command],
      E: ClassTag[Event],
-     eventEncoder: Encoder[Event],
      correlation: Correlation[Command],
      entityName: EntityName[Entity],
      eventBusPublisher: PublishEntityEvent[EventBus, Event]
@@ -69,6 +69,5 @@ object EntityShardRegion {
       }
     }
   }
-
-  def start[Entity]: StartRegion[Entity] = new StartRegion[Entity]
+  def start[Entity](entity: Entity): StartRegion[Entity] = new StartRegion(entity)
 }
