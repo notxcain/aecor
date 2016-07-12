@@ -1,9 +1,7 @@
 package aecor.core.message
 
 import aecor.core.message.Correlation.CorrelationId
-
-import scala.util.hashing.MurmurHash3
-
+import aecor.util.Partitioner
 
 object Correlation {
   type CorrelationId = String
@@ -17,5 +15,5 @@ trait Correlation[A] {
 }
 
 object ExtractShardId {
-  def apply(id: String, numberOfShards: Int): String = scala.math.abs(MurmurHash3.stringHash(id) % numberOfShards).toString
+  def apply(id: String, numberOfShards: Int): String = Partitioner.paritionForString(id, numberOfShards).toString
 }

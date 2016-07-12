@@ -9,7 +9,7 @@ trait FunctionBuilder[H, Input, +Out] {
 object FunctionBuilder {
   type Handler[T, Out] = T => Out
 
-  private val syntax = new FunctionBuilderSyntax {}
+  object syntax extends FunctionBuilderSyntax
 
   trait Apply[In] {
     def apply[H, Out](f: H)(implicit ev: FunctionBuilder[H, In, Out]): In => Out

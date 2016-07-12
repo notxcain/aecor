@@ -4,7 +4,6 @@ import aecor.core.bus.PublishEntityEvent
 import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
 import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem}
-import akka.cluster.client.ClusterClientReceptionist
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.pattern._
 import akka.util.Timeout
@@ -57,9 +56,6 @@ class EntityShardRegion(actorSystem: ActorSystem) {
         extractEntityId = extractEntityId,
         extractShardId = extractShardId
       )
-
-      actorSystem.log.debug("Registering service [{}] [{}]", entityName, shardRegionRef)
-      ClusterClientReceptionist(actorSystem).registerService(shardRegionRef)
 
       new EntityRef[Entity] {
         override private[aecor] val actorRef: ActorRef = shardRegionRef

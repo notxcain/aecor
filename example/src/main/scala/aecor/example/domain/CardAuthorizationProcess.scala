@@ -1,6 +1,6 @@
 package aecor.example.domain
 
-import aecor.example.domain.Account.{CancelHold, HoldPlaced, PlaceHold}
+import aecor.example.domain.Account.{VoidTransaction, TransactionAuthorized, AuthorizeTransaction}
 import aecor.example.domain.CardAuthorization._
 import aecor.core.entity.EntityRef
 import aecor.core.message.Correlation
@@ -10,12 +10,12 @@ import shapeless._
 import ProcessSyntax._
 
 object CardAuthorizationProcess {
-  type Input = CardAuthorizationCreated :+: HoldPlaced :+: CNil
+  type Input = CardAuthorizationCreated :+: TransactionAuthorized :+: CNil
 
   val correlation: Correlation[Input] = Correlation.instance(
     FunctionBuilder[Input] {
       at[CardAuthorizationCreated](_.transactionId) ::
-      at[HoldPlaced](_.transactionId) ::
+      at[TransactionAuthorized](_.transactionId) ::
       HNil
     }.andThen(_.value)
   )
@@ -24,8 +24,8 @@ object CardAuthorizationProcess {
 
     def acceptAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, transactionId: TransactionId) =
       cardAuthorizations.deliver(AcceptCardAuthorization(cardAuthorizationId)).handlingRejection {
-        case AlreadyDeclined => accounts.deliver(CancelHold(accountId, transactionId)).ignoringRejection
-        case DoesNotExists => accounts.deliver(CancelHold(accountId, transactionId)).ignoringRejection
+        case AlreadyDeclined => accounts.deliver(VoidTransaction(accountId, transactionId)).ignoringRejection
+        case DoesNotExists => accounts.deliver(VoidTransaction(accountId, transactionId)).ignoringRejection
         case AlreadyAccepted => doNothing
       }
 
@@ -34,7 +34,7 @@ object CardAuthorizationProcess {
 
     FunctionBuilder[Input] {
       when[CardAuthorizationCreated] { case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, _, _, transactionId) =>
-        accounts.deliver(PlaceHold(accountId, transactionId, amount)).handlingRejection {
+        accounts.deliver(AuthorizeTransaction(accountId, transactionId, amount)).handlingRejection {
           case Account.AccountDoesNotExist =>
             declineAuthorization(cardAuthorizationId, CardAuthorization.AccountDoesNotExist)
           case Account.InsufficientFunds =>
@@ -44,18 +44,18 @@ object CardAuthorizationProcess {
         } and
         become {
           when[CardAuthorizationCreated](ignore) ::
-          when[HoldPlaced] { _ =>
+          when[TransactionAuthorized] { _ =>
             acceptAuthorization(cardAuthorizationId, accountId, transactionId)
           } ::
           HNil
         }
       } ::
-      when[HoldPlaced] { case HoldPlaced(accountId, transactionId, amount) =>
+      when[TransactionAuthorized] { case TransactionAuthorized(accountId, transactionId, amount) =>
         become {
           when[CardAuthorizationCreated] { e =>
             acceptAuthorization(e.cardAuthorizationId, accountId, transactionId)
           } ::
-          when[HoldPlaced](ignore) ::
+          when[TransactionAuthorized](ignore) ::
           HNil
         }
       } ::

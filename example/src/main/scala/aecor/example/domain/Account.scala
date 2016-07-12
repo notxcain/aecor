@@ -12,9 +12,9 @@ object Account {
     def accountId: AccountId
   }
   case class AccountOpened(accountId: AccountId) extends Event
-  case class HoldPlaced(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
-  case class HoldCancelled(accountId: AccountId, transactionId: TransactionId) extends Event
-  case class HoldCleared(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
+  case class TransactionAuthorized(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
+  case class TransactionVoided(accountId: AccountId, transactionId: TransactionId) extends Event
+  case class TransactionCaptured(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
   case class AccountCredited(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
 
   implicit val eventEncoder: Encoder[Event] = shapeless.cachedImplicit
@@ -24,9 +24,9 @@ object Account {
     def accountId: AccountId
   }
   case class OpenAccount(accountId: AccountId) extends Command
-  case class PlaceHold(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command
-  case class CancelHold(accountId: AccountId, transactionId: TransactionId) extends Command
-  case class ClearHold(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command
+  case class AuthorizeTransaction(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command
+  case class VoidTransaction(accountId: AccountId, transactionId: TransactionId) extends Command
+  case class CaptureTransaction(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command
   case class CreditAccount(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command
 
   sealed trait Rejection
@@ -61,20 +61,20 @@ object Account {
         case c: OpenAccount =>
           reject(AccountExists)
 
-        case PlaceHold(_, transactionId, amount) =>
+        case AuthorizeTransaction(_, transactionId, amount) =>
           if (balance > amount) {
-            accept(HoldPlaced(id, transactionId, amount))
+            accept(TransactionAuthorized(id, transactionId, amount))
           } else {
             reject(InsufficientFunds)
           }
 
-        case CancelHold(_, transactionId) =>
-          accept(HoldCancelled(id, transactionId))
+        case VoidTransaction(_, transactionId) =>
+          accept(TransactionVoided(id, transactionId))
 
-        case ClearHold(_, transactionId, clearingAmount) =>
+        case CaptureTransaction(_, transactionId, clearingAmount) =>
           holds.get(transactionId) match {
             case Some(amount) =>
-              accept(HoldCleared(id, transactionId, clearingAmount))
+              accept(TransactionCaptured(id, transactionId, clearingAmount))
             case None =>
               reject(HoldNotFound)
           }
@@ -91,10 +91,10 @@ object Account {
       }
       case self @ Open(id, balance, holds) => {
         case e: AccountOpened => self
-        case e: HoldPlaced => self.copy(holds = holds + (e.transactionId -> e.amount), balance = balance - e.amount)
-        case e: HoldCancelled => holds.get(e.transactionId).map(holdAmount => self.copy(holds = holds - e.transactionId, balance = balance + holdAmount)).getOrElse(self)
+        case e: TransactionAuthorized => self.copy(holds = holds + (e.transactionId -> e.amount), balance = balance - e.amount)
+        case e: TransactionVoided => holds.get(e.transactionId).map(holdAmount => self.copy(holds = holds - e.transactionId, balance = balance + holdAmount)).getOrElse(self)
         case e: AccountCredited => self.copy(balance = balance + e.amount)
-        case e: HoldCleared => self.copy(holds = holds - e.transactionId)
+        case e: TransactionCaptured => self.copy(holds = holds - e.transactionId)
       }
     }
   }

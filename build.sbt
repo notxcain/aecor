@@ -8,16 +8,15 @@ lazy val buildSettings = Seq(
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
-    Resolver.sonatypeRepo("releases"),
-    Resolver.sonatypeRepo("snapshots"),
-    "Twitter Repository"               at "http://maven.twttr.com",
+//    "Twitter Repository"               at "http://maven.twttr.com",
     "Websudos releases"                at "https://dl.bintray.com/websudos/oss-releases/"
   ),
   libraryDependencies ++= Seq(
     "com.github.mpilquist" %% "simulacrum" % "0.7.0",
     "org.typelevel" %% "machinist" % "0.4.1",
     compilerPlugin("org.spire-math" %% "kind-projector" % "0.6.3"),
-    compilerPlugin("com.milessabin" % "si2712fix-plugin" % "1.1.0" cross CrossVersion.full)
+    compilerPlugin("com.milessabin" % "si2712fix-plugin" % "1.1.0" cross CrossVersion.full),
+    compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
   ),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value.filter(_ != "-Xfatal-warnings")
@@ -28,14 +27,19 @@ lazy val aecorSettings = buildSettings ++ commonSettings
 lazy val aecor = project.in(file("."))
   .settings(moduleName := "aecor")
   .settings(aecorSettings)
-  .aggregate(core, example, tests, bench)
-  .dependsOn(core, example, tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
+  .aggregate(core, api, example, tests, bench)
+  .dependsOn(core, api, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
 lazy val core = project
   .settings(moduleName := "aecor-core")
   .settings(aecorSettings)
   .settings(coreSettings)
   .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test")
+
+lazy val api = project
+  .settings(moduleName := "aecor-api")
+  .settings(aecorSettings)
+    .settings(apiSettings)
 
 lazy val bench = project.dependsOn(core, example)
   .settings(moduleName := "aecor-bench")
@@ -45,37 +49,35 @@ lazy val bench = project.dependsOn(core, example)
 lazy val tests = project.dependsOn(core, example)
   .settings(moduleName := "aecor-tests")
   .settings(aecorSettings)
-  .settings(testingDependencies)
+  .settings(testingSettings)
 
-lazy val example = project.dependsOn(core)
+lazy val example = project.dependsOn(core, api)
   .settings(moduleName := "aecor-example")
   .settings(aecorSettings)
-  .settings(exampleDependencies)
+  .settings(exampleSettings)
 
 val circeVersion = "0.4.1"
 val akkaVersion = "2.4.7"
-val akkaStreamKafka = "0.11-M3"
-val akkaPersistenceCassandra = "0.16"
+val reactiveKafka = "0.11-M3"
+val akkaPersistenceCassandra = "0.17"
 val catsVersion = "0.5.0"
 val akkaHttpJson = "1.6.0"
 val kamonVersion = "0.6.1"
-val scalacheckVersion = "1.13.0"
+lazy val scalacheckVersion = "1.13.0"
+val shapelessVersion = "2.3.1"
 
 def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= dependency("com.typesafe.akka")(
-    "akka-http-experimental",
     "akka-cluster-sharding",
     "akka-persistence",
     "akka-slf4j",
-    "akka-contrib",
-    "akka-persistence-query-experimental"
+    "akka-contrib"
   )(akkaVersion),
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
-    "com.typesafe.akka" %% "akka-stream-kafka" % akkaStreamKafka,
-    "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1",
+    "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafka,
     "org.fusesource" % "sigar" % "1.6.4",
     "ch.qos.logback" % "logback-classic" % "1.1.7"
   ),
@@ -93,15 +95,29 @@ lazy val coreSettings = Seq(
     "circe-parser"
   )(circeVersion),
 
-  libraryDependencies += "org.typelevel" %% "cats" % catsVersion,
-  PB.flatPackage in PB.protobufConfig := true
-) ++ PB.protobufSettings
+  libraryDependencies += "org.typelevel" %% "cats" % catsVersion
+) ++
+  PB.protobufSettings ++
+  Seq(
+    version in PB.protobufConfig := "2.6.1",
+    javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+    scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+    PB.flatPackage in PB.protobufConfig := true
+  )
 
-lazy val exampleDependencies = Seq(
-  libraryDependencies += "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
+lazy val apiSettings = Seq(
+  libraryDependencies ++= Seq(
+    "com.chuusai" %% "shapeless" % shapelessVersion,
+    "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
+    "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
+  )
 )
 
-lazy val testingDependencies = Seq(
+lazy val exampleSettings = Seq(
+  libraryDependencies += "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1"
+)
+
+lazy val testingSettings = Seq(
   libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion,
   libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0-RC1" % "test",
   libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"

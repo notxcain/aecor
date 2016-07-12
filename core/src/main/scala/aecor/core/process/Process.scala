@@ -2,13 +2,13 @@ package aecor.core.process
 
 import java.util.UUID
 
-import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
+import aecor.core.message._
 import aecor.core.process.ComposeConfig.Aux
 import aecor.core.process.ProcessActor.ProcessBehavior
 import aecor.core.serialization.DomainEventSerialization
+import aecor.core.serialization.protobuf.DomainEvent
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Terminated}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
-import akka.http.scaladsl.util.FastFuture
 import akka.kafka.ConsumerMessage.CommittableMessage
 import akka.kafka.ConsumerSettings
 import akka.kafka.scaladsl.Consumer
@@ -16,7 +16,6 @@ import akka.pattern.ask
 import akka.stream.scaladsl.{Keep, RunnableGraph, Sink}
 import akka.util.Timeout
 import akka.{Done, NotUsed}
-import io.aecor.message.protobuf.Messages.DomainEvent
 import org.apache.kafka.common.serialization.StringDeserializer
 
 import scala.concurrent.duration.FiniteDuration
@@ -74,7 +73,7 @@ object Process {
               case Some(input) =>
                 (processRegion ? Message(MessageId(event.id), input, NotUsed)).map(_ => offset)
               case None =>
-                FastFuture.successful(offset)
+                Future.successful(offset)
             }
         }
         .mapAsync(1)(_.commitScaladsl())

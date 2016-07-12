@@ -1,11 +1,13 @@
 package aecor.core.process
 
+import java.time.Instant
+
 import aecor.core.entity._
 import aecor.core.logging.PersistentActorLogging
-import aecor.core.message.{Deduplication, Message, MessageId, Passivation}
+import aecor.core.message._
 import aecor.core.process.ProcessAction.{CompoundAction, _}
 import aecor.core.process.ProcessActor.CommandDelivered
-import aecor.core.process.ProcessActor.PersistentMessage.{CommandAccepted, CommandRejected, EventEnvelope}
+import aecor.core.process.ProcessEvent.{CommandAccepted, CommandRejected, EventEnvelope}
 import aecor.util.{FunctionBuilder, FunctionBuilderSyntax}
 import akka.actor.Props
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted}
@@ -24,7 +26,12 @@ object ProcessAction {
   case class DeliverCommand[In, Entity, Rejection, Command](destination: EntityRef[Entity], command: Command, rejectionHandler: Rejection => ProcessAction[In]) extends ProcessAction[In]
   case class CompoundAction[In](l: ProcessAction[In], r: ProcessAction[In]) extends ProcessAction[In]
   case object DoNothing extends ProcessAction[Nothing]
+//  case class WithEventContext[In](f: EventContext => ProcessAction[In]) extends ProcessAction[In]
 }
+
+//case class EventContext(id: MessageId, timestamp: Timestamp)
+
+case class ProcessInput[In](id: MessageId, timestamp: Instant, event: In)
 
 trait ProcessSyntax extends FunctionBuilderSyntax {
   implicit def toChangeState[H, In](f: H)(implicit ev: FunctionBuilder[H, In, ProcessAction[In]]): In => ProcessAction[In] = ev(f)
@@ -54,6 +61,9 @@ trait ProcessSyntax extends FunctionBuilderSyntax {
   final def when[A] = new At[A] {
     override def apply[Out](f: (A) => Out): (A) => Out = f
   }
+
+//  def withContext[E](f: EventContext => ProcessAction[E]): ProcessAction[E] = WithEventContext(f)
+
   def ignore[E]: Any => ProcessAction[E] = _ => doNothing
 }
 
@@ -64,12 +74,6 @@ object ProcessActor {
 
   case class CommandDelivered(deliveryId: Long)
 
-  sealed trait PersistentMessage
-  object PersistentMessage {
-    case class EventEnvelope[E](id: MessageId, event: E) extends PersistentMessage
-    case class CommandRejected(rejection: Any, deliveryId: Long) extends PersistentMessage
-    case class CommandAccepted(deliveryId: Long) extends PersistentMessage
-  }
   def props[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], idleTimeout: FiniteDuration): Props = Props(new ProcessActor[Input](name, initialBehavior, idleTimeout))
 }
 
@@ -136,6 +140,8 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
     case CompoundAction(l, r) =>
       runReaction(l)
       runReaction(r)
+//    case WithEventContext(f) =>
+
     case DoNothing =>
       ()
   }

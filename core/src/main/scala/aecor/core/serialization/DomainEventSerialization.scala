@@ -2,7 +2,7 @@ package aecor.core.serialization
 
 import java.util
 
-import io.aecor.message.protobuf.Messages.DomainEvent
+import aecor.core.serialization.protobuf.DomainEvent
 import org.apache.kafka.common.serialization.{Deserializer, Serializer}
 
 class DomainEventSerialization extends Serializer[DomainEvent] with Deserializer[(String, DomainEvent)] {

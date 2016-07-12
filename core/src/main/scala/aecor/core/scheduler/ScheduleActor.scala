@@ -3,6 +3,7 @@ package aecor.core.scheduler
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Instant, LocalDateTime, ZoneId}
+import java.util.UUID
 
 import aecor.core.bus.PublishEntityEvent
 import aecor.core.entity.{EntityEventEnvelope, EventBusPublisherActor}
@@ -134,7 +135,7 @@ class ScheduleActor[EventBus](scheduleName: String, timeBucket: String, eventBus
       MessageId(persistenceId + "-" + lastSequenceNr),
       event,
       Instant.now(),
-      MessageId("time")
+      MessageId(s"time-${LocalDateTime.now()}")
     )
 
   def applyEvent(envelope: EntityEventEnvelope[Event]): Unit = envelope.event match {
@@ -157,7 +158,7 @@ class ScheduleActor[EventBus](scheduleName: String, timeBucket: String, eventBus
       eventNrToDeliveryId = eventNrToDeliveryId + (lastSequenceNr -> deliveryId)
       EventBusPublisherActor.PublishEvent(
         eventEnvelope,
-        Message("not-used", MarkEventAsPublished(lastSequenceNr)),
+        Message(UUID.randomUUID().toString, MarkEventAsPublished(lastSequenceNr)),
         regionRef
       )
     }

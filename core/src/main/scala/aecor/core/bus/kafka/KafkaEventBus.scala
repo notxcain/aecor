@@ -3,6 +3,7 @@ package aecor.core.bus.kafka
 import aecor.core.bus.PublishEntityEvent
 import aecor.core.entity.EntityEventEnvelope
 import aecor.core.serialization.Encoder
+import aecor.core.serialization.protobuf.DomainEvent
 import akka.Done
 import akka.actor.ActorSystem
 import akka.kafka.scaladsl.Producer
@@ -11,7 +12,6 @@ import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings, Materializer, OverflowStrategy}
 import akka.util.Timeout
 import com.google.protobuf.ByteString
-import io.aecor.message.protobuf.Messages.{DomainEvent, Timestamp}
 import org.apache.kafka.clients.producer.ProducerRecord
 
 import scala.concurrent.{Future, Promise}
@@ -39,7 +39,7 @@ class KafkaEventBus[Event: Encoder](actorSystem: ActorSystem, producerSettings: 
     val domainEvent = DomainEvent(
       eventEnvelope.id.value,
       ByteString.copyFrom(Encoder[Event].encode(eventEnvelope.event)),
-      Timestamp(eventEnvelope.timestamp.toEpochMilli),
+      eventEnvelope.timestamp.toEpochMilli,
       eventEnvelope.causedBy.value
     )
     val record = new ProducerRecord(entityName, entityId, domainEvent)

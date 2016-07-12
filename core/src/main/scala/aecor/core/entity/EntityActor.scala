@@ -58,14 +58,6 @@ private [aecor] case class PublishState[+Event](eventNrToDeliveryId: Map[Long, L
 }
 
 
-private [aecor] sealed trait EntityActorEvent
-case class EntityEventEnvelope[+Event](id: MessageId, event: Event, timestamp: Instant, causedBy: MessageId) extends EntityActorEvent {
-  def cast[EE: ClassTag]: Option[EntityEventEnvelope[EE]] = event match {
-    case e: EE => Some(this.asInstanceOf[EntityEventEnvelope[EE]])
-    case other => None
-  }
-}
-private [aecor] case class EventPublished(eventNr: Long) extends EntityActorEvent
 
 private [aecor] case class MarkEventAsPublished(entityId: String, eventNr: Long)
 
@@ -151,10 +143,18 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   }
 
   def runResult(causedBy: MessageId, ack: Any)(result: CommandHandlerResult[Event, Rejection]): Unit = result match {
-    case Accept(event) =>
-      val envelope = EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr), event, Instant.now, causedBy)
-      persist(Tagged(envelope, Set(entityName))) { _ =>
-        applyEventEnvelope(envelope)
+    case Accept(events) =>
+      val envelopes = events.zipWithIndex
+        .map {
+          case (event, idx) => EntityEventEnvelope(MessageId(entityName, entityId, lastSequenceNr + idx), event, Instant.now, causedBy)
+        }
+        .map(envelope => Tagged(envelope, Set(entityName)))
+          .toList
+      persistAll(envelopes) {
+        case Tagged(e: EntityEventEnvelope[Event], _) =>
+          applyEventEnvelope(e)
+      }
+      deferAsync("") { _ =>
         sender() ! EntityResponse(ack, Accepted)
       }
       context.become(handlingCommand)
@@ -164,8 +164,8 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
     case Defer(deferred) =>
       deferred.map(HandleCommandHandlerResult(_)).asFuture.pipeTo(self)(sender)
       context.become {
-        case HandleCommandHandlerResult(defferedResult) =>
-          runResult(causedBy, ack)(defferedResult)
+        case HandleCommandHandlerResult(deferredResult) =>
+          runResult(causedBy, ack)(deferredResult)
           unstashAll()
         case failure @ Status.Failure(e) =>
           log.error(e, "Deferred reaction failed")

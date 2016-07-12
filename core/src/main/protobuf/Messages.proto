@@ -1,14 +1,22 @@
-option java_package = "io.aecor.message.protobuf";
+package aecor.core.serialization.protobuf;
 option optimize_for = SPEED;
 
 message DomainEvent {
   required string id = 1;
-  required bytes payload = 4;
-  required Timestamp timestamp = 5;
-  required string causedBy = 6;
+  required bytes payload = 2;
+  required uint64 timestamp = 4; //UTC millis
+  required string causedBy = 5;
 }
 
-message Timestamp {
-  //UTC timestamp
-  required uint64 millis = 1;
+message EventPublished {
+  required uint64 eventNr = 1;
+}
+
+message EntityEventEnvelope {
+  required string id = 1;
+  required uint32 serializerId = 2;
+  required string manifest = 3;
+  required bytes payload = 4;
+  required uint64 timestamp = 5; //UTC millis
+  required string causedBy = 6;
 }

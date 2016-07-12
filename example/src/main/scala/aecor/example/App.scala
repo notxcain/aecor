@@ -9,7 +9,7 @@ import aecor.core.bus.kafka.KafkaEventBus
 import aecor.core.entity._
 import aecor.core.process.ComposeConfig
 import aecor.core.serialization.{DomainEventSerialization, Encoder}
-import aecor.example.domain.Account.HoldPlaced
+import aecor.example.domain.Account.TransactionAuthorized
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationCreated, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
@@ -82,7 +82,7 @@ class RootActor extends Actor with ActorLogging with CirceSupport {
     import materializer.executionContext
     val schema =
       from[CardAuthorization, CardAuthorization.Event].collect { case e: CardAuthorizationCreated => e } ::
-      from[Account, Account.Event].collect { case e: HoldPlaced => e } ::
+      from[Account, Account.Event].collect { case e: TransactionAuthorized => e } ::
       HNil
     Process.start[CardAuthorizationProcess.Input](
       actorSystem = actorSystem,
