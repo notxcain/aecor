@@ -3,17 +3,15 @@ package aecor.core.scheduler
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Instant, LocalDateTime, ZoneId}
-import java.util.UUID
 
-import aecor.core.bus.PublishEntityEvent
-import aecor.core.entity.{EntityEventEnvelope, EventBusPublisherActor}
+import aecor.core.entity.PersistentEntityEventEnvelope
 import aecor.core.logging.PersistentActorLogging
-import aecor.core.message.{ExtractShardId, Message, MessageId}
+import aecor.core.message.{ExtractShardId, MessageId}
 import aecor.core.scheduler.ScheduleActor._
 import akka.Done
-import akka.actor.{Actor, ActorRef, Cancellable, Props}
+import akka.actor.{Actor, Cancellable, Props}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId}
-import akka.persistence.{AtLeastOnceDelivery, PersistentActor}
+import akka.persistence.PersistentActor
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 
@@ -31,11 +29,11 @@ object ScheduleActorSupervisor {
     case c @ AddScheduleEntry(scheduleName, dueDate, entryId) =>
       ExtractShardId(scheduleName + "-" + calculateTimeBucket(dueDate), 100)
   }
-  def props[EventBus](eventBus: EventBus)(implicit ev: PublishEntityEvent[EventBus, ScheduleActor.PublicEvent]): Props =
-    Props(new ScheduleActorSupervisor[EventBus](eventBus))
+  def props: Props =
+    Props(new ScheduleActorSupervisor())
 }
 
-class ScheduleActorSupervisor[EventBus](eventBus: EventBus)(implicit ev: PublishEntityEvent[EventBus, ScheduleActor.PublicEvent]) extends Actor {
+class ScheduleActorSupervisor extends Actor {
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system), "ScheduleActorSupervisor")
 
@@ -46,7 +44,7 @@ class ScheduleActorSupervisor[EventBus](eventBus: EventBus)(implicit ev: Publish
   }
 
   var tickControl: Option[Cancellable] = None
-  var worker = context.actorOf(ScheduleActor.props(scheduleName, timeBucket, eventBus, context.parent), "worker")
+  var worker = context.actorOf(ScheduleActor.props(scheduleName, timeBucket), "worker")
 
   override def postStop(): Unit = {
     tickControl.foreach(_.cancel())
@@ -62,47 +60,44 @@ class ScheduleActorSupervisor[EventBus](eventBus: EventBus)(implicit ev: Publish
   }
 }
 
+sealed trait ScheduleActorEvent
+case class ScheduleEntryAdded(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends ScheduleActorEvent
+case class ScheduleEntryFired(scheduleName: String, entryId: String) extends ScheduleActorEvent
+
 object ScheduleActor {
   sealed trait Command
   case class AddScheduleEntry(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends Command
   private [scheduler] case object FireDueEntries extends Command
-  private [scheduler] case class MarkEventAsPublished(deliveryId: Long) extends Command
 
-  sealed trait Event
-  sealed trait PublicEvent extends Event
-  case class ScheduleEntryAdded(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends PublicEvent
-  case class ScheduleEntryFired(scheduleName: String, entryId: String) extends PublicEvent
-  private [scheduler] case class EventPublished(scheduleName: String, seqNr: Long) extends Event
-
-  def props[EventBus](scheduleName: String, timeBucket: String, eventBus: EventBus, regionRef: ActorRef)(implicit ev: PublishEntityEvent[EventBus, PublicEvent]): Props =
-    Props(new ScheduleActor(scheduleName, timeBucket, eventBus, regionRef: ActorRef))
+  def props(scheduleName: String, timeBucket: String): Props =
+    Props(new ScheduleActor(scheduleName, timeBucket))
 }
 
-class ScheduleActor[EventBus](scheduleName: String, timeBucket: String, eventBus: EventBus, regionRef: ActorRef)(implicit ev: PublishEntityEvent[EventBus, PublicEvent])
+private [aecor] case class ScheduleEntry(id: String, dueDate: LocalDateTime)
+private [aecor] case class ScheduleActorState(entries: List[ScheduleEntry]) {
+  def addEntry(entryId: String, dueDate: LocalDateTime): ScheduleActorState =
+    copy(entries = ScheduleEntry(entryId, dueDate) :: entries)
+
+  def removeEntry(entryId: String): ScheduleActorState =
+    copy(entries = entries.filterNot(_.id == entryId))
+
+  def findEntriesDueNow(now: LocalDateTime): List[ScheduleEntry] =
+    entries.filter(_.dueDate.isBefore(now))
+}
+private [aecor] object ScheduleActorState {
+  def empty: ScheduleActorState = ScheduleActorState(List.empty)
+}
+
+private [aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
   extends PersistentActor
-  with AtLeastOnceDelivery
   with PersistentActorLogging {
 
   override val persistenceId: String = "Schedule-" + scheduleName + "-" + timeBucket
 
-  case class Entry(id: String, dueDate: LocalDateTime)
-  case class State(entries: List[Entry]) {
-    def addEntry(entryId: String, dueDate: LocalDateTime): State =
-      copy(entries = Entry(entryId, dueDate) :: entries)
-
-    def removeEntry(entryId: String): State =
-      copy(entries = entries.filterNot(_.id == entryId))
-
-    def findEntriesDueNow(now: LocalDateTime): List[Entry] =
-      entries.filter(_.dueDate.isBefore(now))
-  }
-
-  var state = State(List.empty)
-  val eventBusActor = context.actorOf(EventBusPublisherActor.props[EventBus, PublicEvent](scheduleName, timeBucket, eventBus), "eventBusPublisher")
-  var eventNrToDeliveryId = Map.empty[Long, Long]
+  private var state = ScheduleActorState.empty
 
   override def receiveRecover: Receive = {
-    case e: EntityEventEnvelope[_] => e.cast[Event] match {
+    case e: PersistentEntityEventEnvelope[_] => e.cast[ScheduleActorEvent] match {
       case Some(envelope) => applyEvent(envelope)
       case None => throw new IllegalArgumentException(s"Unexpected event ${e.event}")
     }
@@ -123,43 +118,22 @@ class ScheduleActor[EventBus](scheduleName: String, timeBucket: String, eventBus
         .map(entry => ScheduleEntryFired(scheduleName, entry.id))
         .map(putInEnvelope)
       persistAll(envelopes)(applyEvent)
-
-    case MarkEventAsPublished(eventNr) =>
-      eventNrToDeliveryId.get(eventNr).foreach { _ =>
-        persistAsync(putInEnvelope(EventPublished(scheduleName, eventNr)))(applyEvent)
-      }
   }
 
-  def putInEnvelope(event: Event): EntityEventEnvelope[Event] =
-    EntityEventEnvelope(
-      MessageId(persistenceId + "-" + lastSequenceNr),
+  def putInEnvelope(event: ScheduleActorEvent): PersistentEntityEventEnvelope[ScheduleActorEvent] =
+    PersistentEntityEventEnvelope(
       event,
       Instant.now(),
       MessageId(s"time-${LocalDateTime.now()}")
     )
 
-  def applyEvent(envelope: EntityEventEnvelope[Event]): Unit = envelope.event match {
-    case publicEvent: PublicEvent =>
+  def applyEvent(envelope: PersistentEntityEventEnvelope[ScheduleActorEvent]): Unit = envelope.event match {
+    case publicEvent: ScheduleActorEvent =>
       publicEvent match {
         case ScheduleEntryAdded(_, dueDate, entryId) =>
           state = state.addEntry(entryId, dueDate)
         case ScheduleEntryFired(_, entryId) =>
           state = state.removeEntry(entryId)
       }
-      publishEvent(envelope.asInstanceOf[EntityEventEnvelope[PublicEvent]])
-
-    case EventPublished(_, eventNr) =>
-      eventNrToDeliveryId.get(eventNr).foreach(confirmDelivery)
-      eventNrToDeliveryId = eventNrToDeliveryId - eventNr
   }
-
-  def publishEvent(eventEnvelope: EntityEventEnvelope[PublicEvent]): Unit =
-    deliver(eventBusActor.path) { deliveryId =>
-      eventNrToDeliveryId = eventNrToDeliveryId + (lastSequenceNr -> deliveryId)
-      EventBusPublisherActor.PublishEvent(
-        eventEnvelope,
-        Message(UUID.randomUUID().toString, MarkEventAsPublished(lastSequenceNr)),
-        regionRef
-      )
-    }
 }

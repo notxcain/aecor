@@ -49,10 +49,13 @@ object Account {
   implicit val commandContract: CommandContract.Aux[Account, Command, Rejection] =
     CommandContract.instance
 
+  implicit val eventContract: EventContract.Aux[Account, Event] =
+    EventContract.instance
+
   implicit def behavior: EntityBehavior[Account, State, Command, Event, Rejection] = new EntityBehavior[Account, State, Command, Event, Rejection] {
     override def initialState(entity: Account): State = Initial
 
-    override def commandHandler(entity: Account): CommandHandler[State, Command, Event, Rejection] = CommandHandler.instance {
+    override def commandHandler(entity: Account): CommandHandler[State, Command, Event, Rejection] = CommandHandler {
       case Initial => {
         case OpenAccount(accountId) => accept(AccountOpened(accountId))
         case _ => reject(AccountDoesNotExist)

@@ -18,4 +18,5 @@
     <logger name="org.apache.kafka.clients.consumer.internals.AbstractCoordinator" level="WARN" />
     <logger name="com.datastax.driver.core.Connection" level="WARN" />
     <logger name="com.websudos.phantom" level="WARN" />
+    <logger name="akka.persistence.cassandra.query.EventsByTagPublisher" level="DEBUG" />
 </configuration>

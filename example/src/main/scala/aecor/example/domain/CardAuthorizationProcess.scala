@@ -1,13 +1,12 @@
 package aecor.example.domain
 
-import aecor.example.domain.Account.{VoidTransaction, TransactionAuthorized, AuthorizeTransaction}
-import aecor.example.domain.CardAuthorization._
 import aecor.core.entity.EntityRef
 import aecor.core.message.Correlation
-import aecor.core.process._
+import aecor.core.process.ProcessSyntax._
+import aecor.example.domain.Account.{AuthorizeTransaction, TransactionAuthorized, VoidTransaction}
+import aecor.example.domain.CardAuthorization._
 import aecor.util.FunctionBuilder
 import shapeless._
-import ProcessSyntax._
 
 object CardAuthorizationProcess {
   type Input = CardAuthorizationCreated :+: TransactionAuthorized :+: CNil

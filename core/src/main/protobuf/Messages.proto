@@ -1,19 +1,15 @@
 package aecor.core.serialization.protobuf;
 option optimize_for = SPEED;
 
-message DomainEvent {
-  required string id = 1;
-  required bytes payload = 2;
+message EntityEventEnvelope {
+  required string entityId = 1;
+  required uint64 sequenceNr = 2;
+  required bytes event = 3;
   required uint64 timestamp = 4; //UTC millis
   required string causedBy = 5;
 }
 
-message EventPublished {
-  required uint64 eventNr = 1;
-}
-
-message EntityEventEnvelope {
-  required string id = 1;
+message PersistentEntityEventEnvelope {
   required uint32 serializerId = 2;
   required string manifest = 3;
   required bytes payload = 4;

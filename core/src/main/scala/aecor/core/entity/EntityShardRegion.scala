@@ -1,6 +1,5 @@
 package aecor.core.entity
 
-import aecor.core.bus.PublishEntityEvent
 import aecor.core.message.{Correlation, ExtractShardId, Message, MessageId}
 import akka.NotUsed
 import akka.actor.{ActorRef, ActorSystem}
@@ -10,6 +9,7 @@ import akka.util.Timeout
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
+import scala.concurrent.duration._
 
 object EntityShardRegion {
   def apply(actorSystem: ActorSystem): EntityShardRegion = new EntityShardRegion(actorSystem)
@@ -18,26 +18,27 @@ object EntityShardRegion {
 class EntityShardRegion(actorSystem: ActorSystem) {
   class StartRegion[Entity](entity: Entity) {
     def apply[State, Command, Event, Rejection, EventBus]
-    (eventBus: EventBus, numberOfShards: Int)
+    ()
     (implicit
      contract: CommandContract.Aux[Entity, Command, Rejection],
      behavior: EntityBehavior[Entity, State, Command, Event, Rejection],
      State: ClassTag[State],
      Command: ClassTag[Command],
-     E: ClassTag[Event],
+     Event: ClassTag[Event],
      correlation: Correlation[Command],
-     entityName: EntityName[Entity],
-     eventBusPublisher: PublishEntityEvent[EventBus, Event]
+     entityName: EntityName[Entity]
     ): EntityRef[Entity] = {
+
+      val config = actorSystem.settings.config
+
+      val numberOfShards = config.getInt("aecor.entity.number-of-shards")
 
       def extractEntityId: ShardRegion.ExtractEntityId = {
         case m @ Message(_, c: Command, _) ⇒ (correlation(c), m)
-        case m @ Message(_, c: MarkEventAsPublished, _) => (c.entityId, c)
       }
 
       def extractShardId: ShardRegion.ExtractShardId = {
         case m @ Message(_, c: Command, _) => ExtractShardId(correlation(c), numberOfShards)
-        case m @ Message(_, c: MarkEventAsPublished, _) => ExtractShardId(c.entityId, numberOfShards)
       }
 
       val props = EntityActor.props(
@@ -45,8 +46,7 @@ class EntityShardRegion(actorSystem: ActorSystem) {
         behavior.initialState(entity),
         behavior.commandHandler(entity),
         behavior.eventProjector(entity),
-        eventBus,
-        preserveEventOrderInEventBus = true
+        2.minutes
       )
 
       val shardRegionRef = ClusterSharding(actorSystem).start(

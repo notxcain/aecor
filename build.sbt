@@ -27,8 +27,8 @@ lazy val aecorSettings = buildSettings ++ commonSettings
 lazy val aecor = project.in(file("."))
   .settings(moduleName := "aecor")
   .settings(aecorSettings)
-  .aggregate(core, api, example, tests, bench)
-  .dependsOn(core, api, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
+  .aggregate(core, api, circe, example, tests, bench)
+  .dependsOn(core, api, circe, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
 lazy val core = project
   .settings(moduleName := "aecor-core")
@@ -51,16 +51,21 @@ lazy val tests = project.dependsOn(core, example)
   .settings(aecorSettings)
   .settings(testingSettings)
 
-lazy val example = project.dependsOn(core, api)
+lazy val circe = project.dependsOn(core)
+  .settings(moduleName := "aecor-circe")
+  .settings(aecorSettings)
+  .settings(circeSettings)
+
+lazy val example = project.dependsOn(core, api, circe)
   .settings(moduleName := "aecor-example")
   .settings(aecorSettings)
   .settings(exampleSettings)
 
-val circeVersion = "0.4.1"
-val akkaVersion = "2.4.7"
-val reactiveKafka = "0.11-M3"
+val circeVersion = "0.5.0-M2"
+val akkaVersion = "2.4.8"
+val reactiveKafka = "0.11-M4"
 val akkaPersistenceCassandra = "0.17"
-val catsVersion = "0.5.0"
+val catsVersion = "0.6.0"
 val akkaHttpJson = "1.6.0"
 val kamonVersion = "0.6.1"
 lazy val scalacheckVersion = "1.13.0"
@@ -81,6 +86,11 @@ lazy val coreSettings = Seq(
     "org.fusesource" % "sigar" % "1.6.4",
     "ch.qos.logback" % "logback-classic" % "1.1.7"
   ),
+
+  libraryDependencies ++= Seq(
+    "com.chuusai" %% "shapeless" % "2.3.1"
+  ),
+
   libraryDependencies ++= Seq(
     "io.kamon" %% "kamon-core",
     "io.kamon" %% "kamon-jmx",
@@ -88,12 +98,6 @@ lazy val coreSettings = Seq(
     "io.kamon" %% "kamon-akka-remote_akka-2.4",
     "io.kamon" %% "kamon-autoweave"
   ).map(_ % kamonVersion),
-
-  libraryDependencies ++= dependency("io.circe")(
-    "circe-core",
-    "circe-generic",
-    "circe-parser"
-  )(circeVersion),
 
   libraryDependencies += "org.typelevel" %% "cats" % catsVersion
 ) ++
@@ -117,10 +121,18 @@ lazy val exampleSettings = Seq(
   libraryDependencies += "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1"
 )
 
+lazy val circeSettings = Seq(
+  libraryDependencies ++= dependency("io.circe")(
+    "circe-core",
+    "circe-generic",
+    "circe-parser"
+  )(circeVersion)
+)
+
 lazy val testingSettings = Seq(
   libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion,
-  libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0-RC1" % "test",
-  libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test"
+  libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0-RC1" % Test,
+  libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
 )
 
 lazy val commonScalacOptions = Seq(

@@ -1,96 +1,57 @@
 package aecor.core.process
 
-import java.time.Instant
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 import aecor.core.entity._
 import aecor.core.logging.PersistentActorLogging
 import aecor.core.message._
-import aecor.core.process.ProcessAction.{CompoundAction, _}
-import aecor.core.process.ProcessActor.CommandDelivered
+import aecor.core.process.ProcessActor.{CommandDelivered, ProcessBehavior}
 import aecor.core.process.ProcessEvent.{CommandAccepted, CommandRejected, EventEnvelope}
-import aecor.util.{FunctionBuilder, FunctionBuilderSyntax}
+import aecor.core.process.ProcessReaction.{CompoundReaction, _}
 import akka.actor.Props
 import akka.persistence.{AtLeastOnceDelivery, PersistentActor, RecoveryCompleted}
 
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
-sealed trait
-ProcessAction[+In] {
-  def and[In0 >: In](that: ProcessAction[In0]): ProcessAction[In0] = {
-    CompoundAction(this, that)
+sealed trait ProcessReaction[+In] {
+  def and[In0 >: In](that: ProcessReaction[In0]): ProcessReaction[In0] = {
+    CompoundReaction(this, that)
   }
 }
-object ProcessAction {
-  case class ChangeState[In](f: In => ProcessAction[In]) extends ProcessAction[In]
-  case class DeliverCommand[In, Entity, Rejection, Command](destination: EntityRef[Entity], command: Command, rejectionHandler: Rejection => ProcessAction[In]) extends ProcessAction[In]
-  case class CompoundAction[In](l: ProcessAction[In], r: ProcessAction[In]) extends ProcessAction[In]
-  case object DoNothing extends ProcessAction[Nothing]
-//  case class WithEventContext[In](f: EventContext => ProcessAction[In]) extends ProcessAction[In]
+object ProcessReaction {
+  case class ChangeBehavior[In](f: In => ProcessReaction[In]) extends ProcessReaction[In]
+  case class DeliverCommand[In, Entity, Rejection, Command](destination: EntityRef[Entity], command: Command, rejectionHandler: Rejection => ProcessReaction[In]) extends ProcessReaction[In]
+  case class CompoundReaction[In](l: ProcessReaction[In], r: ProcessReaction[In]) extends ProcessReaction[In]
+  case object DoNothing extends ProcessReaction[Nothing]
 }
-
-//case class EventContext(id: MessageId, timestamp: Timestamp)
-
-case class ProcessInput[In](id: MessageId, timestamp: Instant, event: In)
-
-trait ProcessSyntax extends FunctionBuilderSyntax {
-  implicit def toChangeState[H, In](f: H)(implicit ev: FunctionBuilder[H, In, ProcessAction[In]]): In => ProcessAction[In] = ev(f)
-  final def become[In](f: In => ProcessAction[In]): ProcessAction[In] = ChangeState(f)
-
-  trait DeliverCommand[R] {
-    trait HandlingRejection[A] { outer =>
-      def map[B](f: A => B): HandlingRejection[B] = new HandlingRejection[B] {
-        override def apply[In](handler: (B) => ProcessAction[In]): ProcessAction[In] = outer.apply(x => handler(f(x)))
-      }
-      def apply[In](handler: A => ProcessAction[In]): ProcessAction[In]
-    }
-    def handlingRejection: HandlingRejection[R]
-    def ignoringRejection[In]: ProcessAction[In] = handlingRejection(_ => DoNothing)
-  }
-
-  implicit class EntityRefOps[Entity](er: EntityRef[Entity]) {
-    final def deliver[Command](command: Command)(implicit contract: CommandContract[Entity, Command]) =
-      new DeliverCommand[contract.Rejection] {
-        override def handlingRejection: HandlingRejection[contract.Rejection] = new HandlingRejection[contract.Rejection] {
-          override def apply[In](handler: (contract.Rejection) => ProcessAction[In]): ProcessAction[In] = DeliverCommand(er, command, handler)
-        }
-      }
-  }
-
-  final def doNothing[E]: ProcessAction[E] = DoNothing
-  final def when[A] = new At[A] {
-    override def apply[Out](f: (A) => Out): (A) => Out = f
-  }
-
-//  def withContext[E](f: EventContext => ProcessAction[E]): ProcessAction[E] = WithEventContext(f)
-
-  def ignore[E]: Any => ProcessAction[E] = _ => doNothing
-}
-
-object ProcessSyntax extends ProcessSyntax
 
 object ProcessActor {
-  type ProcessBehavior[E] = E => ProcessAction[E]
+  type ProcessBehavior[E] = E => ProcessReaction[E]
 
   case class CommandDelivered(deliveryId: Long)
 
-  def props[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], idleTimeout: FiniteDuration): Props = Props(new ProcessActor[Input](name, initialBehavior, idleTimeout))
+  def props[Input: ClassTag](processName: String, initialBehavior: ProcessBehavior[Input], idleTimeout: FiniteDuration): Props =
+    Props(new ProcessActor[Input](processName, initialBehavior, idleTimeout))
 }
 
-class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => ProcessAction[Input], val idleTimeout: FiniteDuration)
+class ProcessActor[Input: ClassTag](processName: String, initialBehavior: ProcessBehavior[Input], val idleTimeout: FiniteDuration)
   extends PersistentActor
     with AtLeastOnceDelivery
     with Deduplication
     with Passivation
     with PersistentActorLogging {
 
-  override def persistenceId: String = name + "-" + self.path.name
+  private val processId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
 
-  private var state = initialBehavior
+  override def persistenceId: String = processName + "-" + processId
+
+  private var behavior = initialBehavior
 
   override def receiveRecover: Receive =  {
     case EventEnvelope(id, event: Input) =>
-      val reaction = state(event)
+      val reaction = behavior(event)
       runReaction(reaction)
       confirmProcessed(id)
     case CommandRejected(rejection, deliveryId) =>
@@ -99,7 +60,7 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
       confirmDelivery(deliveryId)
       ()
     case RecoveryCompleted =>
-      schedulePassivation()
+      setIdleTimeout()
   }
 
   override def receiveCommand: Receive = receivePassivationMessages.orElse {
@@ -109,7 +70,7 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
         log.debug("Received duplicate event [{}]", event)
       } else {
         persist(EventEnvelope(id, event)) { em =>
-          val reaction = state(event)
+          val reaction = behavior(event)
           log.debug("Processed event [{}] with reaction [{}]", event, reaction)
           runReaction(reaction)
           confirmProcessed(id)
@@ -132,28 +93,26 @@ class ProcessActor[Input: ClassTag](name: String, initialBehavior: Input => Proc
     }
   }
 
-  private def runReaction(reaction: ProcessAction[Input]): Unit = reaction match {
-    case ChangeState(newState) =>
-      state = newState
+  private def runReaction(reaction: ProcessReaction[Input]): Unit = reaction match {
+    case ChangeBehavior(newBehavior) =>
+      behavior = newBehavior
     case DeliverCommand(destination, command, rejectionHandler) =>
       deliverCommand(destination, command, rejectionHandler)
-    case CompoundAction(l, r) =>
+    case CompoundReaction(l, r) =>
       runReaction(l)
       runReaction(r)
-//    case WithEventContext(f) =>
-
     case DoNothing =>
       ()
   }
 
-  type RejectionHandler = Any => ProcessAction[Input]
+  type RejectionHandler = Any => ProcessReaction[Input]
 
   val rejectionHandlers = scala.collection.mutable.Map.empty[Long, RejectionHandler]
 
-  def deliverCommand[A, C, R](destination: EntityRef[A], command: C, rejectionHandler: R => ProcessAction[Input]): Unit = {
+  def deliverCommand[A, C, R](destination: EntityRef[A], command: C, rejectionHandler: R => ProcessReaction[Input]): Unit = {
     deliver(destination.actorRef.path) { deliveryId =>
       rejectionHandlers.update(deliveryId, rejection => rejectionHandler(rejection.asInstanceOf[R]))
-      Message(command, CommandDelivered(deliveryId))
+      Message(MessageId.generate, command, CommandDelivered(deliveryId))
     }
   }
 

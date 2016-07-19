@@ -2,10 +2,11 @@ package aecor.core.process
 
 import java.nio.ByteBuffer
 
+import aecor.core.entity.EventContract.Aux
 import cats.std.function._
 import cats.syntax.functor._
-import aecor.core.entity.EntityName
-import io.circe.{Decoder, jawn}
+import aecor.core.entity.{EntityName, EventContract}
+import aecor.core.serialization.Decoder
 import shapeless.{:+:, ::, CNil, Coproduct, Generic, HList, HNil}
 
 
@@ -59,10 +60,11 @@ trait LowPriorityInstances {
 
 object CompositeConsumerSettingsSyntax {
   trait MkFrom[A] {
-    def apply[T](implicit decoder: Decoder[T], arName: EntityName[A]): TopicSchema[T]
+    def apply[T]()(implicit arName: EntityName[A], contract: EventContract.Aux[A, T], decoder: Decoder[T]): TopicSchema[T]
   }
-  def from[A, T](implicit decoder: Decoder[T], arName: EntityName[A]): TopicSchema[T] = {
-    TopicSchema(arName.value, bytes => jawn.parseByteBuffer(ByteBuffer.wrap(bytes)).flatMap(_.as[T]).toOption)
+  def from[A] = new MkFrom[A] {
+    override def apply[T]()(implicit arName: EntityName[A], contract: Aux[A, T], decoder: Decoder[T]): TopicSchema[T] =
+      TopicSchema(arName.value, bytes => decoder.decode(ByteBuffer.wrap(bytes)).toOption)
   }
 
 }

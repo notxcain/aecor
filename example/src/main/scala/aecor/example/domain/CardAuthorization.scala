@@ -50,11 +50,13 @@ object CardAuthorization {
   implicit def correlation[Rejection]: Correlation[Command[Rejection]] = Correlation.instance(_.cardAuthorizationId.value)
   implicit val name: EntityName[CardAuthorization] = EntityName.instance("CardAuthorization")
 
+  implicit val eventContract: EventContract.Aux[CardAuthorization, Event] = EventContract.instance
+
   implicit def behavior[Rejection]: EntityBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] = new EntityBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] {
     override def initialState(entity: CardAuthorization): State = Initial
 
     override def commandHandler(entity: CardAuthorization): CommandHandler[State, Command[Rejection], Event, Rejection] =
-      CommandHandler.instance {
+      CommandHandler {
         case Initial => {
           case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
             accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
