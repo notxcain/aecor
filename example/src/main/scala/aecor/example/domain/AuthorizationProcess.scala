@@ -8,7 +8,7 @@ import aecor.example.domain.CardAuthorization._
 import aecor.util.FunctionBuilder
 import shapeless._
 
-object CardAuthorizationProcess {
+object AuthorizationProcess {
   type Input = CardAuthorizationCreated :+: TransactionAuthorized :+: CNil
 
   val correlation: Correlation[Input] = Correlation.instance(

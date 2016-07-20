@@ -26,7 +26,7 @@ trait EventStream[Event] {
 class DefaultEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Control])(implicit materializer: Materializer) extends EventStream[Event] {
   import akka.pattern.ask
   val actor = actorSystem.actorOf(Props(new EventStreamObserverRegistry[Event]), "event-stream-observer-registry")
-  source.map(event => ObserveEvent(event)).runWith(Sink.actorRefWithAck(actor, Init, Done, ShutDown))
+  source.map(HandleEvent(_)).runWith(Sink.actorRefWithAck(actor, Init, Done, ShutDown))
   override def registerObserver[A](f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]] = {
     import materializer.executionContext
     (actor ? RegisterObserver(f, timeout)).mapTo[ObserverRegistered[A]].map(_.control)
@@ -38,7 +38,7 @@ object EventStreamObserverRegistry {
   case object Init extends Command[Nothing]
   case class RegisterObserver[Event, A](f: PartialFunction[Event, A], timeout: Timeout) extends Command[Event]
   case class DeregisterObserver(id: String) extends Command[Nothing]
-  case class ObserveEvent[Event](event: Event) extends Command[Event]
+  case class HandleEvent[Event](event: Event) extends Command[Event]
   case object ShutDown extends Command[Nothing]
 
   case class ObserverRegistered[A](control: ObserverControl[A])
@@ -80,7 +80,7 @@ class EventStreamObserverRegistry[Event] extends Actor with ActorLogging {
         }
       }
       sender() ! ObserverRegistered(ObserverControl(id, promise.future))
-    case ObserveEvent(event) =>
+    case HandleEvent(event) =>
       observers = observers.filterNot {
         case (id, observer) => observer.handleEvent(event)
       }

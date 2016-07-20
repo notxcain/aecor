@@ -122,6 +122,7 @@ private [aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
 
   def putInEnvelope(event: ScheduleActorEvent): PersistentEntityEventEnvelope[ScheduleActorEvent] =
     PersistentEntityEventEnvelope(
+      MessageId.generate,
       event,
       Instant.now(),
       MessageId(s"time-${LocalDateTime.now()}")

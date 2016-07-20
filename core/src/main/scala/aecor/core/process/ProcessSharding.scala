@@ -6,7 +6,7 @@ import aecor.core.message._
 import aecor.core.process.ProcessActor.ProcessBehavior
 import aecor.core.process.ProcessSharding.{Control, TopicName}
 import aecor.core.serialization.PureDeserializer
-import aecor.core.serialization.protobuf.EntityEventEnvelope
+import aecor.core.serialization.protobuf.ExternalEntityEventEnvelope
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Terminated}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.kafka.ConsumerMessage.{Committable, CommittableMessage}
@@ -39,7 +39,7 @@ case class ProcessInputEnvelope[Input](eventId: MessageId, input: Input)
 
 class ProcessInputDeserializer[Input](config: Map[TopicName, (Array[Byte] => Option[Input])]) extends PureDeserializer[Option[ProcessInputEnvelope[Input]]] {
   override def deserialize(topic: TopicName, data: Array[Byte]): Option[ProcessInputEnvelope[Input]] = {
-    val envelope = EntityEventEnvelope.parseFrom(data)
+    val envelope = ExternalEntityEventEnvelope.parseFrom(data)
     config.get(topic).flatMap(f => f(envelope.event.toByteArray)).map { input =>
       ProcessInputEnvelope(MessageId(s"${envelope.entityId}#${envelope.sequenceNr}"), input)
     }

@@ -7,9 +7,8 @@ import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardReg
 import akka.pattern._
 import akka.util.Timeout
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.reflect.ClassTag
-import scala.concurrent.duration._
 
 object EntityShardRegion {
   def apply(actorSystem: ActorSystem): EntityShardRegion = new EntityShardRegion(actorSystem)
@@ -29,14 +28,14 @@ class EntityShardRegion(actorSystem: ActorSystem) {
      entityName: EntityName[Entity]
     ): EntityRef[Entity] = {
 
-      val config = actorSystem.settings.config
+      val config = new EntityShardRegionConfig(actorSystem.settings.config.getConfig("aecor.entity"))
 
-      val numberOfShards = config.getInt("aecor.entity.number-of-shards")
 
       def extractEntityId: ShardRegion.ExtractEntityId = {
         case m @ Message(_, c: Command, _) ⇒ (correlation(c), m)
       }
 
+      val numberOfShards = config.numberOfShards
       def extractShardId: ShardRegion.ExtractShardId = {
         case m @ Message(_, c: Command, _) => ExtractShardId(correlation(c), numberOfShards)
       }
@@ -46,7 +45,7 @@ class EntityShardRegion(actorSystem: ActorSystem) {
         behavior.initialState(entity),
         behavior.commandHandler(entity),
         behavior.eventProjector(entity),
-        2.minutes
+        config.idleTimeout(entityName.value)
       )
 
       val shardRegionRef = ClusterSharding(actorSystem).start(
@@ -58,10 +57,13 @@ class EntityShardRegion(actorSystem: ActorSystem) {
       )
 
       new EntityRef[Entity] {
+        implicit val askTimeout = Timeout(config.askTimeout)
+        import actorSystem.dispatcher
+
         override private[aecor] val actorRef: ActorRef = shardRegionRef
 
-        override def handle[C](id: String, command: C)(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, C]): Future[Result[contract.Rejection]] =
-          (actorRef ? Message(MessageId(id), command, NotUsed)).mapTo[EntityResponse[contract.Rejection, NotUsed]].map(_.result)
+        override def handle[C](idempotencyKey: String, command: C)(implicit contract: CommandContract[Entity, C]): Future[Result[contract.Rejection]] =
+          (actorRef ? Message(MessageId(idempotencyKey), command, NotUsed)).mapTo[EntityResponse[contract.Rejection, NotUsed]].map(_.result)
       }
     }
   }

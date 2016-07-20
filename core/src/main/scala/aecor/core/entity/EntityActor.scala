@@ -41,7 +41,7 @@ private [aecor] case class EntityActorState[State](entityState: State, processed
     case _ => None
   }
 
-  def hasProcessedCommandWithId(messageId: MessageId): Boolean = processedCommands(messageId)
+  def shouldHandleCommand(messageId: MessageId): Boolean = processedCommands(messageId)
 
   def applyEntityEvent[Event](projector: EventProjector[State, Event])(event: Event, causedBy: MessageId): EntityActorState[State] =
     copy(entityState = projector(entityState, event), processedCommands = processedCommands + causedBy)
@@ -105,7 +105,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   def receiveCommandMessage: Receive = {
     case m @ Message(id, command: Command, ack) =>
       log.debug("Received command message [{}]", m)
-      if (state.hasProcessedCommandWithId(id)) {
+      if (state.shouldHandleCommand(id)) {
         sender() ! EntityResponse(ack, Accepted)
         log.debug("Message already processed")
       } else {
@@ -120,7 +120,7 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
   def runResult(causedBy: MessageId, ack: Any)(result: CommandHandlerResult[Rejection, Event]): Unit = result match {
     case Accept(events) =>
       val envelopes = events.map { event =>
-        Tagged(PersistentEntityEventEnvelope(event, Instant.now, causedBy), Set(entityName))
+        Tagged(PersistentEntityEventEnvelope(MessageId.generate, event, Instant.now, causedBy), Set(entityName))
       }.toList
       persistAll(envelopes) {
         case Tagged(e: PersistentEntityEventEnvelope[Event], _) =>
@@ -129,10 +129,8 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
       deferAsync(NotUsed) { _ =>
         sender() ! EntityResponse(ack, Accepted)
       }
-      context.become(receiveCommand)
     case Reject(rejection) =>
       sender() ! EntityResponse(ack, Rejected(rejection))
-      context.become(receiveCommand)
     case Defer(deferred) =>
       deferred.map(HandleCommandHandlerResult).asFuture.pipeTo(self)(sender)
       context.become {
@@ -140,11 +138,12 @@ private [aecor] class EntityActor[State: ClassTag, Command: ClassTag, Event: Cla
           log.debug("Command handler result [{}]", deferredResult)
           runResult(causedBy, ack)(deferredResult)
           unstashAll()
+          context.become(receiveCommand)
         case failure @ Status.Failure(e) =>
           log.error(e, "Deferred reaction failed")
           sender() ! failure
-          context.become(receiveCommand)
           unstashAll()
+          context.become(receiveCommand)
         case _ =>
           stash()
       }

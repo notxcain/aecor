@@ -3,14 +3,13 @@ package aecor.core.entity
 import aecor.core.message.{Message, MessageId}
 import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.pattern._
-import akka.util.Timeout
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 import scala.reflect.ClassTag
 
 abstract class EntityRef[Entity] {
   private [aecor] def actorRef: ActorRef
-  def handle[Command](idempotencyKey: String, command: Command)(implicit ec: ExecutionContext, timeout: Timeout, contract: CommandContract[Entity, Command]): Future[Result[contract.Rejection]]
+  def handle[Command](idempotencyKey: String, command: Command)(implicit contract: CommandContract[Entity, Command]): Future[Result[contract.Rejection]]
 }
 
 class RemoteEntityRef[C: ClassTag, R](handler: (MessageId, C) => Future[Result[R]])(implicit actorSystem: ActorSystem) {

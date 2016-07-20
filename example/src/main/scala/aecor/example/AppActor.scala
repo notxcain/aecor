@@ -3,27 +3,29 @@ package aecor.example
 import java.util.UUID
 
 import aecor.core.entity.{Accepted, EntityRef, EntityShardRegion, Rejected}
+import aecor.core.message.Message
 import aecor.core.process.CompositeConsumerSettingsSyntax._
 import aecor.core.process.{ComposeConfig, ProcessSharding}
 import aecor.core.serialization.CirceSupport._
-import aecor.core.serialization.protobuf.EntityEventEnvelope
+import aecor.core.serialization.protobuf.ExternalEntityEventEnvelope
 import aecor.core.serialization.{Encoder, EntityEventEnvelopeSerde}
 import aecor.core.streaming.{CommittableMessage, ExtendedCassandraReadJournal, JournalEntry, Replicator}
 import aecor.example.domain.Account.TransactionAuthorized
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationCreated, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
-import akka.Done
 import akka.actor.{Actor, ActorLogging, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
+import akka.kafka.ConsumerMessage.Committable
 import akka.kafka.scaladsl.{Consumer, Producer}
 import akka.kafka.{ConsumerSettings, ProducerMessage, ProducerSettings, Subscriptions}
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Flow}
+import akka.stream.scaladsl.Flow
 import akka.util.Timeout
+import akka.{Done, NotUsed}
 import cats.data.Xor
 import com.google.protobuf.ByteString
 import com.typesafe.config.ConfigFactory
@@ -32,16 +34,16 @@ import io.circe.Decoder
 import io.circe.generic.auto._
 import org.apache.kafka.clients.producer.ProducerRecord
 import org.apache.kafka.common.serialization.{StringDeserializer, StringSerializer}
-import shapeless.HNil
+import shapeless.{Coproduct, HNil}
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
-object RootActor {
-  def props: Props = Props(new RootActor)
+object AppActor {
+  def props: Props = Props(new AppActor)
 }
 
-class RootActor extends Actor with ActorLogging {
+class AppActor extends Actor with ActorLogging {
   override def receive: Receive = Actor.emptyBehavior
   implicit val actorSystem = context.system
   implicit val materializer = ActorMaterializer()
@@ -57,14 +59,14 @@ class RootActor extends Actor with ActorLogging {
   val accountRegion: EntityRef[Account] =
     EntityShardRegion(actorSystem).start(Account())()
 
-
   val extendedCassandraReadJournal = ExtendedCassandraReadJournal(actorSystem, PersistenceQuery(actorSystem).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier))
 
   def eventSink[A: Encoder](topicName: String) = Flow[CommittableMessage[JournalEntry[A]]].map {
-    case CommittableMessage(offset, JournalEntry(persistenceId, sequenceNr, event, timestamp, causedBy)) =>
-      val payload = EntityEventEnvelope(persistenceId, sequenceNr, ByteString.copyFrom(Encoder[A].encode(event)), timestamp.toEpochMilli, causedBy.value)
+    case CommittableMessage(offset, JournalEntry(persistenceId, sequenceNr, eventId, event, timestamp, causedBy)) =>
+      val payload = ExternalEntityEventEnvelope(eventId.value, persistenceId, sequenceNr, ByteString.copyFrom(Encoder[A].encode(event)), timestamp.toEpochMilli)
       ProducerMessage.Message(new ProducerRecord(topicName, null, timestamp.toEpochMilli, persistenceId, payload), offset)
   }.to(Producer.commitableSink(producerSettings))
+  val replicator = Replicator(extendedCassandraReadJournal)
 
   {
     import materializer.executionContext
@@ -83,13 +85,30 @@ class RootActor extends Actor with ActorLogging {
     val process = ProcessSharding(actorSystem)
     val source = process.source(Set(s"$kafkaAddress:9092"), schema, "CardAuthorizationProcess")
 
+    def toProcessInput[A]: Flow[CommittableMessage[JournalEntry[A]], Message[A, Committable], NotUsed] =
+      Flow[CommittableMessage[JournalEntry[A]]].map {
+        case CommittableMessage(offset, JournalEntry(persistenceId, sequenceNr, eventId, event, timestamp, causedBy)) =>
+          Message(eventId, event, offset)
+      }
+
+    val accountEvents =
+      replicator.committableEventSourceFor[Account](consumerId = "CardAuthorizationProcess").via(toProcessInput).collect {
+        case m @ Message(_, e: TransactionAuthorized, _) => m.copy(payload = Coproduct[AuthorizationProcess.Input](e))
+      }
+    val caEvents =
+      replicator.committableEventSourceFor[CardAuthorization](consumerId = "CardAuthorizationProcess").via(toProcessInput).collect {
+        case m @ Message(_, e: CardAuthorizationCreated, _) => m.copy(payload = Coproduct[AuthorizationProcess.Input](e))
+      }
+
+    val directSource = accountEvents.merge(caEvents)
+
     val sink = process.sink(
       name = "CardAuthorizationProcess",
-      behavior = CardAuthorizationProcess.behavior(accountRegion, authorizationRegion),
-      correlation = CardAuthorizationProcess.correlation,
+      behavior = AuthorizationProcess.behavior(accountRegion, authorizationRegion),
+      correlation = AuthorizationProcess.correlation,
       idleTimeout = 10.seconds
     )
-    source.to(sink).run()
+    directSource.to(sink).run()
   }
 
   object AuthorizePaymentAPI {

@@ -14,7 +14,7 @@ import com.google.protobuf.ByteString
 
 import scala.util.Try
 
-class EntityActorEventCodec(actorSystem: ExtendedActorSystem) extends Codec[PersistentEntityEventEnvelope[AnyRef]] {
+class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) extends Codec[PersistentEntityEventEnvelope[AnyRef]] {
 
   lazy val serialization = SerializationExtension(actorSystem)
 
@@ -23,7 +23,7 @@ class EntityActorEventCodec(actorSystem: ExtendedActorSystem) extends Codec[Pers
   override def decode(bytes: Array[Byte], manifest: String): Try[PersistentEntityEventEnvelope[AnyRef]] =
     pb.PersistentEntityEventEnvelope.validate(bytes).flatMap { dto =>
       serialization.deserialize(dto.payload.toByteArray, dto.serializerId, dto.manifest).map { event =>
-        PersistentEntityEventEnvelope(event, Instant.ofEpochMilli(dto.timestamp), MessageId(dto.causedBy))
+        PersistentEntityEventEnvelope(MessageId(dto.id), event, Instant.ofEpochMilli(dto.timestamp), MessageId(dto.causedBy))
       }
     }
 
@@ -37,8 +37,9 @@ class EntityActorEventCodec(actorSystem: ExtendedActorSystem) extends Codec[Pers
         if (serializer.includeManifest) event.getClass.getName
         else PersistentRepr.Undefined
     }
-    pb.PersistentEntityEventEnvelope(serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(event)), timestamp.toEpochMilli, causedBy.value).toByteArray
+    pb.PersistentEntityEventEnvelope(e.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(event)), timestamp.toEpochMilli, causedBy.value).toByteArray
   }
 }
 
-class EntityActorEventSerializer(actorSystem: ExtendedActorSystem) extends CodecSerializer[PersistentEntityEventEnvelope[AnyRef]](actorSystem, new EntityActorEventCodec(actorSystem))
+class PersistentEntityEventEnvelopeSerializer(actorSystem: ExtendedActorSystem)
+  extends CodecSerializer[PersistentEntityEventEnvelope[AnyRef]](actorSystem, new PersistentEntityEventEnvelopeCodec(actorSystem))

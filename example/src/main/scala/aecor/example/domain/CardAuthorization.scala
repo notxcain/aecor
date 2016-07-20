@@ -7,6 +7,8 @@ import aecor.core.message.Correlation
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 
+import scala.concurrent.Future
+
 case class TransactionId(value: String) extends AnyVal
 object CardAuthorization {
 
@@ -59,7 +61,11 @@ object CardAuthorization {
       CommandHandler {
         case Initial => {
           case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
-            accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
+            defer { _ =>
+              Future.successful {
+                accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
+              }
+            }
           case c: AcceptCardAuthorization =>
             reject(DoesNotExists)
           case c: DeclineCardAuthorization =>
