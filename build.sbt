@@ -156,6 +156,6 @@ lazy val commonScalacOptions = Seq(
 )
 
 lazy val warnUnusedImport = Seq(
-  scalacOptions in (Compile, console) ~= {_.filterNot("-Ywarn-unused-import" == _)},
+  scalacOptions in (Compile, console) ~= {_.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))},
   scalacOptions in (Test, console) <<= (scalacOptions in (Compile, console))
 )

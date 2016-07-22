@@ -7,7 +7,6 @@ import aecor.example.EventStream.ObserverControl
 import aecor.example.EventStreamObserverRegistry._
 import akka.Done
 import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
-import akka.kafka.scaladsl.Consumer.Control
 import akka.stream.Materializer
 import akka.stream.scaladsl.{Sink, Source}
 import akka.util.Timeout
@@ -23,7 +22,7 @@ trait EventStream[Event] {
   def registerObserver[A](f: PartialFunction[Event, A])(implicit timeout: Timeout): Future[ObserverControl[A]]
 }
 
-class DefaultEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Control])(implicit materializer: Materializer) extends EventStream[Event] {
+class DefaultEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Any])(implicit materializer: Materializer) extends EventStream[Event] {
   import akka.pattern.ask
   val actor = actorSystem.actorOf(Props(new EventStreamObserverRegistry[Event]), "event-stream-observer-registry")
   source.map(HandleEvent(_)).runWith(Sink.actorRefWithAck(actor, Init, Done, ShutDown))

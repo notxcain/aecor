@@ -1,6 +1,6 @@
 package aecor.example.domain
 
-import aecor.core.entity.EntityRef
+import aecor.core.aggregate.AggregateRef
 import aecor.core.message.Correlation
 import aecor.core.process.ProcessSyntax._
 import aecor.example.domain.Account.{AuthorizeTransaction, TransactionAuthorized, VoidTransaction}
@@ -19,7 +19,7 @@ object AuthorizationProcess {
     }.andThen(_.value)
   )
 
-  def behavior(accounts: EntityRef[Account], cardAuthorizations: EntityRef[CardAuthorization]) = {
+  def behavior(accounts: AggregateRef[Account], cardAuthorizations: AggregateRef[CardAuthorization]) = {
 
     def acceptAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, transactionId: TransactionId) =
       cardAuthorizations.deliver(AcceptCardAuthorization(cardAuthorizationId)).handlingRejection {

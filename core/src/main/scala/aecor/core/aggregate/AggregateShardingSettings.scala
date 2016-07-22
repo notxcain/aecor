@@ -1,11 +1,11 @@
-package aecor.core.entity
+package aecor.core.aggregate
 
 import aecor.util.ConfigHelpers._
 import com.typesafe.config.Config
 
 import scala.concurrent.duration.FiniteDuration
 
-class EntityShardRegionConfig(config: Config) {
+class AggregateShardingSettings(config: Config) {
   val numberOfShards: Int = config.getInt("number-of-shards")
   val askTimeout: FiniteDuration = config.getMillisDuration("ask-timeout")
   val defaultIdleTimeout: FiniteDuration = config.getMillisDuration("default-idle-timeout")

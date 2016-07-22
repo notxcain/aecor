@@ -1,4 +1,4 @@
-package aecor.core.entity
+package aecor.core.aggregate
 
 import aecor.core.concurrent.Deferred
 

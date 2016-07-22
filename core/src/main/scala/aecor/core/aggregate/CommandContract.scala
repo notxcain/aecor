@@ -1,4 +1,4 @@
-package aecor.core.entity
+package aecor.core.aggregate
 
 object CommandContract {
   type Aux[Entity, -Command, Rejection0] = CommandContract[Entity, Command] {

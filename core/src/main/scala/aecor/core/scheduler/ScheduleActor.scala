@@ -4,12 +4,12 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Instant, LocalDateTime, ZoneId}
 
-import aecor.core.entity.PersistentEntityEventEnvelope
-import aecor.core.logging.PersistentActorLogging
-import aecor.core.message.{ExtractShardId, MessageId}
+import aecor.core.aggregate.{AggregateEventEnvelope, CommandId, EventId}
+import aecor.core.message.ExtractShardId
 import aecor.core.scheduler.ScheduleActor._
+import aecor.util._
 import akka.Done
-import akka.actor.{Actor, Cancellable, Props}
+import akka.actor.{Actor, ActorLogging, Cancellable, Props}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId}
 import akka.persistence.PersistentActor
 import akka.stream.scaladsl.{Keep, Sink, Source}
@@ -21,14 +21,17 @@ object ScheduleActorSupervisor {
   def calculateTimeBucket(date: LocalDateTime, bucketLength: Duration = 60.seconds): Long = {
     date.atZone(ZoneId.systemDefault()).toEpochSecond / bucketLength.toSeconds
   }
+
   def extractEntityId: ExtractEntityId = {
-    case c @ AddScheduleEntry(scheduleName, dueDate, entryId) =>
+    case c@AddScheduleEntry(scheduleName, dueDate, entryId) =>
       (scheduleName + "-" + calculateTimeBucket(dueDate), c)
   }
+
   def extractShardId: ExtractShardId = {
-    case c @ AddScheduleEntry(scheduleName, dueDate, entryId) =>
+    case c@AddScheduleEntry(scheduleName, dueDate, entryId) =>
       ExtractShardId(scheduleName + "-" + calculateTimeBucket(dueDate), 100)
   }
+
   def props: Props =
     Props(new ScheduleActorSupervisor())
 }
@@ -61,20 +64,26 @@ class ScheduleActorSupervisor extends Actor {
 }
 
 sealed trait ScheduleActorEvent
+
 case class ScheduleEntryAdded(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends ScheduleActorEvent
+
 case class ScheduleEntryFired(scheduleName: String, entryId: String) extends ScheduleActorEvent
 
 object ScheduleActor {
+
   sealed trait Command
+
   case class AddScheduleEntry(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends Command
-  private [scheduler] case object FireDueEntries extends Command
+
+  private[scheduler] case object FireDueEntries extends Command
 
   def props(scheduleName: String, timeBucket: String): Props =
     Props(new ScheduleActor(scheduleName, timeBucket))
 }
 
-private [aecor] case class ScheduleEntry(id: String, dueDate: LocalDateTime)
-private [aecor] case class ScheduleActorState(entries: List[ScheduleEntry]) {
+private[aecor] case class ScheduleEntry(id: String, dueDate: LocalDateTime)
+
+private[aecor] case class ScheduleActorState(entries: List[ScheduleEntry]) {
   def addEntry(entryId: String, dueDate: LocalDateTime): ScheduleActorState =
     copy(entries = ScheduleEntry(entryId, dueDate) :: entries)
 
@@ -84,20 +93,21 @@ private [aecor] case class ScheduleActorState(entries: List[ScheduleEntry]) {
   def findEntriesDueNow(now: LocalDateTime): List[ScheduleEntry] =
     entries.filter(_.dueDate.isBefore(now))
 }
-private [aecor] object ScheduleActorState {
+
+private[aecor] object ScheduleActorState {
   def empty: ScheduleActorState = ScheduleActorState(List.empty)
 }
 
-private [aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
+private[aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
   extends PersistentActor
-  with PersistentActorLogging {
+          with ActorLogging {
 
   override val persistenceId: String = "Schedule-" + scheduleName + "-" + timeBucket
 
   private var state = ScheduleActorState.empty
 
   override def receiveRecover: Receive = {
-    case e: PersistentEntityEventEnvelope[_] => e.cast[ScheduleActorEvent] match {
+    case e: AggregateEventEnvelope[_] => e.cast[ScheduleActorEvent] match {
       case Some(envelope) => applyEvent(envelope)
       case None => throw new IllegalArgumentException(s"Unexpected event ${e.event}")
     }
@@ -114,21 +124,21 @@ private [aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
     case FireDueEntries =>
       val now = LocalDateTime.now()
       val envelopes = state
-        .findEntriesDueNow(now)
-        .map(entry => ScheduleEntryFired(scheduleName, entry.id))
-        .map(putInEnvelope)
+                      .findEntriesDueNow(now)
+                      .map(entry => ScheduleEntryFired(scheduleName, entry.id))
+                      .map(putInEnvelope)
       persistAll(envelopes)(applyEvent)
   }
 
-  def putInEnvelope(event: ScheduleActorEvent): PersistentEntityEventEnvelope[ScheduleActorEvent] =
-    PersistentEntityEventEnvelope(
-      MessageId.generate,
-      event,
-      Instant.now(),
-      MessageId(s"time-${LocalDateTime.now()}")
-    )
+  def putInEnvelope(event: ScheduleActorEvent): AggregateEventEnvelope[ScheduleActorEvent] =
+    AggregateEventEnvelope(
+                            generate[EventId],
+                            event,
+                            Instant.now(),
+                            CommandId(s"time-${LocalDateTime.now()}")
+                          )
 
-  def applyEvent(envelope: PersistentEntityEventEnvelope[ScheduleActorEvent]): Unit = envelope.event match {
+  def applyEvent(envelope: AggregateEventEnvelope[ScheduleActorEvent]): Unit = envelope.event match {
     case publicEvent: ScheduleActorEvent =>
       publicEvent match {
         case ScheduleEntryAdded(_, dueDate, entryId) =>

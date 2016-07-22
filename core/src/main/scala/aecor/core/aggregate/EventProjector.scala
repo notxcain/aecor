@@ -1,4 +1,4 @@
-package aecor.core.entity
+package aecor.core.aggregate
 
 object EventProjector {
   def instance[State, Event](f: State => Event => State): EventProjector[State, Event] = new EventProjector[State, Event] {

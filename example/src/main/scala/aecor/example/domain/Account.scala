@@ -1,7 +1,7 @@
 package aecor.example.domain
 
-import aecor.core.entity.CommandHandlerResult._
-import aecor.core.entity._
+import aecor.core.aggregate.CommandHandlerResult._
+import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
@@ -43,8 +43,8 @@ object Account {
   implicit def correlation: Correlation[Command] =
     Correlation.instance(_.accountId.value)
 
-  implicit val entityName: EntityName[Account] =
-    EntityName.instance("Account")
+  implicit val entityName: AggregateName[Account] =
+    AggregateName.instance("Account")
 
   implicit val commandContract: CommandContract.Aux[Account, Command, Rejection] =
     CommandContract.instance
@@ -52,7 +52,7 @@ object Account {
   implicit val eventContract: EventContract.Aux[Account, Event] =
     EventContract.instance
 
-  implicit def behavior: EntityBehavior[Account, State, Command, Event, Rejection] = new EntityBehavior[Account, State, Command, Event, Rejection] {
+  implicit def behavior: AggregateBehavior[Account, State, Command, Event, Rejection] = new AggregateBehavior[Account, State, Command, Event, Rejection] {
     override def initialState(entity: Account): State = Initial
 
     override def commandHandler(entity: Account): CommandHandler[State, Command, Event, Rejection] = CommandHandler {

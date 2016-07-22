@@ -2,22 +2,23 @@ package aecor.core.process
 
 import java.util.UUID
 
+import aecor.core.aggregate.EventId
 import aecor.core.message._
 import aecor.core.process.ProcessActor.ProcessBehavior
 import aecor.core.process.ProcessSharding.{Control, TopicName}
 import aecor.core.serialization.PureDeserializer
-import aecor.core.serialization.protobuf.ExternalEntityEventEnvelope
+import aecor.core.serialization.protobuf.EventEnvelope
+import aecor.core.streaming.CommittableMessage
+import akka.Done
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Terminated}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
-import akka.kafka.ConsumerMessage.{Committable, CommittableMessage}
 import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.pattern.ask
+import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
+import akka.pattern.{ask, _}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.util.Timeout
-import akka.{Done, NotUsed}
-import com.typesafe.config.ConfigFactory
 import org.apache.kafka.common.serialization.StringDeserializer
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
@@ -35,19 +36,22 @@ object ProcessSharding {
   def apply(actorSystem: ActorSystem): ProcessSharding = new ProcessSharding(actorSystem)
 }
 
-case class ProcessInputEnvelope[Input](eventId: MessageId, input: Input)
+case class ProcessInputEnvelope[Input](eventId: EventId, input: Input)
 
 class ProcessInputDeserializer[Input](config: Map[TopicName, (Array[Byte] => Option[Input])]) extends PureDeserializer[Option[ProcessInputEnvelope[Input]]] {
   override def deserialize(topic: TopicName, data: Array[Byte]): Option[ProcessInputEnvelope[Input]] = {
-    val envelope = ExternalEntityEventEnvelope.parseFrom(data)
+    val envelope = EventEnvelope.parseFrom(data)
     config.get(topic).flatMap(f => f(envelope.event.toByteArray)).map { input =>
-      ProcessInputEnvelope(MessageId(s"${envelope.entityId}#${envelope.sequenceNr}"), input)
+      ProcessInputEnvelope(EventId(s"${envelope.entityId}#${envelope.sequenceNr}"), input)
     }
   }
 }
 
 class ProcessSharding(actorSystem: ActorSystem) {
-  def source[Schema](kafkaServers: Set[String], schema: Schema, groupId: String)(implicit composeConfig: ComposeConfig[Schema]): Source[Message[composeConfig.Out, Committable], Consumer.Control] = {
+  val logger = LoggerFactory.getLogger(classOf[ProcessSharding])
+
+  def kafkaSource[Schema](kafkaServers: Set[String], schema: Schema, groupId: String)(implicit composeConfig: ComposeConfig[Schema]): Source[CommittableMessage[HandleEvent[composeConfig.Out]], Consumer.Control] = {
+
     val processStreamConfig = composeConfig(schema)
 
     val consumerSettings = ConsumerSettings(actorSystem, new StringDeserializer, new ProcessInputDeserializer(processStreamConfig))
@@ -58,10 +62,10 @@ class ProcessSharding(actorSystem: ActorSystem) {
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(processStreamConfig.keySet))
       .flatMapConcat {
-        case CommittableMessage(_, envelopeOption, offset) =>
+        case ConsumerMessage.CommittableMessage(_, envelopeOption, offset) =>
           envelopeOption match {
             case Some(envelope) =>
-              Source.single(Message(envelope.eventId, envelope.input, offset))
+              Source.single(CommittableMessage(offset, HandleEvent(envelope.eventId, envelope.input)))
             case None =>
               Source.fromFuture(offset.commitScaladsl()).flatMapConcat(_ => Source.empty)
           }
@@ -70,20 +74,17 @@ class ProcessSharding(actorSystem: ActorSystem) {
 
   def sink[Input]
   (name: String, behavior: ProcessBehavior[Input], correlation: Correlation[Input], idleTimeout: FiniteDuration)
-  (implicit Input: ClassTag[Input], ec: ExecutionContext): Sink[Message[Input, Committable], ProcessSharding.Control] = {
-    val config = ConfigFactory.load()
-    val numberOfShards = config.getInt("aecor.process.number-of-shards")
-    val props = ProcessActor.props[Input](name, behavior, idleTimeout)
+  (implicit Input: ClassTag[Input], ec: ExecutionContext): Sink[CommittableMessage[HandleEvent[Input]], ProcessSharding.Control] = {
+    val settings = new ProcessShardingSettings(actorSystem.settings.config.getConfig("aecor.process"))
+
+    implicit val _correllation = correlation
+
     val processRegion = ClusterSharding(actorSystem).start(
       typeName = name,
-      entityProps = props,
+      entityProps = ProcessActor.props[Input](name, behavior, idleTimeout),
       settings = ClusterShardingSettings(actorSystem).withRememberEntities(true),
-      extractEntityId = {
-        case m @ Message(_, input: Input, _) => (correlation(input), m)
-      },
-      extractShardId = {
-        case m @ Message(_, input: Input, _) => ExtractShardId(correlation(input), numberOfShards)
-      }
+      extractEntityId = ProcessActor.extractEntityId[Input],
+      extractShardId = ProcessActor.extractShardId[Input](settings.numberOfShards)
     )
 
     def createControl: Control = new Control {
@@ -93,12 +94,23 @@ class ProcessSharding(actorSystem: ActorSystem) {
       }
     }
 
-    implicit val askTimeout = Timeout(idleTimeout)
+    implicit val askTimeout = Timeout(settings.deliveryTimeout)
 
-    Flow[Message[Input, Committable]]
-      .mapAsync(8) { m =>
-        (processRegion ? m.copy(ack = NotUsed)).map(_ => m.ack)
+    val sendMessage = { m: HandleEvent[Input] =>
+      (processRegion ? m).mapTo[EventHandled]
+    }
+
+    val deliverMessage = { m: CommittableMessage[HandleEvent[Input]] =>
+      def run: Future[EventHandled] = sendMessage(m.message).recoverWith {
+        case e =>
+          logger.error(s"Event delivery error [$e], scheduling redelivery after [{}]", settings.eventRedeliveryInterval)
+          after(settings.eventRedeliveryInterval, actorSystem.scheduler)(run)
       }
+      run.map(_ => m.committable)
+    }
+
+    Flow[CommittableMessage[HandleEvent[Input]]]
+      .mapAsync(8)(deliverMessage)
       .mapAsync(1)(_.commitScaladsl())
       .mapMaterializedValue[Control](_ => createControl)
       .toMat(Sink.ignore)(Keep.left)

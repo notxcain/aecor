@@ -1,8 +1,8 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.core.entity.CommandHandlerResult._
-import aecor.core.entity._
+import aecor.core.aggregate.CommandHandlerResult._
+import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
@@ -50,11 +50,11 @@ object CardAuthorization {
 
   implicit def commandContract[Rejection]: CommandContract.Aux[CardAuthorization, Command[Rejection], Rejection] = CommandContract.instance
   implicit def correlation[Rejection]: Correlation[Command[Rejection]] = Correlation.instance(_.cardAuthorizationId.value)
-  implicit val name: EntityName[CardAuthorization] = EntityName.instance("CardAuthorization")
+  implicit val name: AggregateName[CardAuthorization] = AggregateName.instance("CardAuthorization")
 
   implicit val eventContract: EventContract.Aux[CardAuthorization, Event] = EventContract.instance
 
-  implicit def behavior[Rejection]: EntityBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] = new EntityBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] {
+  implicit def behavior[Rejection]: AggregateBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] = new AggregateBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] {
     override def initialState(entity: CardAuthorization): State = Initial
 
     override def commandHandler(entity: CardAuthorization): CommandHandler[State, Command[Rejection], Event, Rejection] =

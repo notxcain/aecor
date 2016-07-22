@@ -15,5 +15,6 @@ trait Correlation[A] {
 }
 
 object ExtractShardId {
-  def apply(id: String, numberOfShards: Int): String = Partitioner.paritionForString(id, numberOfShards).toString
+  private val partitioner = Partitioner.murmur3
+  def apply(id: String, numberOfShards: Int): String = partitioner.partitionForString(id, numberOfShards).toString
 }
