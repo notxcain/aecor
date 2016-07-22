@@ -6,7 +6,7 @@ import aecor.core.aggregate.EventId
 import aecor.core.message._
 import aecor.core.process.ProcessActor.ProcessBehavior
 import aecor.core.process.ProcessSharding.{Control, TopicName}
-import aecor.core.serialization.PureDeserializer
+import aecor.core.serialization.kafka.PureDeserializer
 import aecor.core.serialization.protobuf.EventEnvelope
 import aecor.core.streaming.CommittableMessage
 import akka.Done

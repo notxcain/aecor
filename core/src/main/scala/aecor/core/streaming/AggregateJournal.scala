@@ -1,15 +1,17 @@
 package aecor.core.streaming
 
-import java.time.Instant
-
 import aecor.core.aggregate._
 import akka.NotUsed
+import akka.actor.ActorSystem
+import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.stream.scaladsl.Source
 
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
-class Journal(extendedCassandraReadJournal: ExtendedCassandraReadJournal) {
+class AggregateJournal(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal) {
+
+  val extendedCassandraReadJournal = new ExtendedCassandraReadJournal(actorSystem, cassandraReadJournal)
 
   sealed trait MkCommittableEventSource[A] {
     def apply[E](consumerId: String)
@@ -34,6 +36,6 @@ class Journal(extendedCassandraReadJournal: ExtendedCassandraReadJournal) {
   }
 }
 
-object Journal {
-  def apply(extendedCassandraReadJournal: ExtendedCassandraReadJournal): Journal = new Journal(extendedCassandraReadJournal)
+object AggregateJournal {
+  def apply(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal): AggregateJournal = new AggregateJournal(actorSystem, cassandraReadJournal)
 }

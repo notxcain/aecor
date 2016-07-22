@@ -29,4 +29,8 @@ object Router {
   implicit def generic[A, Repr](implicit gen: Generic.Aux[A, Repr], Repr: Router[Repr]): Router[A] = new Router[A] {
     override def route(a: A): Route = Repr.route(gen.to(a))
   }
+
+  implicit def routeRouter: Router[Route] = new Router[Route] {
+    override def route(a: Route): Route = a
+  }
 }
