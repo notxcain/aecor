@@ -1,7 +1,7 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.core.aggregate.CommandHandlerResult._
+import aecor.core.aggregate.NowOrLater._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import io.circe.{Decoder, Encoder}

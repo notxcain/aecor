@@ -31,9 +31,9 @@ class AggregateSharding(actorSystem: ActorSystem) {
 
       val props = AggregateActor.props(
         entityName.value,
-        behavior.initialState(aggregate),
-        behavior.commandHandler(aggregate),
-        behavior.eventProjector(aggregate),
+        DefaultAggregateActorBehavior(behavior.initialState(aggregate), Set.empty,
+                                       behavior.commandHandler(aggregate),
+                                       behavior.eventProjector(aggregate)),
         settings.idleTimeout(entityName.value)
       )
 

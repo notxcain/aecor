@@ -1,6 +1,6 @@
 package aecor.example.domain
 
-import aecor.core.aggregate.CommandHandlerResult._
+import aecor.core.aggregate.NowOrLater._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import io.circe.{Decoder, Encoder}
@@ -51,6 +51,7 @@ object Account {
 
   implicit val eventContract: EventContract.Aux[Account, Event] =
     EventContract.instance
+
 
   implicit def behavior: AggregateBehavior[Account, State, Command, Event, Rejection] = new AggregateBehavior[Account, State, Command, Event, Rejection] {
     override def initialState(entity: Account): State = Initial

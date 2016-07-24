@@ -48,11 +48,6 @@ object ProcessActor {
 
 
 private [aecor] case class ProcessActorState[Input](behavior: ProcessBehavior[Input], processedEvents: Set[EventId]) {
-  def cast[S: ClassTag]: Option[AggregateActorState[S]] = this match {
-    case ProcessActorState(es: S, _) => Some(this.asInstanceOf[AggregateActorState[S]])
-    case _ => None
-  }
-
   def shouldProcessEvent(commandId: EventId): Boolean = processedEvents(commandId)
 }
 
