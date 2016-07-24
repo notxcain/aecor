@@ -45,7 +45,7 @@ class ScheduleActorSupervisor extends Actor {
     (components.dropRight(1).mkString("-"), components.last)
   }
 
-  val worker = context.actorOf(ScheduleActor.props(scheduleName, timeBucket), "worker")
+  val worker = context.actorOf(ScheduleActor.props(scheduleName, timeBucket), scheduleName + "-" + timeBucket)
   val tickControl = Source.tick(0.seconds, 1.second, NotUsed).map(_ => FireDueEntries(LocalDateTime.now())).toMat(Sink.actorRef(worker, Done))(Keep.left).run()
 
   @scala.throws[Exception](classOf[Exception])

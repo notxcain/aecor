@@ -3,10 +3,9 @@ package aecor.core.aggregate
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant}
-import scala.collection.immutable.Seq
+
 import aecor.core.aggregate.NowOrLater.{Deferred, Now}
 import aecor.core.message._
-import aecor.util.generate
 import akka.NotUsed
 import akka.actor.{ActorLogging, Props, Stash, Status}
 import akka.cluster.sharding.ShardRegion
@@ -14,70 +13,24 @@ import akka.pattern._
 import akka.persistence.journal.Tagged
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 
+import scala.collection.immutable.Seq
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
-case class CommandId(value: String) extends AnyVal
-case class HandleCommand[+A](id: CommandId, command: A)
-
-case class EventId(value: String) extends AnyVal
-
-case class AggregateEventEnvelope[+Event](id: EventId, event: Event, timestamp: Instant, causedBy: CommandId) {
-  def cast[EE: ClassTag]: Option[AggregateEventEnvelope[EE]] = event match {
-    case e: EE => Some(this.asInstanceOf[AggregateEventEnvelope[EE]])
-    case other => None
+sealed trait NowOrLater[+A] {
+  def map[B](f: A => B): NowOrLater[B] = this match {
+    case Now(value) => Now(f(value))
+    case Deferred(run) => Deferred { implicit ec =>
+      run(ec).map(f)
+    }
   }
 }
 
-case class AggregateResponse[+Rejection](causedBy: CommandId, result: Result[Rejection])
-sealed trait Result[+Rejection]
-case object Accepted extends Result[Nothing]
-case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
-
-
-case class DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection]
-(aggregateState: AggregateState,
-  processedCommands: Set[CommandId],
-  commandHandler: CommandHandler[AggregateState, Command, Event, Rejection],
-  projector: EventProjector[AggregateState, Event]
-) {
-
-  def snapshot: AggregateActorState[AggregateState] = AggregateActorState(aggregateState, processedCommands)
-
-  def withSnapshot(snapshot: AggregateActorState[AggregateState]) = copy(aggregateState = snapshot.entityState, processedCommands = snapshot.processedCommands)
-
-  def applyEntityEvent(event: Event, causedBy: CommandId): DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection] =
-    copy(aggregateState = projector(aggregateState, event), processedCommands = processedCommands + causedBy)
-
-  def handleCommand(commandId: CommandId, command: Command): NowOrLater[AggregateDecision[Rejection, AggregateEventEnvelope[Event]]] =
-    if (processedCommands.contains(commandId)) {
-      NowOrLater.accept()
-    } else {
-      commandHandler(aggregateState, command).map(_.map(event => AggregateEventEnvelope(generate[EventId], event, Instant.now(), commandId)))
-    }
+object NowOrLater {
+  case class Now[+A](value: A) extends NowOrLater[A]
+  case class Deferred[+A](run: ExecutionContext => Future[A]) extends NowOrLater[A]
 }
-
-object DefaultAggregateActorBehavior {
-  implicit def instance[AggregateState, Command, Event, Rejection]:
-  AggregateActorBehavior[DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection], AggregateActorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] =
-    new AggregateActorBehavior[DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection], AggregateActorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] {
-      override def snapshot(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection]): AggregateActorState[AggregateState] =
-        a.snapshot
-
-      override def applySnapshot(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection])(state: AggregateActorState[AggregateState]): DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection] =
-        a.withSnapshot(state)
-
-      override def handleCommand(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection])(command: HandleCommand[Command]): NowOrLater[CommandHandlerResult[AggregateResponse[Rejection], AggregateEventEnvelope[Event]]] =
-        a.handleCommand(command.id, command.command).map {
-          case Accept(events) => CommandHandlerResult(AggregateResponse(command.id, Accepted), events)
-          case Reject(rejection) => CommandHandlerResult(AggregateResponse(command.id, Rejected(rejection)), Seq.empty)
-        }
-      override def applyEvent(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection])(event: AggregateEventEnvelope[Event]): DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection] =
-        a.applyEntityEvent(event.event, event.causedBy)
-    }
-}
-
-case class AggregateActorState[State](entityState: State, processedCommands: Set[CommandId])
 
 case class CommandHandlerResult[Response, Event](response: Response, events: Seq[Event])
 
@@ -97,10 +50,10 @@ private [aecor] object AggregateActor {
     Props(new AggregateActor(entityName, initialBehavior, idleTimeout))
 
   def extractEntityId[A: ClassTag](implicit correlation: Correlation[A]): ShardRegion.ExtractEntityId = {
-    case m @ HandleCommand(_, a: A) ⇒ (correlation(a), m)
+    case a: A ⇒ (correlation(a), a)
   }
   def extractShardId[A: ClassTag](numberOfShards: Int)(implicit correlation: Correlation[A]): ShardRegion.ExtractShardId = {
-    case m @ HandleCommand(_, a: A) => ExtractShardId(correlation(a), numberOfShards)
+    case a: A => ExtractShardId(correlation(a), numberOfShards)
   }
 }
 
@@ -156,7 +109,6 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
     Behavior.handleCommand(behavior)(command) match {
       case Now(result) =>
         runResult(result)
-
       case Deferred(deferred) =>
         deferred(context.dispatcher).map(HandleCommandHandlerResult).pipeTo(self)(sender)
         context.become {
@@ -165,7 +117,7 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
             unstashAll()
             context.become(receiveCommand)
           case failure @ Status.Failure(e) =>
-            log.error(e, "Deferred reaction failed")
+            log.error(e, "Deferred result failed")
             sender() ! failure
             unstashAll()
             context.become(receiveCommand)

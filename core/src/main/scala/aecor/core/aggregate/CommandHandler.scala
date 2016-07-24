@@ -14,19 +14,7 @@ sealed trait AggregateDecision[+R, +E] {
 case class Accept[+E](events: Seq[E]) extends AggregateDecision[Nothing, E]
 case class Reject[+R](rejection: R) extends AggregateDecision[R, Nothing]
 
-sealed trait NowOrLater[+A] {
-  def map[B](f: A => B): NowOrLater[B] = this match {
-    case Now(value) => Now(f(value))
-    case Deferred(run) => Deferred { implicit ec =>
-      run(ec).map(f)
-    }
-  }
-}
-
-object NowOrLater {
-  case class Now[+A](value: A) extends NowOrLater[A]
-  case class Deferred[+A](run: ExecutionContext => Future[A]) extends NowOrLater[A]
-
+object AggregateDecision {
   def accept[R, E](events: E*): AggregateDecision[R, E] = Accept(events.toVector)
   def reject[R, E](rejection: R): AggregateDecision[R, E] = Reject(rejection)
   def defer[R, E](f: ExecutionContext => Future[AggregateDecision[R, E]]): NowOrLater[AggregateDecision[R, E]] = Deferred(f)

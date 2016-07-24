@@ -31,9 +31,7 @@ class AggregateSharding(actorSystem: ActorSystem) {
 
       val props = AggregateActor.props(
         entityName.value,
-        DefaultAggregateActorBehavior(behavior.initialState(aggregate), Set.empty,
-                                       behavior.commandHandler(aggregate),
-                                       behavior.eventProjector(aggregate)),
+        DefaultAggregateActorBehavior(aggregate),
         settings.idleTimeout(entityName.value)
       )
 
@@ -41,8 +39,8 @@ class AggregateSharding(actorSystem: ActorSystem) {
         typeName = entityName.value,
         entityProps = props,
         settings = ClusterShardingSettings(actorSystem).withRememberEntities(false),
-        extractEntityId = AggregateActor.extractEntityId[Command],
-        extractShardId = AggregateActor.extractShardId[Command](settings.numberOfShards)
+        extractEntityId = AggregateActor.extractEntityId[HandleCommand[Command]],
+        extractShardId = AggregateActor.extractShardId[HandleCommand[Command]](settings.numberOfShards)
       )
 
       new AggregateRef[Aggregate] {
