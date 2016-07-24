@@ -34,9 +34,9 @@ object NowOrLater {
 
 case class CommandHandlerResult[Response, Event](response: Response, events: Seq[Event])
 
-trait AggregateActorBehavior[A, State, Command, Response, Event] {
-  def snapshot(a: A): State
-  def applySnapshot(a: A)(state: State): A
+trait AggregateBehavior[A, State, Command, Response, Event] {
+  def getState(a: A): State
+  def setState(a: A)(state: State): A
   def handleCommand(a: A)(command: Command): NowOrLater[CommandHandlerResult[Response, Event]]
   def applyEvent(a: A)(event: Event): A
 }
@@ -46,7 +46,7 @@ private [aecor] object AggregateActor {
   (entityName: String,
     initialBehavior: Behavior,
     idleTimeout: FiniteDuration
-  )(implicit Behavior: AggregateActorBehavior[Behavior, State, Command, Response, Event], Command: ClassTag[Command], State: ClassTag[State], Event: ClassTag[Event]): Props =
+  )(implicit Behavior: AggregateBehavior[Behavior, State, Command, Response, Event], Command: ClassTag[Command], State: ClassTag[State], Event: ClassTag[Event]): Props =
     Props(new AggregateActor(entityName, initialBehavior, idleTimeout))
 
   def extractEntityId[A: ClassTag](implicit correlation: Correlation[A]): ShardRegion.ExtractEntityId = {
@@ -61,7 +61,7 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
 (entityName: String,
  initialBehavior: Behavior,
  val idleTimeout: FiniteDuration
-)(implicit Behavior: AggregateActorBehavior[Behavior, State, Command, Response, Event],
+)(implicit Behavior: AggregateBehavior[Behavior, State, Command, Response, Event],
   Command: ClassTag[Command], State: ClassTag[State], Event: ClassTag[Event]) extends PersistentActor
   with Stash
   with ActorLogging
@@ -88,7 +88,7 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
 
     case SnapshotOffer(metadata, snapshot: State) =>
       log.debug("Applying snapshot [{}]", snapshot)
-      behavior = Behavior.applySnapshot(behavior)(snapshot)
+      behavior = Behavior.setState(behavior)(snapshot)
 
     case RecoveryCompleted =>
       log.debug("[{}] Recovery completed in [{} ms]", persistenceId, Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)

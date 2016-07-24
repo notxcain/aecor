@@ -2,6 +2,7 @@ package aecor.core.aggregate
 
 import java.time.Instant
 
+import aecor.core.aggregate.NowOrLater.Now
 import aecor.core.message.Correlation
 import aecor.util._
 
@@ -25,57 +26,40 @@ case class AggregateEventEnvelope[+Event](id: EventId, event: Event, timestamp: 
 
 case class AggregateResponse[+Rejection](causedBy: CommandId, result: Result[Rejection])
 sealed trait Result[+Rejection]
-case object Accepted extends Result[Nothing]
-case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
-
-
-case class DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection]
-(aggregateState: AggregateState,
-  processedCommands: Set[CommandId],
-  commandHandler: CommandHandler[AggregateState, Command, Event, Rejection],
-  projector: EventProjector[AggregateState, Event]
-) {
-
-  def snapshot: DefaultAggregateActorBehaviorState[AggregateState] = DefaultAggregateActorBehaviorState(aggregateState, processedCommands)
-
-  def withSnapshot(snapshot: DefaultAggregateActorBehaviorState[AggregateState]) = copy(aggregateState = snapshot.entityState, processedCommands = snapshot.processedCommands)
-
-  def applyEntityEvent(event: Event, causedBy: CommandId): DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection] =
-    copy(aggregateState = projector(aggregateState, event), processedCommands = processedCommands + causedBy)
-
-  def handleCommand(commandId: CommandId, command: Command): NowOrLater[AggregateDecision[Rejection, AggregateEventEnvelope[Event]]] =
-    if (processedCommands.contains(commandId)) {
-      AggregateDecision.accept()
-    } else {
-      commandHandler(aggregateState, command).map(_.map(event => AggregateEventEnvelope(generate[EventId], event, Instant.now(), commandId)))
-    }
+object Result {
+  case object Accepted extends Result[Nothing]
+  case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
 }
 
+case class DefaultAggregateActorBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
+
 object DefaultAggregateActorBehavior {
-  implicit def instance[AggregateState, Command, Event, Rejection]:
-  AggregateActorBehavior[DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] =
-    new AggregateActorBehavior[DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] {
-      override def snapshot(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection]): DefaultAggregateActorBehaviorState[AggregateState] =
-        a.snapshot
+  implicit def instance[Aggregate, AggregateState, Command, Event, Rejection]
+  (implicit aab: AggregateBehavior[Aggregate, AggregateState, Command, Result[Rejection], Event]):
+  AggregateBehavior[DefaultAggregateActorBehavior[Aggregate], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] =
+    new AggregateBehavior[DefaultAggregateActorBehavior[Aggregate], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] {
+      override def getState(a: DefaultAggregateActorBehavior[Aggregate]): DefaultAggregateActorBehaviorState[AggregateState] =
+        DefaultAggregateActorBehaviorState(aab.getState(a.aggregate), a.processedCommands)
 
-      override def applySnapshot(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection])(state: DefaultAggregateActorBehaviorState[AggregateState]): DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection] =
-        a.withSnapshot(state)
+      override def setState(a: DefaultAggregateActorBehavior[Aggregate])(state: DefaultAggregateActorBehaviorState[AggregateState]): DefaultAggregateActorBehavior[Aggregate] =
+        a.copy(aggregate = aab.setState(a.aggregate)(state.entityState), processedCommands = state.processedCommands)
 
-      override def handleCommand(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection])(command: HandleCommand[Command]): NowOrLater[CommandHandlerResult[AggregateResponse[Rejection], AggregateEventEnvelope[Event]]] =
-        a.handleCommand(command.id, command.command).map {
-          case Accept(events) => CommandHandlerResult(AggregateResponse(command.id, Accepted), events)
-          case Reject(rejection) => CommandHandlerResult(AggregateResponse(command.id, Rejected(rejection)), Seq.empty)
+
+      override def handleCommand(a: DefaultAggregateActorBehavior[Aggregate])(command: HandleCommand[Command]): NowOrLater[CommandHandlerResult[AggregateResponse[Rejection], AggregateEventEnvelope[Event]]] =
+        if (a.processedCommands.contains(command.id)) {
+          Now(CommandHandlerResult(AggregateResponse(command.id, Result.Accepted), Seq.empty))
+        } else {
+          aab.handleCommand(a.aggregate)(command.command).map { case CommandHandlerResult(result, events) =>
+            CommandHandlerResult(AggregateResponse(command.id, result), events.map(event => AggregateEventEnvelope(generate[EventId], event, Instant.now(), command.id)))
+          }
         }
-      override def applyEvent(a: DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection])(event: AggregateEventEnvelope[Event]): DefaultAggregateActorBehavior[AggregateState, Command, Event, Rejection] =
-        a.applyEntityEvent(event.event, event.causedBy)
+
+
+      override def applyEvent(a: DefaultAggregateActorBehavior[Aggregate])(event: AggregateEventEnvelope[Event]): DefaultAggregateActorBehavior[Aggregate] =
+        a.copy(aggregate = aab.applyEvent(a.aggregate)(event.event), processedCommands = a.processedCommands + event.causedBy)
     }
 
-  def apply[Aggregate, State, Command, Event, Rejection](aggregate: Aggregate)(implicit behavior: AggregateBehavior[Aggregate, State, Command, Event, Rejection], State: ClassTag[State],
-    Command: ClassTag[Command],
-    Event: ClassTag[Event]): DefaultAggregateActorBehavior[State, Command, Event, Rejection] =
-    DefaultAggregateActorBehavior(behavior.initialState(aggregate), Set.empty,
-                                                  behavior.commandHandler(aggregate),
-                                                  behavior.eventProjector(aggregate))
+  def apply[Aggregate](aggregate: Aggregate): DefaultAggregateActorBehavior[Aggregate] = DefaultAggregateActorBehavior(aggregate)
 }
 
 case class DefaultAggregateActorBehaviorState[State](entityState: State, processedCommands: Set[CommandId])

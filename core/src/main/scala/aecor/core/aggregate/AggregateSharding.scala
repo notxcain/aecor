@@ -19,7 +19,7 @@ class AggregateSharding(actorSystem: ActorSystem) {
     ()
     (implicit
      contract: CommandContract.Aux[Aggregate, Command, Rejection],
-     behavior: AggregateBehavior[Aggregate, State, Command, Event, Rejection],
+      aab: AggregateBehavior[Aggregate, State, Command, Result[Rejection], Event],
      State: ClassTag[State],
      Command: ClassTag[Command],
      Event: ClassTag[Event],

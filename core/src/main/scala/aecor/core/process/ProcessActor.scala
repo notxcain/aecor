@@ -95,12 +95,12 @@ class ProcessActor[Input: ClassTag](processName: String, initialBehavior: Proces
       }
 
     case AggregateResponse(causedBy, result) => result match {
-      case Rejected(rejection) =>
+      case Result.Rejected(rejection) =>
         log.debug("Command [{}] rejected [{}]", causedBy, rejection)
         persist(CommandRejected(rejection, causedBy)) { _ =>
           commandRejected(rejection, causedBy)
         }
-      case Accepted =>
+      case Result.Accepted =>
         log.debug("Command [{}] accepted", causedBy)
         persist(CommandAccepted(causedBy)) { e =>
           confirmCommandDelivery(causedBy)

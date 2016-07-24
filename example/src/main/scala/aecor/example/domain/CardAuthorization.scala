@@ -52,65 +52,17 @@ object CardAuthorization {
 
   implicit val eventContract: EventContract.Aux[CardAuthorization, Event] = EventContract.instance
 
-  implicit def behavior[Rejection]: AggregateBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] = new AggregateBehavior[CardAuthorization, State, Command[Rejection], Event, Rejection] {
-    override def initialState(entity: CardAuthorization): State = Initial
 
-    override def commandHandler(entity: CardAuthorization): CommandHandler[State, Command[Rejection], Event, Rejection] =
-      CommandHandler {
-        case Initial => {
-          case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
-            accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
-          case c: AcceptCardAuthorization =>
-            reject(DoesNotExists)
-          case c: DeclineCardAuthorization =>
-            reject(DoesNotExists)
-        }
-        case Created(id) => {
-          case e: AcceptCardAuthorization =>
-            accept(CardAuthorizationAccepted(id))
-          case e: DeclineCardAuthorization =>
-            accept(CardAuthorizationDeclined(id, e.reason))
-          case e: CreateCardAuthorization =>
-            reject(AlreadyExists)
-        }
-        case Accepted(id) => {
-          case e: AcceptCardAuthorization => reject(AlreadyAccepted)
-          case e: DeclineCardAuthorization => reject(AlreadyAccepted)
-          case e: CreateCardAuthorization => reject(AlreadyExists)
-        }
-        case Declined(id) => {
-          case e: AcceptCardAuthorization => reject(AlreadyDeclined)
-          case e: DeclineCardAuthorization => reject(AlreadyDeclined)
-          case e: CreateCardAuthorization => reject(AlreadyExists)
-        }
-      }
-
-    override def eventProjector(entity: CardAuthorization): EventProjector[State, Event] =
-      EventProjector.instance {
-        case Initial => {
-          case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
-            Created(cardAuthorizationId)
-          case other =>
-            throw new IllegalArgumentException(s"Unexpected event $other")
-        }
-        case self: Created => {
-          case e: CardAuthorizationCreated => self
-          case e: CardAuthorizationAccepted => Accepted(self.id)
-          case e: CardAuthorizationDeclined => Declined(self.id)
-        }
-        case self: Accepted => {
-          case e: CardAuthorizationCreated => self
-          case e: CardAuthorizationAccepted => Accepted(self.id)
-          case e: CardAuthorizationDeclined => Declined(self.id)
-        }
-        case self: Declined => {
-          case e: CardAuthorizationCreated => self
-          case e: CardAuthorizationAccepted => Accepted(self.id)
-          case e: CardAuthorizationDeclined => Declined(self.id)
-        }
-      }
-  }
-  def apply(): CardAuthorization = new CardAuthorization {}
+  implicit def behavior[Rejection]: AggregateBehavior[CardAuthorization, State, Command[Rejection], Result[Rejection], Event] =
+    new AggregateBehavior[CardAuthorization, State, Command[Rejection], Result[Rejection], Event] {
+      override def getState(a: CardAuthorization): State = a.state
+      override def setState(a: CardAuthorization)(state: State): CardAuthorization = a.copy(state = state)
+      override def handleCommand(a: CardAuthorization)(command: Command[Rejection]): NowOrLater[CommandHandlerResult[Result[Rejection], Event]] =
+        a.handleCommand(command)
+      override def applyEvent(a: CardAuthorization)(event: Event): CardAuthorization =
+        a.apply(event)
+    }
+  def apply(): CardAuthorization = CardAuthorization(Initial)
 }
 case class CardAuthorizationId(value: String) extends AnyVal
 case class CardNumber(value: String) extends AnyVal
@@ -118,4 +70,60 @@ case class AcquireId(value: Long) extends AnyVal
 case class TerminalId(value: Long) extends AnyVal
 
 
-sealed trait CardAuthorization
+import CardAuthorization._
+
+case class CardAuthorization(state: State) {
+  def handleCommand[R](command: Command[R]): NowOrLater[CommandHandlerResult[Result[R], Event]] =
+    CommandHandler(state, command) {
+      case Initial => {
+        case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
+          accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
+        case c: AcceptCardAuthorization =>
+          reject(DoesNotExists)
+        case c: DeclineCardAuthorization =>
+          reject(DoesNotExists)
+      }
+      case Created(id) => {
+        case e: AcceptCardAuthorization =>
+          accept(CardAuthorizationAccepted(id))
+        case e: DeclineCardAuthorization =>
+          accept(CardAuthorizationDeclined(id, e.reason))
+        case e: CreateCardAuthorization =>
+          reject(AlreadyExists)
+      }
+      case Accepted(id) => {
+        case e: AcceptCardAuthorization => reject(AlreadyAccepted)
+        case e: DeclineCardAuthorization => reject(AlreadyAccepted)
+        case e: CreateCardAuthorization => reject(AlreadyExists)
+      }
+      case Declined(id) => {
+        case e: AcceptCardAuthorization => reject(AlreadyDeclined)
+        case e: DeclineCardAuthorization => reject(AlreadyDeclined)
+        case e: CreateCardAuthorization => reject(AlreadyExists)
+      }
+    }
+
+  def apply(event: Event): CardAuthorization = copy(state = EventProjector(state, event) {
+    case Initial => {
+      case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
+        Created(cardAuthorizationId)
+      case other =>
+        throw new IllegalArgumentException(s"Unexpected event $other")
+    }
+    case self: Created => {
+      case e: CardAuthorizationCreated => self
+      case e: CardAuthorizationAccepted => Accepted(self.id)
+      case e: CardAuthorizationDeclined => Declined(self.id)
+    }
+    case self: Accepted => {
+      case e: CardAuthorizationCreated => self
+      case e: CardAuthorizationAccepted => Accepted(self.id)
+      case e: CardAuthorizationDeclined => Declined(self.id)
+    }
+    case self: Declined => {
+      case e: CardAuthorizationCreated => self
+      case e: CardAuthorizationAccepted => Accepted(self.id)
+      case e: CardAuthorizationDeclined => Declined(self.id)
+    }
+  })
+}
