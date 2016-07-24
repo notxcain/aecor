@@ -6,14 +6,13 @@ import java.time.{Instant, LocalDateTime, ZoneId}
 
 import aecor.core.aggregate.{AggregateEventEnvelope, CommandId, EventId, HandleCommand}
 import aecor.core.message.ExtractShardId
-import aecor.core.schedule.ScheduleActor._
 import aecor.util._
-import akka.{Done, NotUsed}
-import akka.actor.{Actor, ActorLogging, Cancellable, Props}
+import akka.actor.{Actor, ActorLogging, Props}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId}
 import akka.persistence.PersistentActor
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
+import akka.{Done, NotUsed}
 
 import scala.concurrent.duration._
 

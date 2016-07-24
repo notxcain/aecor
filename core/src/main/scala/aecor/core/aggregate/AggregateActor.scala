@@ -4,17 +4,15 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant}
 
-import aecor.core.aggregate.CommandHandlerResult.{Accept, Defer, Reject}
-import aecor.core.concurrent._
+import aecor.core.aggregate.CommandHandlerResult.{Defer, Now}
 import aecor.core.message._
+import aecor.util.generate
 import akka.NotUsed
 import akka.actor.{ActorLogging, Props, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import akka.pattern._
 import akka.persistence.journal.Tagged
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
-import cats.std.future._
-import aecor.util.generate
 
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
@@ -65,8 +63,21 @@ private [aecor] case class AggregateActorState[State](entityState: State, proces
   def applyEntityEvent[Event](projector: EventProjector[State, Event])(event: Event, causedBy: CommandId): AggregateActorState[State] =
     copy(entityState = projector(entityState, event), processedCommands = processedCommands + causedBy)
 
-  def handleEntityCommand[Command, Event, Rejection](commandHandler: CommandHandler[State, Command, Event, Rejection])(command: Command): CommandHandlerResult[Rejection, Event] =
+  def handleEntityCommand[Command, Event, Rejection](commandHandler: CommandHandler[State, Command, Event, Rejection])(command: Command): CommandHandlerResult[AggregateDecision[Rejection, Event]] =
     commandHandler(entityState, command)
+
+  def handleCommand[Command, Event, Rejection](commandHandler: CommandHandler[State, Command, Event, Rejection])(commandId: CommandId, command: Command): CommandHandlerResult[AggregateDecision[Rejection, AggregateEventEnvelope[Event]]] =
+    if (shouldHandleCommand(commandId)) {
+      def transformDecision(decision: AggregateDecision[Rejection, Event]): AggregateDecision[Rejection, AggregateEventEnvelope[Event]] = decision match {
+        case Accept(events) => Accept(events.map { event =>
+          AggregateEventEnvelope(generate[EventId], event, Instant.now(), commandId)
+        })
+        case r @ Reject(rejection) => r
+      }
+      commandHandler(entityState, command).map(transformDecision)
+    } else {
+      CommandHandlerResult.accept()
+    }
 }
 
 private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: ClassTag, Rejection]
@@ -82,7 +93,7 @@ private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: 
 
   import context.dispatcher
 
-  private case class HandleCommandHandlerResult(result: CommandHandlerResult[Rejection, Event])
+  private case class HandleAggregateDecision(result: AggregateDecision[Rejection, AggregateEventEnvelope[Event]])
 
   private val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   override val persistenceId: String = s"$entityName-$entityId"
@@ -91,7 +102,9 @@ private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: 
 
   log.debug("[{}] Starting...", persistenceId)
 
-  val recoveryStartTimestamp: Instant = Instant.now()
+  private val tags = Set(entityName)
+
+  private val recoveryStartTimestamp: Instant = Instant.now()
 
   override def receiveRecover: Receive = {
     case e: AggregateEventEnvelope[_] =>
@@ -119,40 +132,22 @@ private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: 
   def receiveCommandMessage: Receive = {
     case HandleCommand(id, command: Command) =>
       log.debug("Received command message id = [{}] command = [{}]", id, command)
-      if (state.shouldHandleCommand(id)) {
-        sender() ! AggregateResponse(id, Accepted)
-        log.debug("Message already processed")
-      } else {
-        val result = state.handleEntityCommand(commandHandler)(command)
-        log.debug("Command handler result [{}]", result)
-        runResult(id)(result)
-      }
+      val result = state.handleCommand(commandHandler)(id, command)
+      runResult(id, result)
     case other =>
       log.warning("[{}] Unknown message [{}]", persistenceId, other)
   }
 
-  def runResult(causedBy: CommandId)(result: CommandHandlerResult[Rejection, Event]): Unit = result match {
-    case Accept(events) =>
-      val envelopes = events.map { event =>
-        Tagged(AggregateEventEnvelope(generate[EventId], event, Instant.now(), causedBy), Set(entityName))
-      }.toList
-      persistAll(envelopes) {
-        case Tagged(e: AggregateEventEnvelope[Event], _) =>
-          applyEventEnvelope(e)
-      }
-      deferAsync(NotUsed) { _ =>
-        sender() ! AggregateResponse(causedBy, Accepted)
-      }
-
-    case Reject(rejection) =>
-      sender() ! AggregateResponse(causedBy, Rejected(rejection))
+  def runResult(causedBy: CommandId, result: CommandHandlerResult[AggregateDecision[Rejection, AggregateEventEnvelope[Event]]]): Unit = result match {
+    case Now(decision) =>
+      runDecision(causedBy, decision)
 
     case Defer(deferred) =>
-      deferred.map(HandleCommandHandlerResult).asFuture.pipeTo(self)(sender)
+      deferred(context.dispatcher).map(HandleAggregateDecision).pipeTo(self)(sender)
       context.become {
-        case HandleCommandHandlerResult(deferredResult) =>
-          log.debug("Command handler result [{}]", deferredResult)
-          runResult(causedBy)(deferredResult)
+        case HandleAggregateDecision(decision) =>
+          log.debug("Command handler result [{}]", decision)
+          runDecision(causedBy, decision)
           unstashAll()
           context.become(receiveCommand)
         case failure @ Status.Failure(e) =>
@@ -163,6 +158,21 @@ private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: 
         case _ =>
           stash()
       }
+  }
+
+  def runDecision(causedBy: CommandId, decision: AggregateDecision[Rejection, AggregateEventEnvelope[Event]]): Unit = decision match {
+    case Accept(events) =>
+      val envelopes = events.map(Tagged(_, tags))
+      persistAll(envelopes) {
+        case Tagged(e: AggregateEventEnvelope[Event], _) =>
+          applyEventEnvelope(e)
+      }
+      deferAsync(NotUsed) { _ =>
+        sender() ! AggregateResponse(causedBy, Accepted)
+      }
+
+    case Reject(rejection) =>
+      sender() ! AggregateResponse(causedBy, Rejected(rejection))
   }
 
   def applyEventEnvelope(entityEventEnvelope: AggregateEventEnvelope[Event]): Unit = {
