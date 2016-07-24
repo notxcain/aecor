@@ -49,10 +49,7 @@ object CardAuthorization {
   implicit def commandContract[Rejection]: CommandContract.Aux[CardAuthorization, Command[Rejection], Rejection] = CommandContract.instance
   implicit def correlation[Rejection]: Correlation[Command[Rejection]] = Correlation.instance(_.cardAuthorizationId.value)
   implicit val name: AggregateName[CardAuthorization] = AggregateName.instance("CardAuthorization")
-
   implicit val eventContract: EventContract.Aux[CardAuthorization, Event] = EventContract.instance
-
-
   implicit def behavior[Rejection]: AggregateBehavior[CardAuthorization, State, Command[Rejection], Result[Rejection], Event] =
     new AggregateBehavior[CardAuthorization, State, Command[Rejection], Result[Rejection], Event] {
       override def getState(a: CardAuthorization): State = a.state
@@ -103,7 +100,7 @@ case class CardAuthorization(state: State) {
       }
     }
 
-  def apply(event: Event): CardAuthorization = copy(state = EventProjector(state, event) {
+  def apply(event: Event): CardAuthorization = copy(state = ApplyEvent(state, event) {
     case Initial => {
       case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
         Created(cardAuthorizationId)

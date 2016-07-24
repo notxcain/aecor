@@ -87,7 +87,6 @@ object Account {
 import Account._
 
 case class Account(state: Account.State) {
-
   def handleCommand(command: Command): NowOrLater[CommandHandlerResult[Result[Rejection], Event]] = CommandHandler(state, command) {
     case Initial => {
       case OpenAccount(accountId) => accept(AccountOpened(accountId))

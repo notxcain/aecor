@@ -31,21 +31,21 @@ object Result {
   case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
 }
 
-case class DefaultAggregateActorBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
+case class DeduplicatingAggregateBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
 
-object DefaultAggregateActorBehavior {
+object DeduplicatingAggregateBehavior {
   implicit def instance[Aggregate, AggregateState, Command, Event, Rejection]
   (implicit aab: AggregateBehavior[Aggregate, AggregateState, Command, Result[Rejection], Event]):
-  AggregateBehavior[DefaultAggregateActorBehavior[Aggregate], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] =
-    new AggregateBehavior[DefaultAggregateActorBehavior[Aggregate], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] {
-      override def getState(a: DefaultAggregateActorBehavior[Aggregate]): DefaultAggregateActorBehaviorState[AggregateState] =
+  AggregateBehavior[DeduplicatingAggregateBehavior[Aggregate], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] =
+    new AggregateBehavior[DeduplicatingAggregateBehavior[Aggregate], DefaultAggregateActorBehaviorState[AggregateState], HandleCommand[Command], AggregateResponse[Rejection], AggregateEventEnvelope[Event]] {
+      override def getState(a: DeduplicatingAggregateBehavior[Aggregate]): DefaultAggregateActorBehaviorState[AggregateState] =
         DefaultAggregateActorBehaviorState(aab.getState(a.aggregate), a.processedCommands)
 
-      override def setState(a: DefaultAggregateActorBehavior[Aggregate])(state: DefaultAggregateActorBehaviorState[AggregateState]): DefaultAggregateActorBehavior[Aggregate] =
+      override def setState(a: DeduplicatingAggregateBehavior[Aggregate])(state: DefaultAggregateActorBehaviorState[AggregateState]): DeduplicatingAggregateBehavior[Aggregate] =
         a.copy(aggregate = aab.setState(a.aggregate)(state.entityState), processedCommands = state.processedCommands)
 
 
-      override def handleCommand(a: DefaultAggregateActorBehavior[Aggregate])(command: HandleCommand[Command]): NowOrLater[CommandHandlerResult[AggregateResponse[Rejection], AggregateEventEnvelope[Event]]] =
+      override def handleCommand(a: DeduplicatingAggregateBehavior[Aggregate])(command: HandleCommand[Command]): NowOrLater[CommandHandlerResult[AggregateResponse[Rejection], AggregateEventEnvelope[Event]]] =
         if (a.processedCommands.contains(command.id)) {
           Now(CommandHandlerResult(AggregateResponse(command.id, Result.Accepted), Seq.empty))
         } else {
@@ -53,13 +53,11 @@ object DefaultAggregateActorBehavior {
             CommandHandlerResult(AggregateResponse(command.id, result), events.map(event => AggregateEventEnvelope(generate[EventId], event, Instant.now(), command.id)))
           }
         }
-
-
-      override def applyEvent(a: DefaultAggregateActorBehavior[Aggregate])(event: AggregateEventEnvelope[Event]): DefaultAggregateActorBehavior[Aggregate] =
+      override def applyEvent(a: DeduplicatingAggregateBehavior[Aggregate])(event: AggregateEventEnvelope[Event]): DeduplicatingAggregateBehavior[Aggregate] =
         a.copy(aggregate = aab.applyEvent(a.aggregate)(event.event), processedCommands = a.processedCommands + event.causedBy)
     }
 
-  def apply[Aggregate](aggregate: Aggregate): DefaultAggregateActorBehavior[Aggregate] = DefaultAggregateActorBehavior(aggregate)
+  def apply[Aggregate](aggregate: Aggregate): DeduplicatingAggregateBehavior[Aggregate] = DeduplicatingAggregateBehavior(aggregate)
 }
 
 case class DefaultAggregateActorBehaviorState[State](entityState: State, processedCommands: Set[CommandId])
