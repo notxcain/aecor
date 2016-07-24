@@ -9,33 +9,18 @@ import akka.stream.scaladsl.Source
 import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
-class AggregateJournal(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal) {
-
-  val extendedCassandraReadJournal = new ExtendedCassandraReadJournal(actorSystem, cassandraReadJournal)
-
-  sealed trait MkCommittableEventSource[A] {
+trait AggregateJournal {
+  trait MkCommittableEventSource[A] {
     def apply[E](consumerId: String)
       (implicit name: AggregateName[A],
         contract: EventContract.Aux[A, E],
-        E: ClassTag[E],
-        ec: ExecutionContext
+        E: ClassTag[E]
       ): Source[CommittableJournalEntry[AggregateEventEnvelope[E]], NotUsed]
   }
 
-  def committableEventSourceFor[A] = new MkCommittableEventSource[A] {
-    override def apply[E](consumerId: String)
-      (implicit name: AggregateName[A],
-        contract: EventContract.Aux[A, E],
-        E: ClassTag[E],
-        ec: ExecutionContext
-      ): Source[CommittableJournalEntry[AggregateEventEnvelope[E]], NotUsed] =
-      extendedCassandraReadJournal.committableEventsByTag(name.value, consumerId).collect {
-        case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEventEnvelope(id, event: E, timestamp, causedBy)) =>
-          m.asInstanceOf[CommittableJournalEntry[AggregateEventEnvelope[E]]]
-      }
-  }
+  def committableEventSourceFor[A]: MkCommittableEventSource[A]
 }
 
 object AggregateJournal {
-  def apply(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal): AggregateJournal = new AggregateJournal(actorSystem, cassandraReadJournal)
+  def apply(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal)(implicit ec: ExecutionContext): AggregateJournal = new CassandraAggregateJournal(actorSystem, cassandraReadJournal)
 }

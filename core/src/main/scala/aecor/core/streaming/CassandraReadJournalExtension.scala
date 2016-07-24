@@ -35,7 +35,7 @@ case class CommittableJournalEntry[+A](
     copy(value = f(value))
 }
 
-class ExtendedCassandraReadJournal(actorSystem: ActorSystem, readJournal: CassandraReadJournal) {
+class CassandraReadJournalExtension(actorSystem: ActorSystem, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext) {
 
   def underlying: CassandraReadJournal = readJournal
 
@@ -49,7 +49,7 @@ class ExtendedCassandraReadJournal(actorSystem: ActorSystem, readJournal: Cassan
   private val selectOffsetStatement = readJournal.session.prepare(s"select offset from $keyspace.consumer_offset where consumer_id = ? and tag = ?")
   private val updateOffsetStatement = readJournal.session.prepare(s"update $keyspace.consumer_offset set offset = ? where consumer_id = ? and tag = ?")
 
-  def committableEventsByTag(tag: String, consumerId: String)(implicit ec: ExecutionContext): Source[CommittableJournalEntry[Any], NotUsed] = {
+  def committableEventsByTag(tag: String, consumerId: String): Source[CommittableJournalEntry[Any], NotUsed] = {
     Source.single(NotUsed).mapAsync(1) { _ =>
       createTableStatement.map(_.bind()).flatMap(readJournal.session.executeWrite).flatMap { _ =>
         updateOffsetStatement.flatMap { updateStatement =>
@@ -75,6 +75,6 @@ class ExtendedCassandraReadJournal(actorSystem: ActorSystem, readJournal: Cassan
   }
 }
 
-object ExtendedCassandraReadJournal {
-  def apply(actorSystem: ActorSystem, readJournal: CassandraReadJournal): ExtendedCassandraReadJournal = new ExtendedCassandraReadJournal(actorSystem, readJournal)
+object CassandraReadJournalExtension {
+  def apply(actorSystem: ActorSystem, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext): CassandraReadJournalExtension = new CassandraReadJournalExtension(actorSystem, readJournal)
 }

@@ -82,20 +82,16 @@ private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: 
 
   import context.dispatcher
 
-  case class HandleCommandHandlerResult(result: CommandHandlerResult[Rejection, Event])
+  private case class HandleCommandHandlerResult(result: CommandHandlerResult[Rejection, Event])
 
   private val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   override val persistenceId: String = s"$entityName-$entityId"
 
   var state: AggregateActorState[State] = AggregateActorState(initialState, Set.empty)
 
-  var recoveryStartTimestamp: Option[Instant] = None
+  log.debug("[{}] Starting...", persistenceId)
 
-  override def preStart(): Unit = {
-    log.debug("[{}] Starting...", persistenceId)
-    recoveryStartTimestamp = Some(Instant.now())
-    super.preStart()
-  }
+  val recoveryStartTimestamp: Instant = Instant.now()
 
   override def receiveRecover: Receive = {
     case e: AggregateEventEnvelope[_] =>
@@ -114,9 +110,7 @@ private [aecor] class AggregateActor[State: ClassTag, Command: ClassTag, Event: 
       }
 
     case RecoveryCompleted =>
-      recoveryStartTimestamp.foreach { start =>
-        log.debug("[{}] Recovery completed in [{} ms]", persistenceId, Duration.between(start, Instant.now()).toMillis)
-      }
+      log.debug("[{}] Recovery completed in [{} ms]", persistenceId, Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
       setIdleTimeout()
   }
 

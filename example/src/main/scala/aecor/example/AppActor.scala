@@ -19,11 +19,8 @@ import akka.kafka.ProducerSettings
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.PersistenceQuery
 import akka.stream.ActorMaterializer
-import io.circe.generic.auto._
 import org.apache.kafka.common.serialization.StringSerializer
 import shapeless.{Coproduct, HNil}
-
-import scala.concurrent.duration._
 
 object AppActor {
   def props: Props = Props(new AppActor)
@@ -58,8 +55,8 @@ class AppActor extends Actor with ActorLogging {
 
   val cardAuthorizationProcess = {
     val schema =
-      from[CardAuthorization]().collect { case e: CardAuthorizationCreated => e } ::
-        from[Account]().collect { case e: TransactionAuthorized => e } ::
+      fromJournal[CardAuthorization]().collect { case e: CardAuthorizationCreated => e } ::
+        fromJournal[Account]().collect { case e: TransactionAuthorized => e } ::
         HNil
     val process = ProcessSharding(system)
 
@@ -77,19 +74,16 @@ class AppActor extends Actor with ActorLogging {
     val directSource = accountEvents.merge(caEvents)
 
     val sink = process.sink(
-                             name = "CardAuthorizationProcess",
+                             name = AuthorizationProcess.name,
                              behavior = AuthorizationProcess.behavior(accountRegion, authorizationRegion),
                              correlation = AuthorizationProcess.correlation,
-                             idleTimeout = 10.seconds
+                             idleTimeout = AuthorizationProcess.idleTimeout
                            )
     directSource.to(sink).run()
   }
 
-  val cardAuthorizationEventStream = {
-    val groupId = "CardAuthorization-API"
-    val source = journal.committableEventSourceFor[CardAuthorization](groupId).map(_.value.event)
-    new DefaultEventStream(system, source)
-  }
+  val cardAuthorizationEventStream =
+    new DefaultEventStream(system, journal.committableEventSourceFor[CardAuthorization]("CardAuthorization-API").map(_.value.event))
 
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion, cardAuthorizationEventStream, Logging(system, classOf[AuthorizePaymentAPI]))

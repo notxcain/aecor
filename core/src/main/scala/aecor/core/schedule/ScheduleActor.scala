@@ -1,14 +1,14 @@
-package aecor.core.scheduler
+package aecor.core.schedule
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Instant, LocalDateTime, ZoneId}
 
-import aecor.core.aggregate.{AggregateEventEnvelope, CommandId, EventId}
+import aecor.core.aggregate.{AggregateEventEnvelope, CommandId, EventId, HandleCommand}
 import aecor.core.message.ExtractShardId
-import aecor.core.scheduler.ScheduleActor._
+import aecor.core.schedule.ScheduleActor._
 import aecor.util._
-import akka.Done
+import akka.{Done, NotUsed}
 import akka.actor.{Actor, ActorLogging, Cancellable, Props}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId}
 import akka.persistence.PersistentActor
@@ -18,18 +18,18 @@ import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import scala.concurrent.duration._
 
 object ScheduleActorSupervisor {
-  def calculateTimeBucket(date: LocalDateTime, bucketLength: Duration = 60.seconds): Long = {
+  def calculateTimeBucket(date: LocalDateTime, bucketLength: FiniteDuration): Long = {
     date.atZone(ZoneId.systemDefault()).toEpochSecond / bucketLength.toSeconds
   }
 
-  def extractEntityId: ExtractEntityId = {
+  def extractEntityId(bucketLength: FiniteDuration): ExtractEntityId = {
     case c@AddScheduleEntry(scheduleName, dueDate, entryId) =>
-      (scheduleName + "-" + calculateTimeBucket(dueDate), c)
+      (scheduleName + "-" + calculateTimeBucket(dueDate, bucketLength), c)
   }
 
-  def extractShardId: ExtractShardId = {
+  def extractShardId(numberOfShards: Int, bucketLength: FiniteDuration): ExtractShardId = {
     case c@AddScheduleEntry(scheduleName, dueDate, entryId) =>
-      ExtractShardId(scheduleName + "-" + calculateTimeBucket(dueDate), 100)
+      ExtractShardId(scheduleName + "-" + calculateTimeBucket(dueDate, bucketLength), numberOfShards)
   }
 
   def props: Props =
@@ -46,37 +46,29 @@ class ScheduleActorSupervisor extends Actor {
     (components.dropRight(1).mkString("-"), components.last)
   }
 
-  var tickControl: Option[Cancellable] = None
-  var worker = context.actorOf(ScheduleActor.props(scheduleName, timeBucket), "worker")
+  val worker = context.actorOf(ScheduleActor.props(scheduleName, timeBucket), "worker")
+  val tickControl = Source.tick(0.seconds, 1.second, NotUsed).map(_ => FireDueEntries(LocalDateTime.now())).toMat(Sink.actorRef(worker, Done))(Keep.left).run()
 
-  override def postStop(): Unit = {
-    tickControl.foreach(_.cancel())
-  }
-
-  override def preStart(): Unit = {
-    val graph = Source.tick(5.seconds, 1.second, FireDueEntries).toMat(Sink.actorRef(worker, Done))(Keep.left)
-    tickControl = Some(graph.run())
+  @scala.throws[Exception](classOf[Exception])
+  override def preRestart(reason: Throwable, message: Option[Any]): Unit = {
+    tickControl.cancel()
+    super.preRestart(reason, message)
   }
 
   override def receive: Receive = {
-    case c: AddScheduleEntry => worker.forward(c)
+    case hc @ HandleCommand(id, c: AddScheduleEntry) => worker.forward(hc)
   }
 }
 
 sealed trait ScheduleActorEvent
-
 case class ScheduleEntryAdded(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends ScheduleActorEvent
-
 case class ScheduleEntryFired(scheduleName: String, entryId: String) extends ScheduleActorEvent
 
+sealed trait ScheduleActorCommand
+case class AddScheduleEntry(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends ScheduleActorCommand
+private[schedule] case class FireDueEntries(now: LocalDateTime) extends ScheduleActorCommand
+
 object ScheduleActor {
-
-  sealed trait Command
-
-  case class AddScheduleEntry(scheduleName: String, dueDate: LocalDateTime, entryId: String) extends Command
-
-  private[scheduler] case object FireDueEntries extends Command
-
   def props(scheduleName: String, timeBucket: String): Props =
     Props(new ScheduleActor(scheduleName, timeBucket))
 }
@@ -90,8 +82,8 @@ private[aecor] case class ScheduleActorState(entries: List[ScheduleEntry]) {
   def removeEntry(entryId: String): ScheduleActorState =
     copy(entries = entries.filterNot(_.id == entryId))
 
-  def findEntriesDueNow(now: LocalDateTime): List[ScheduleEntry] =
-    entries.filter(_.dueDate.isBefore(now))
+  def findEntriesDueTo(date: LocalDateTime): List[ScheduleEntry] =
+    entries.filter(_.dueDate.isBefore(date))
 }
 
 private[aecor] object ScheduleActorState {
@@ -114,17 +106,16 @@ private[aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
   }
 
   override def receiveCommand: Receive = {
-    case c: Command => handleCommand(c)
+    case c: ScheduleActorCommand => handleCommand(c)
   }
 
-  def handleCommand(c: Command): Unit = c match {
+  def handleCommand(c: ScheduleActorCommand): Unit = c match {
     case AddScheduleEntry(_, dueDate, entry) =>
       persist(putInEnvelope(ScheduleEntryAdded(scheduleName, dueDate, entry)))(applyEvent)
 
-    case FireDueEntries =>
-      val now = LocalDateTime.now()
+    case FireDueEntries(now) =>
       val envelopes = state
-                      .findEntriesDueNow(now)
+                      .findEntriesDueTo(now)
                       .map(entry => ScheduleEntryFired(scheduleName, entry.id))
                       .map(putInEnvelope)
       persistAll(envelopes)(applyEvent)

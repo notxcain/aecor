@@ -7,8 +7,14 @@ import aecor.example.domain.Account.{AuthorizeTransaction, TransactionAuthorized
 import aecor.example.domain.CardAuthorization._
 import aecor.util.FunctionBuilder
 import shapeless._
+import scala.concurrent.duration._
+
+import scala.concurrent.duration.FiniteDuration
 
 object AuthorizationProcess {
+  val name: String = "CardAuthorizationProcess"
+
+  val idleTimeout: FiniteDuration = 20.seconds
   type Input = CardAuthorizationCreated :+: TransactionAuthorized :+: CNil
 
   val correlation: Correlation[Input] = Correlation.instance(

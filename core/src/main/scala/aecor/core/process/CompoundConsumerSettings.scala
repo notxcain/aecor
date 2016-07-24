@@ -2,7 +2,6 @@ package aecor.core.process
 
 import java.nio.ByteBuffer
 
-import aecor.core.aggregate.EventContract.Aux
 import cats.std.function._
 import cats.syntax.functor._
 import aecor.core.aggregate.{AggregateName, EventContract}
@@ -59,13 +58,16 @@ trait LowPriorityInstances {
 
 
 object CompositeConsumerSettingsSyntax {
-  trait MkFrom[A] {
+  trait MkFromJournal[A] {
     def apply[T]()(implicit arName: AggregateName[A], contract: EventContract.Aux[A, T], decoder: Decoder[T]): TopicSchema[T]
   }
-  def from[A] = new MkFrom[A] {
-    override def apply[T]()(implicit arName: AggregateName[A], contract: Aux[A, T], decoder: Decoder[T]): TopicSchema[T] =
+  def fromJournal[A] = new MkFromJournal[A] {
+    override def apply[T]()(implicit arName: AggregateName[A], contract: EventContract.Aux[A, T], decoder: Decoder[T]): TopicSchema[T] =
       TopicSchema(arName.value, bytes => decoder.decode(ByteBuffer.wrap(bytes)).toOption)
   }
 
+  trait MkFromKafkaTopic[A] {
+    def apply[T](topic: String)(implicit decoder: Decoder[T]): TopicSchema[T]
+  }
 }
 
