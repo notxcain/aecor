@@ -130,7 +130,7 @@ class ProcessActor[Input: ClassTag](processName: String, initialBehavior: Proces
   def deliverCommand[A, C, R](destination: AggregateRef[A], command: C, rejectionHandler: R => ProcessReaction[Input], commandId: CommandId): Unit = {
     deliver(destination.actorRef.path) { internalDeliveryId =>
       activeDeliveries.update(commandId, CommandDelivery(rejectionHandler.asInstanceOf[RejectionHandler], internalDeliveryId))
-      HandleCommand(commandId, command)
+      AggregateCommand(commandId, command)
     }
   }
 

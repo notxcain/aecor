@@ -11,10 +11,10 @@ import akka.actor.{ActorLogging, Props, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import akka.pattern._
 import akka.persistence.journal.Tagged
-import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
+import akka.persistence.{PersistentActor, RecoveryCompleted}
 
 import scala.collection.immutable.Seq
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent._
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
@@ -28,53 +28,81 @@ sealed trait NowOrLater[+A] {
 }
 
 object NowOrLater {
+
   case class Now[+A](value: A) extends NowOrLater[A]
+
   case class Deferred[+A](run: ExecutionContext => Future[A]) extends NowOrLater[A]
+
 }
 
-case class CommandHandlerResult[Response, Event](response: Response, events: Seq[Event])
+trait EventsourcedActorBehavior[A] {
+  type Command
+  type Response
+  type Event
 
-trait AggregateBehavior[A, State, Command, Response, Event] {
-  def getState(a: A): State
-  def setState(a: A)(state: State): A
-  def handleCommand(a: A)(command: Command): NowOrLater[CommandHandlerResult[Response, Event]]
+  def handleCommand(a: A)(command: Command): NowOrLater[EventsourcedActorBehavior.Result[Response, Event]]
+
   def applyEvent(a: A)(event: Event): A
 }
 
-private [aecor] object AggregateActor {
-  def props[Behavior, State, Command, Event, Response]
-  (entityName: String,
-    initialBehavior: Behavior,
-    idleTimeout: FiniteDuration
-  )(implicit Behavior: AggregateBehavior[Behavior, State, Command, Response, Event], Command: ClassTag[Command], State: ClassTag[State], Event: ClassTag[Event]): Props =
-    Props(new AggregateActor(entityName, initialBehavior, idleTimeout))
+object EventsourcedActorBehavior {
+  type Aux[A, Command0, Response0, Event0] = EventsourcedActorBehavior[A] {
+    type Command = Command0
+    type Response = Response0
+    type Event = Event0
+  }
+  type Result[Response, Event] = (Response, Seq[Event])
+  def apply[A](implicit A: EventsourcedActorBehavior[A]): EventsourcedActorBehavior.Aux[A, A.Command, A.Response, A.Event] = A
+}
+
+private[aecor] object EventsourcedActor {
+  trait MkProps[Behavior] {
+    def apply[Command, Event, Response]
+    (entityName: String,
+     idleTimeout: FiniteDuration
+    )(implicit
+      actorBehavior: EventsourcedActorBehavior.Aux[Behavior, Command, Response, Event],
+      Command: ClassTag[Command],
+      Event: ClassTag[Event]
+    ): Props
+  }
+  def props[Behavior](initialBehavior: Behavior) = new MkProps[Behavior] {
+    override def apply[Command, Event, Response]
+    (entityName: String, idleTimeout: FiniteDuration)
+    (implicit actorBehavior: EventsourcedActorBehavior.Aux[Behavior, Command, Response, Event], Command: ClassTag[Command], Event: ClassTag[Event]): Props =
+      Props(new EventsourcedActor[Behavior, Command, Event, Response](entityName, initialBehavior, idleTimeout))
+  }
 
   def extractEntityId[A: ClassTag](implicit correlation: Correlation[A]): ShardRegion.ExtractEntityId = {
     case a: A ⇒ (correlation(a), a)
   }
+
   def extractShardId[A: ClassTag](numberOfShards: Int)(implicit correlation: Correlation[A]): ShardRegion.ExtractShardId = {
     case a: A => ExtractShardId(correlation(a), numberOfShards)
   }
 }
 
-private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
+private[aecor] class EventsourcedActor[Behavior, Command, Event, Response]
 (entityName: String,
  initialBehavior: Behavior,
  val idleTimeout: FiniteDuration
-)(implicit Behavior: AggregateBehavior[Behavior, State, Command, Response, Event],
-  Command: ClassTag[Command], State: ClassTag[State], Event: ClassTag[Event]) extends PersistentActor
-  with Stash
-  with ActorLogging
-  with Passivation {
+)(implicit
+  actorBehavior: EventsourcedActorBehavior.Aux[Behavior, Command, Response, Event],
+  Command: ClassTag[Command],
+  Event: ClassTag[Event]
+) extends PersistentActor
+          with Stash
+          with ActorLogging
+          with Passivation {
 
   import context.dispatcher
 
-  private case class HandleCommandHandlerResult(result: CommandHandlerResult[Response, Event])
+  private case class HandleResult(result: EventsourcedActorBehavior.Result[Response, Event])
 
-  private val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
+  protected val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   override val persistenceId: String = s"$entityName-$entityId"
 
-  var behavior = initialBehavior
+  protected var behavior: Behavior = initialBehavior
 
   log.debug("[{}] Starting...", persistenceId)
 
@@ -85,10 +113,6 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
   override def receiveRecover: Receive = {
     case e: Event =>
       applyEvent(e)
-
-    case SnapshotOffer(metadata, snapshot: State) =>
-      log.debug("Applying snapshot [{}]", snapshot)
-      behavior = Behavior.setState(behavior)(snapshot)
 
     case RecoveryCompleted =>
       log.debug("[{}] Recovery completed in [{} ms]", persistenceId, Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
@@ -106,17 +130,17 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
 
   def handleCommand(command: Command) = {
     log.debug("Received command [{}]", command)
-    Behavior.handleCommand(behavior)(command) match {
+    actorBehavior.handleCommand(behavior)(command) match {
       case Now(result) =>
         runResult(result)
       case Deferred(deferred) =>
-        deferred(context.dispatcher).map(HandleCommandHandlerResult).pipeTo(self)(sender)
+        deferred(context.dispatcher).map(HandleResult).pipeTo(self)(sender)
         context.become {
-          case HandleCommandHandlerResult(result) =>
+          case HandleResult(result) =>
             runResult(result)
             unstashAll()
             context.become(receiveCommand)
-          case failure @ Status.Failure(e) =>
+          case failure@Status.Failure(e) =>
             log.error(e, "Deferred result failed")
             sender() ! failure
             unstashAll()
@@ -128,21 +152,22 @@ private [aecor] class AggregateActor[Behavior, State, Command, Event, Response]
   }
 
 
-  def runResult(result: CommandHandlerResult[Response, Event]): Unit = {
+  def runResult(result: EventsourcedActorBehavior.Result[Response, Event]): Unit = {
+    val (response, events) = result
     log.debug("Command handler result [{}]", result)
-    val envelopes = result.events.map(Tagged(_, tags))
+    val envelopes = events.map(Tagged(_, tags))
     persistAll(envelopes) {
       case Tagged(e: Event, _) =>
         applyEvent(e)
     }
     deferAsync(NotUsed) { _ =>
-      sender() ! result.response
+      sender() ! response
     }
   }
 
   def applyEvent(event: Event): Unit = {
     log.debug("Applying event [{}]", event)
-    behavior = Behavior.applyEvent(behavior)(event)
+    behavior = actorBehavior.applyEvent(behavior)(event)
     log.debug("New behavior [{}]", behavior)
   }
 }

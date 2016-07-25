@@ -15,12 +15,10 @@ object AggregateSharding {
 
 class AggregateSharding(actorSystem: ActorSystem) {
   class StartRegion[Aggregate](aggregate: Aggregate) {
-    def apply[State, Command, Event, Rejection, EventBus]
+    def apply[Command, Event, Rejection, EventBus]
     ()
     (implicit
-     contract: CommandContract.Aux[Aggregate, Command, Rejection],
-      aab: AggregateBehavior[Aggregate, State, Command, Result[Rejection], Event],
-     State: ClassTag[State],
+      aab: AggregateBehavior.Aux[Aggregate, Command, Rejection, Event],
      Command: ClassTag[Command],
      Event: ClassTag[Event],
      correlation: Correlation[Command],
@@ -29,18 +27,16 @@ class AggregateSharding(actorSystem: ActorSystem) {
 
       val settings = new AggregateShardingSettings(actorSystem.settings.config.getConfig("aecor.aggregate"))
 
-      val props = AggregateActor.props(
-        entityName.value,
-                                        DeduplicatingAggregateBehavior(aggregate),
-        settings.idleTimeout(entityName.value)
-      )
+      scala.reflect.classTag[AggregateCommand[Command]]
+
+      val props = EventsourcedActor.props(DefaultBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
 
       val shardRegionRef = ClusterSharding(actorSystem).start(
         typeName = entityName.value,
         entityProps = props,
         settings = ClusterShardingSettings(actorSystem).withRememberEntities(false),
-        extractEntityId = AggregateActor.extractEntityId[HandleCommand[Command]],
-        extractShardId = AggregateActor.extractShardId[HandleCommand[Command]](settings.numberOfShards)
+        extractEntityId = EventsourcedActor.extractEntityId[AggregateCommand[Command]],
+        extractShardId = EventsourcedActor.extractShardId[AggregateCommand[Command]](settings.numberOfShards)
       )
 
       new AggregateRef[Aggregate] {
@@ -50,7 +46,7 @@ class AggregateSharding(actorSystem: ActorSystem) {
         override private[aecor] val actorRef: ActorRef = shardRegionRef
 
         override def handle[C](idempotencyKey: String, command: C)(implicit contract: CommandContract[Aggregate, C]): Future[Result[contract.Rejection]] =
-          (actorRef ? HandleCommand(CommandId(idempotencyKey), command)).mapTo[AggregateResponse[contract.Rejection]].map(_.result)
+          (actorRef ? AggregateCommand(CommandId(idempotencyKey), command)).mapTo[AggregateResponse[contract.Rejection]].map(_.result)
       }
     }
   }

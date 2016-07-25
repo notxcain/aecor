@@ -62,12 +62,12 @@ class AppActor extends Actor with ActorLogging {
 
     val accountEvents =
       journal.committableEventSourceFor[Account](consumerId = "CardAuthorizationProcess").collect {
-        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEventEnvelope(id, event: Account.TransactionAuthorized, ts, causedBy)) =>
+        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: Account.TransactionAuthorized, ts, causedBy)) =>
           CommittableMessage(offset, HandleEvent(id, Coproduct[AuthorizationProcess.Input](event)))
       }
     val caEvents =
       journal.committableEventSourceFor[CardAuthorization](consumerId = "CardAuthorizationProcess").collect {
-        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEventEnvelope(id, event: CardAuthorizationCreated, ts, causedBy)) =>
+        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: CardAuthorizationCreated, ts, causedBy)) =>
           CommittableMessage(offset, HandleEvent(id, Coproduct[AuthorizationProcess.Input](event)))
       }
 
