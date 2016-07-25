@@ -2,7 +2,7 @@ package aecor.core.aggregate.serialization
 
 import java.time.Instant
 
-import aecor.core.aggregate.{AggregateEventEnvelope, CommandId, EventId}
+import aecor.core.aggregate.{AggregateEvent, CommandId, EventId}
 import aecor.core.serialization.akka.{Codec, CodecSerializer}
 import aecor.core.serialization.{protobuf => pb}
 import akka.actor.ExtendedActorSystem
@@ -12,20 +12,20 @@ import com.google.protobuf.ByteString
 
 import scala.util.Try
 
-class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateEventEnvelope[AnyRef]] {
+class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateEvent[AnyRef]] {
 
   lazy val serialization = SerializationExtension(actorSystem)
 
-  override def manifest(o: AggregateEventEnvelope[AnyRef]): String = ""
+  override def manifest(o: AggregateEvent[AnyRef]): String = ""
 
-  override def decode(bytes: Array[Byte], manifest: String): Try[AggregateEventEnvelope[AnyRef]] =
+  override def decode(bytes: Array[Byte], manifest: String): Try[AggregateEvent[AnyRef]] =
     pb.PersistentAggregateEventEnvelope.validate(bytes).flatMap { dto =>
       serialization.deserialize(dto.payload.toByteArray, dto.serializerId, dto.manifest).map { event =>
-        AggregateEventEnvelope(EventId(dto.id), event, Instant.ofEpochMilli(dto.timestamp), CommandId(dto.causedBy))
+        AggregateEvent(EventId(dto.id), event, Instant.ofEpochMilli(dto.timestamp), CommandId(dto.causedBy))
       }
     }
 
-  override def encode(e: AggregateEventEnvelope[AnyRef]): Array[Byte] = {
+  override def encode(e: AggregateEvent[AnyRef]): Array[Byte] = {
     import e._
     val serializer = serialization.findSerializerFor(event)
     val serManifest = serializer match {
@@ -40,4 +40,4 @@ class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) exten
 }
 
 class PersistentEntityEventEnvelopeSerializer(actorSystem: ExtendedActorSystem)
-  extends CodecSerializer[AggregateEventEnvelope[AnyRef]](actorSystem, new PersistentEntityEventEnvelopeCodec(actorSystem))
+  extends CodecSerializer[AggregateEvent[AnyRef]](actorSystem, new PersistentEntityEventEnvelopeCodec(actorSystem))

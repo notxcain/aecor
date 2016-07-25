@@ -15,7 +15,7 @@ trait AggregateJournal {
       (implicit name: AggregateName[A],
         contract: EventContract.Aux[A, E],
         E: ClassTag[E]
-      ): Source[CommittableJournalEntry[AggregateEventEnvelope[E]], NotUsed]
+      ): Source[CommittableJournalEntry[AggregateEvent[E]], NotUsed]
   }
 
   def committableEventSourceFor[A]: MkCommittableEventSource[A]

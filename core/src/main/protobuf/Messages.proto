@@ -10,10 +10,8 @@ message CommandMessage {
 
 message EventEnvelope {
   required string id = 1;
-  required string entityId = 2;
-  required uint64 sequenceNr = 3;
-  required bytes event = 4;
-  required uint64 timestamp = 5; //UTC millis
+  required bytes event = 2;
+  required uint64 timestamp = 3; //UTC millis
 }
 
 message PersistentAggregateEventEnvelope {

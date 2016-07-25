@@ -3,7 +3,7 @@ package aecor.example
 import java.util.UUID
 
 import aecor.api.Router
-import aecor.core.aggregate.{Accepted, AggregateRef, Rejected}
+import aecor.core.aggregate.{AggregateRef,Result}
 import aecor.example.AuthorizePaymentAPI._
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
@@ -21,7 +21,7 @@ class AuthorizePaymentAPI(authorization: AggregateRef[CardAuthorization], eventS
 
   import DTO._
 
-  def authorizePayment(dto: AuthorizePayment)(implicit ec: ExecutionContext): Future[Xor[CardAuthorization.CreateCardAuthorizationRejection, Result]] = dto match {
+  def authorizePayment(dto: AuthorizePayment)(implicit ec: ExecutionContext): Future[Xor[CardAuthorization.CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] = dto match {
     case AuthorizePayment(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
       val command = CreateCardAuthorization(
                                              CardAuthorizationId(cardAuthorizationId),
@@ -34,14 +34,14 @@ class AuthorizePaymentAPI(authorization: AggregateRef[CardAuthorization], eventS
       val start = System.nanoTime()
       val id = UUID.randomUUID.toString
       eventStream.registerObserver(30.seconds) {
-        case e: CardAuthorizationDeclined if e.cardAuthorizationId.value == cardAuthorizationId => Declined(e.reason.toString)
-        case e: CardAuthorizationAccepted if e.cardAuthorizationId.value == cardAuthorizationId => Authorized
+        case e: CardAuthorizationDeclined if e.cardAuthorizationId.value == cardAuthorizationId => AuthorizePaymentAPI.ApiResult.Declined(e.reason.toString)
+        case e: CardAuthorizationAccepted if e.cardAuthorizationId.value == cardAuthorizationId => AuthorizePaymentAPI.ApiResult.Authorized
       }.flatMap { observer =>
         authorization
         .handle(id, command)
         .flatMap {
-          case Rejected(rejection) => Future.successful(Xor.left(rejection))
-          case Accepted => observer.result.map(Xor.right)
+          case Result.Rejected(rejection) => Future.successful(Xor.left(rejection))
+          case Result.Accepted => observer.result.map(Xor.right)
         }.map { x =>
           log.debug("Command [{}] processed with result [{}] in [{}]", command, x, (System.nanoTime() - start) / 1000000)
           x
@@ -53,11 +53,11 @@ class AuthorizePaymentAPI(authorization: AggregateRef[CardAuthorization], eventS
 
 object AuthorizePaymentAPI {
 
-  sealed trait Result
-
-  case object Authorized extends Result
-
-  case class Declined(reason: String) extends Result
+  sealed trait ApiResult
+  object ApiResult {
+    case object Authorized extends ApiResult
+    case class Declined(reason: String) extends ApiResult
+  }
 
   @JsonCodec sealed trait DTO
 
@@ -77,8 +77,8 @@ object AuthorizePaymentAPI {
                 api.authorizePayment(dto).map {
                   case Xor.Left(e) => StatusCodes.BadRequest -> e.toString
                   case Xor.Right(result) => result match {
-                    case AuthorizePaymentAPI.Authorized => StatusCodes.OK -> "Authorized"
-                    case AuthorizePaymentAPI.Declined(reason) => StatusCodes.BadRequest -> s"Declined: $reason"
+                    case ApiResult.Authorized => StatusCodes.OK -> "Authorized"
+                    case ApiResult.Declined(reason) => StatusCodes.BadRequest -> s"Declined: $reason"
                   }
                 }
               }

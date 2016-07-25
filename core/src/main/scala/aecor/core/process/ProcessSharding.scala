@@ -42,7 +42,7 @@ class ProcessInputDeserializer[Input](config: Map[TopicName, (Array[Byte] => Opt
   override def deserialize(topic: TopicName, data: Array[Byte]): Option[ProcessInputEnvelope[Input]] = {
     val envelope = EventEnvelope.parseFrom(data)
     config.get(topic).flatMap(f => f(envelope.event.toByteArray)).map { input =>
-      ProcessInputEnvelope(EventId(s"${envelope.entityId}#${envelope.sequenceNr}"), input)
+      ProcessInputEnvelope(EventId(envelope.id), input)
     }
   }
 }

@@ -1,8 +1,9 @@
 package aecor.example.domain
 
-import aecor.core.aggregate.CommandHandlerResult._
+import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
+import aecor.example.domain.Account.{AccountCredited, AccountOpened, AuthorizeTransaction, CaptureTransaction, CreditAccount, Open, OpenAccount, TransactionAuthorized, TransactionCaptured, TransactionVoided, VoidTransaction}
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 
@@ -49,45 +50,59 @@ object Account {
   implicit val commandContract: CommandContract.Aux[Account, Command, Rejection] =
     CommandContract.instance
 
-  implicit val eventContract: EventContract.Aux[Account, Event] =
-    EventContract.instance
+  implicit def behavior: AggregateBehavior.Aux[Account, Command, Rejection, Event] =
+    new AggregateBehavior[Account] {
+      override type Cmd = Command
+      override type Evt = Event
+      override type Rjn = Rejection
 
-  implicit def behavior: AggregateBehavior[Account, State, Command, Event, Rejection] = new AggregateBehavior[Account, State, Command, Event, Rejection] {
-    override def initialState(entity: Account): State = Initial
+      override def handleCommand(a: Account)(command: Cmd): NowOrLater[AggregateDecision[Rjn, Evt]] =
+        a.handleCommand(command)
 
-    override def commandHandler(entity: Account): CommandHandler[State, Command, Event, Rejection] = CommandHandler {
-      case Initial => {
-        case OpenAccount(accountId) => accept(AccountOpened(accountId))
-        case _ => reject(AccountDoesNotExist)
-      }
-      case Open(id, balance, holds) => {
-        case c: OpenAccount =>
-          reject(AccountExists)
-
-        case AuthorizeTransaction(_, transactionId, amount) =>
-          if (balance > amount) {
-            accept(TransactionAuthorized(id, transactionId, amount))
-          } else {
-            reject(InsufficientFunds)
-          }
-
-        case VoidTransaction(_, transactionId) =>
-          accept(TransactionVoided(id, transactionId))
-
-        case CaptureTransaction(_, transactionId, clearingAmount) =>
-          holds.get(transactionId) match {
-            case Some(amount) =>
-              accept(TransactionCaptured(id, transactionId, clearingAmount))
-            case None =>
-              reject(HoldNotFound)
-          }
-
-        case CreditAccount(_, transactionId, amount) =>
-          accept(AccountCredited(id, transactionId, amount))
-      }
+      override def applyEvent(a: Account)(event: Evt): Account =
+        a.applyEvent(event)
     }
 
-    override def eventProjector(entity: Account): EventProjector[State, Event] = EventProjector.instance {
+  def apply(): Account = Account(Initial)
+
+}
+import Account._
+
+case class Account(state: Account.State) {
+  def handleCommand(command: Command): NowOrLater[AggregateDecision[Rejection, Event]] = handle(state, command) {
+    case Initial => {
+      case OpenAccount(accountId) => accept(AccountOpened(accountId))
+      case _ => reject(AccountDoesNotExist)
+    }
+    case Open(id, balance, holds) => {
+      case c: OpenAccount =>
+        reject(AccountExists)
+
+      case AuthorizeTransaction(_, transactionId, amount) =>
+        if (balance > amount) {
+          accept(TransactionAuthorized(id, transactionId, amount))
+        } else {
+          reject(InsufficientFunds)
+        }
+
+      case VoidTransaction(_, transactionId) =>
+        accept(TransactionVoided(id, transactionId))
+
+      case CaptureTransaction(_, transactionId, clearingAmount) =>
+        holds.get(transactionId) match {
+          case Some(amount) =>
+            accept(TransactionCaptured(id, transactionId, clearingAmount))
+          case None =>
+            reject(HoldNotFound)
+        }
+
+      case CreditAccount(_, transactionId, amount) =>
+        accept(AccountCredited(id, transactionId, amount))
+    }
+  }
+
+  def applyEvent(event: Event): Account = copy(
+    state = handle(state, event) {
       case Initial => {
         case AccountOpened(accountId) => Open(accountId, Amount(0), Map.empty)
         case other => throw new IllegalArgumentException(s"Unexpected event $other")
@@ -100,10 +115,6 @@ object Account {
         case e: TransactionCaptured => self.copy(holds = holds - e.transactionId)
       }
     }
-  }
-
-  def apply(): Account = new Account {}
+  )
 
 }
-
-sealed trait Account

@@ -48,11 +48,6 @@ object ProcessActor {
 
 
 private [aecor] case class ProcessActorState[Input](behavior: ProcessBehavior[Input], processedEvents: Set[EventId]) {
-  def cast[S: ClassTag]: Option[AggregateActorState[S]] = this match {
-    case ProcessActorState(es: S, _) => Some(this.asInstanceOf[AggregateActorState[S]])
-    case _ => None
-  }
-
   def shouldProcessEvent(commandId: EventId): Boolean = processedEvents(commandId)
 }
 
@@ -100,12 +95,12 @@ class ProcessActor[Input: ClassTag](processName: String, initialBehavior: Proces
       }
 
     case AggregateResponse(causedBy, result) => result match {
-      case Rejected(rejection) =>
+      case Result.Rejected(rejection) =>
         log.debug("Command [{}] rejected [{}]", causedBy, rejection)
         persist(CommandRejected(rejection, causedBy)) { _ =>
           commandRejected(rejection, causedBy)
         }
-      case Accepted =>
+      case Result.Accepted =>
         log.debug("Command [{}] accepted", causedBy)
         persist(CommandAccepted(causedBy)) { e =>
           confirmCommandDelivery(causedBy)
@@ -135,7 +130,7 @@ class ProcessActor[Input: ClassTag](processName: String, initialBehavior: Proces
   def deliverCommand[A, C, R](destination: AggregateRef[A], command: C, rejectionHandler: R => ProcessReaction[Input], commandId: CommandId): Unit = {
     deliver(destination.actorRef.path) { internalDeliveryId =>
       activeDeliveries.update(commandId, CommandDelivery(rejectionHandler.asInstanceOf[RejectionHandler], internalDeliveryId))
-      HandleCommand(commandId, command)
+      AggregateCommand(commandId, command)
     }
   }
 

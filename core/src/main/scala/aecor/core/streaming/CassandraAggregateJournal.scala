@@ -1,6 +1,6 @@
 package aecor.core.streaming
 
-import aecor.core.aggregate.{AggregateEventEnvelope, AggregateName, EventContract}
+import aecor.core.aggregate.{AggregateEvent, AggregateName, EventContract}
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
@@ -18,10 +18,10 @@ class CassandraAggregateJournal(actorSystem: ActorSystem, cassandraReadJournal: 
       (implicit name: AggregateName[A],
         contract: EventContract.Aux[A, E],
         E: ClassTag[E]
-      ): Source[CommittableJournalEntry[AggregateEventEnvelope[E]], NotUsed] =
+      ): Source[CommittableJournalEntry[AggregateEvent[E]], NotUsed] =
       extendedCassandraReadJournal.committableEventsByTag(name.value, consumerId).collect {
-        case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEventEnvelope(id, event: E, timestamp, causedBy)) =>
-          m.asInstanceOf[CommittableJournalEntry[AggregateEventEnvelope[E]]]
+        case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: E, timestamp, causedBy)) =>
+          m.asInstanceOf[CommittableJournalEntry[AggregateEvent[E]]]
       }
   }
 }

@@ -3,7 +3,7 @@ package aecor.example
 import java.util.UUID
 
 import aecor.api.Router
-import aecor.core.aggregate.{Accepted, AggregateRef, Rejected}
+import aecor.core.aggregate.{AggregateRef, Result}
 import aecor.example.domain.{Account, AccountId, Amount, TransactionId}
 import akka.Done
 import akka.http.scaladsl.model.StatusCodes
@@ -11,6 +11,7 @@ import akka.http.scaladsl.server.Directives._
 import cats.data.Xor
 import io.circe.generic.JsonCodec
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
+
 import scala.concurrent.{ExecutionContext, Future}
 
 class AccountAPI(account: AggregateRef[Account]) {
@@ -22,9 +23,9 @@ class AccountAPI(account: AggregateRef[Account]) {
       account
       .handle(UUID.randomUUID.toString, Account.OpenAccount(AccountId(accountId)))
       .flatMap {
-        case Accepted =>
+        case Result.Accepted =>
           Future.successful(Xor.Right(Done: Done))
-        case Rejected(rejection) =>
+        case Result.Rejected(rejection) =>
           Future.successful(Xor.Left(rejection.toString))
       }
   }
@@ -34,9 +35,9 @@ class AccountAPI(account: AggregateRef[Account]) {
       account
       .handle(UUID.randomUUID().toString, Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
       .flatMap {
-        case Accepted =>
+        case Result.Accepted =>
           Future.successful(Xor.Right(Done: Done))
-        case Rejected(rejection) =>
+        case Result.Rejected(rejection) =>
           Future.successful(Xor.Left(rejection.toString))
       }
   }
