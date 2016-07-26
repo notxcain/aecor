@@ -35,10 +35,10 @@ case class EventHandled(causedBy: EventId)
 object ProcessActor {
   type ProcessBehavior[E] = E => ProcessReaction[E]
 
-  def extractEntityId[A: ClassTag](implicit correlation: Correlation[A]): ShardRegion.ExtractEntityId = {
+  def extractEntityId[A: ClassTag](correlation: A => String): ShardRegion.ExtractEntityId = {
     case m @ HandleEvent(_, a: A) ⇒ (correlation(a), m)
   }
-  def extractShardId[A: ClassTag](numberOfShards: Int)(implicit correlation: Correlation[A]): ShardRegion.ExtractShardId = {
+  def extractShardId[A: ClassTag](numberOfShards: Int)(correlation: A => String): ShardRegion.ExtractShardId = {
     case m @ HandleEvent(_, a: A) => ExtractShardId(correlation(a), numberOfShards)
   }
 

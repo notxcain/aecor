@@ -8,4 +8,5 @@ class ProcessShardingSettings(config: Config) {
   val eventRedeliveryInterval: FiniteDuration = config.getMillisDuration("event-redelivery-interval")
   val deliveryTimeout: FiniteDuration = config.getMillisDuration("delivery-timeout")
   val numberOfShards: Int = config.getInt("number-of-shards")
+  val parallelism: Int = config.getInt("parallelism")
 }

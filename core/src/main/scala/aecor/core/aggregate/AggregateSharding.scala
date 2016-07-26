@@ -14,41 +14,39 @@ object AggregateSharding {
 }
 
 class AggregateSharding(actorSystem: ActorSystem) {
-  class StartRegion[Aggregate](aggregate: Aggregate) {
-    def apply[Command, Event, Rejection, EventBus]
-    ()
-    (implicit
-      aab: AggregateBehavior.Aux[Aggregate, Command, Rejection, Event],
-     Command: ClassTag[Command],
-     Event: ClassTag[Event],
-     correlation: Correlation[Command],
-     entityName: AggregateName[Aggregate]
-    ): AggregateRef[Aggregate] = {
+  def start[Aggregate, Command, Event, Rejection, EventBus]
+  (aggregate: Aggregate)
+  (implicit
+   aab: AggregateBehavior.Aux[Aggregate, Command, Rejection, Event],
+   Command: ClassTag[Command],
+   Event: ClassTag[Event],
+   correlation: Correlation[Command],
+   entityName: AggregateName[Aggregate]
+  ): AggregateRef[Aggregate] = {
 
-      val settings = new AggregateShardingSettings(actorSystem.settings.config.getConfig("aecor.aggregate"))
+    val settings = new AggregateShardingSettings(actorSystem.settings.config.getConfig("aecor.aggregate"))
 
-      scala.reflect.classTag[AggregateCommand[Command]]
+    scala.reflect.classTag[AggregateCommand[Command]]
 
-      val props = EventsourcedActor.props(DefaultBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
+    val props = EventsourcedActor.props(DefaultBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
 
-      val shardRegionRef = ClusterSharding(actorSystem).start(
-        typeName = entityName.value,
-        entityProps = props,
-        settings = ClusterShardingSettings(actorSystem).withRememberEntities(false),
-        extractEntityId = EventsourcedActor.extractEntityId[AggregateCommand[Command]],
-        extractShardId = EventsourcedActor.extractShardId[AggregateCommand[Command]](settings.numberOfShards)
-      )
+    val shardRegionRef = ClusterSharding(actorSystem).start(
+      typeName = entityName.value,
+      entityProps = props,
+      settings = ClusterShardingSettings(actorSystem).withRememberEntities(false),
+      extractEntityId = EventsourcedActor.extractEntityId[AggregateCommand[Command]],
+      extractShardId = EventsourcedActor.extractShardId[AggregateCommand[Command]](settings.numberOfShards)
+    )
 
-      new AggregateRef[Aggregate] {
-        implicit val askTimeout = Timeout(settings.askTimeout)
-        import actorSystem.dispatcher
+    new AggregateRef[Aggregate] {
+      implicit val askTimeout = Timeout(settings.askTimeout)
 
-        override private[aecor] val actorRef: ActorRef = shardRegionRef
+      import actorSystem.dispatcher
 
-        override def handle[C](idempotencyKey: String, command: C)(implicit contract: CommandContract[Aggregate, C]): Future[Result[contract.Rejection]] =
-          (actorRef ? AggregateCommand(CommandId(idempotencyKey), command)).mapTo[AggregateResponse[contract.Rejection]].map(_.result)
-      }
+      override private[aecor] val actorRef: ActorRef = shardRegionRef
+
+      override def handle[C](idempotencyKey: String, command: C)(implicit contract: CommandContract[Aggregate, C]): Future[Result[contract.Rejection]] =
+        (actorRef ? AggregateCommand(CommandId(idempotencyKey), command)).mapTo[AggregateResponse[contract.Rejection]].map(_.result)
     }
   }
-  def start[Entity](entity: Entity): StartRegion[Entity] = new StartRegion(entity)
 }

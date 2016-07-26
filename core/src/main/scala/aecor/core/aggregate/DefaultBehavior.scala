@@ -53,12 +53,11 @@ trait AggregateBehavior[A] {
 
 object AggregateBehavior {
   object syntax {
-    def accept[R, E](events: E*): AggregateDecision[R, E] = Accept(events.toVector)
-    def reject[R, E](rejection: R): AggregateDecision[R, E] = Reject(rejection)
+    def accept[R, E](events: E*): Now[AggregateDecision[R, E]] = Now(Accept(events.toVector))
+    def reject[R, E](rejection: R): Now[AggregateDecision[R, E]] = Now(Reject(rejection))
     def defer[R, E](f: ExecutionContext => Future[AggregateDecision[R, E]]): NowOrLater[AggregateDecision[R, E]] = Deferred(f)
 
-    implicit def fromDecision[R, E](decision: AggregateDecision[R, E]): NowOrLater[AggregateDecision[R, E]] =
-      Now(decision)
+    implicit def fromNow[A](now: Now[A]): A = now.value
 
     def handle[State, In, Out](state: State, command: In)(f: State => In => Out): Out = f(state)(command)
   }
@@ -70,7 +69,7 @@ object AggregateBehavior {
 }
 
 object DefaultBehavior {
-  implicit def eventsourced[A](implicit A: AggregateBehavior[A]): EventsourcedActorBehavior.Aux[DefaultBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
+  implicit def instance[A](implicit A: AggregateBehavior[A]): EventsourcedActorBehavior.Aux[DefaultBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
     new EventsourcedActorBehavior[DefaultBehavior[A]] {
       override type Command = AggregateCommand[A.Cmd]
       override type Response = AggregateResponse[A.Rjn]

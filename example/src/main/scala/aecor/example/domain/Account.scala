@@ -7,6 +7,8 @@ import aecor.example.domain.Account.{AccountCredited, AccountOpened, AuthorizeTr
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 
+import scala.concurrent.Future
+
 case class AccountId(value: String) extends AnyVal
 object Account {
   sealed trait Event {
@@ -72,7 +74,7 @@ case class Account(state: Account.State) {
   def handleCommand(command: Command): NowOrLater[AggregateDecision[Rejection, Event]] = handle(state, command) {
     case Initial => {
       case OpenAccount(accountId) => accept(AccountOpened(accountId))
-      case _ => reject(AccountDoesNotExist)
+      case _ => defer(_ => Future.successful(reject(AccountDoesNotExist)))
     }
     case Open(id, balance, holds) => {
       case c: OpenAccount =>
