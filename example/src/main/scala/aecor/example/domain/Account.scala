@@ -1,5 +1,6 @@
 package aecor.example.domain
 
+import aecor.core.actor.NowOrDeferred
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
@@ -58,7 +59,7 @@ object Account {
       override type Evt = Event
       override type Rjn = Rejection
 
-      override def handleCommand(a: Account)(command: Cmd): NowOrLater[AggregateDecision[Rjn, Evt]] =
+      override def handleCommand(a: Account)(command: Cmd): NowOrDeferred[AggregateDecision[Rjn, Evt]] =
         a.handleCommand(command)
 
       override def applyEvent(a: Account)(event: Evt): Account =
@@ -71,7 +72,7 @@ object Account {
 import Account._
 
 case class Account(state: Account.State) {
-  def handleCommand(command: Command): NowOrLater[AggregateDecision[Rejection, Event]] = handle(state, command) {
+  def handleCommand(command: Command): NowOrDeferred[AggregateDecision[Rejection, Event]] = handle(state, command) {
     case Initial => {
       case OpenAccount(accountId) => accept(AccountOpened(accountId))
       case _ => defer(_ => Future.successful(reject(AccountDoesNotExist)))

@@ -2,26 +2,25 @@ package aecor.core.process
 
 import java.util.UUID
 
+import aecor.core.actor.EventsourcedActor
 import aecor.core.aggregate.EventId
 import aecor.core.message._
-import aecor.core.process.ProcessActor.ProcessBehavior
 import aecor.core.process.ProcessSharding.{Control, TopicName}
 import aecor.core.serialization.kafka.PureDeserializer
 import aecor.core.serialization.protobuf.EventEnvelope
-import aecor.core.streaming.CommittableMessage
+import aecor.core.streaming.{CommittableMessage, ComposeConfig}
 import akka.Done
 import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Terminated}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.kafka.ConsumerMessage.Committable
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
-import akka.pattern.{ask, _}
+import akka.pattern.{after, ask}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.util.Timeout
 import org.apache.kafka.common.serialization.StringDeserializer
 import org.slf4j.LoggerFactory
 
-import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.reflect.ClassTag
 
@@ -58,34 +57,34 @@ class ProcessSharding(actorSystem: ActorSystem) {
     val processStreamConfig = composeConfig(schema)
 
     val consumerSettings = ConsumerSettings(actorSystem, new StringDeserializer, new ProcessInputDeserializer(processStreamConfig))
-      .withBootstrapServers(kafkaServers.mkString(","))
-      .withGroupId(groupId)
-      .withClientId(s"$groupId-${UUID.randomUUID()}")
-      .withProperty("auto.offset.reset", "earliest")
+                           .withBootstrapServers(kafkaServers.mkString(","))
+                           .withGroupId(groupId)
+                           .withClientId(s"$groupId-${UUID.randomUUID()}")
+                           .withProperty("auto.offset.reset", "earliest")
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(processStreamConfig.keySet))
-      .flatMapConcat {
-        case ConsumerMessage.CommittableMessage(_, envelopeOption, offset) =>
-          envelopeOption match {
-            case Some(envelope) =>
-              Source.single(CommittableMessage(offset, HandleEvent(envelope.eventId, envelope.input)))
-            case None =>
-              Source.fromFuture(offset.commitScaladsl()).flatMapConcat(_ => Source.empty)
-          }
-      }
+    .flatMapConcat {
+      case ConsumerMessage.CommittableMessage(_, envelopeOption, offset) =>
+        envelopeOption match {
+          case Some(envelope) =>
+            Source.single(CommittableMessage(offset, HandleEvent(envelope.eventId, envelope.input)))
+          case None =>
+            Source.fromFuture(offset.commitScaladsl()).flatMapConcat(_ => Source.empty)
+        }
+    }
   }
 
-  def flow[Input, PassThrough]
-  (name: String, behavior: ProcessBehavior[Input], correlation: Correlation[Input], idleTimeout: FiniteDuration)
-  (implicit Input: ClassTag[Input], ec: ExecutionContext): Flow[ProcessSharding.Message[Input, PassThrough], PassThrough, ProcessSharding.Control] = {
+  def flow[Behavior, Input, State, PassThrough]
+  (name: String, behavior: Behavior, correlation: Correlation[Input])
+  (implicit Input: ClassTag[Input], ec: ExecutionContext, Behavior: ProcessBehavior.Aux[Behavior, Input, State]): Flow[ProcessSharding.Message[Input, PassThrough], PassThrough, ProcessSharding.Control] = {
     val settings = new ProcessShardingSettings(actorSystem.settings.config.getConfig("aecor.process"))
 
     val processRegion = ClusterSharding(actorSystem).start(
       typeName = name,
-      entityProps = ProcessActor.props[Input](name, behavior, idleTimeout),
+      entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior, Set.empty))(name, settings.idleTimeout(name)),
       settings = ClusterShardingSettings(actorSystem).withRememberEntities(true),
-      extractEntityId = ProcessActor.extractEntityId[Input](correlation),
-      extractShardId = ProcessActor.extractShardId[Input](settings.numberOfShards)(correlation)
+      extractEntityId = EventsourcedActor.extractEntityId[HandleEvent[Input]](x => correlation(x.event)),
+      extractShardId = EventsourcedActor.extractShardId[HandleEvent[Input]](settings.numberOfShards)(x => correlation(x.event))
     )
 
     def createControl: Control = new Control {
@@ -113,11 +112,11 @@ class ProcessSharding(actorSystem: ActorSystem) {
     .mapMaterializedValue[Control](_ => createControl)
   }
 
-  def committableSink[Input]
-  (name: String, behavior: ProcessBehavior[Input], correlation: Correlation[Input], idleTimeout: FiniteDuration)
-  (implicit Input: ClassTag[Input], ec: ExecutionContext): Sink[ProcessSharding.Message[Input, Committable], ProcessSharding.Control] = {
+  def committableSink[Behavior, Input, State]
+  (name: String, behavior: Behavior, correlation: Correlation[Input])
+  (implicit Input: ClassTag[Input], ec: ExecutionContext, Behavior: ProcessBehavior.Aux[Behavior, Input, State]): Sink[ProcessSharding.Message[Input, Committable], ProcessSharding.Control] = {
     val settings = new ProcessShardingSettings(actorSystem.settings.config.getConfig("aecor.process"))
-    flow[Input, Committable](name, behavior, correlation, idleTimeout)
+    flow[Behavior, Input, State, Committable](name, behavior, correlation)
     .mapAsync(settings.parallelism)(_.commitScaladsl())
     .toMat(Sink.ignore)(Keep.left)
   }
@@ -138,11 +137,13 @@ class ShardRegionGracefulShutdownActor(region: ActorRef) extends Actor {
       region ! ShardRegion.GracefulShutdown
       context.become(waitingTerminated(sender()))
   }
+
   def waitingTerminated(replyTo: ActorRef): Receive = {
     case Terminated(`region`) ⇒
       context.unwatch(region)
       replyTo ! Done
       self ! PoisonPill
   }
+
   def receive = initial
 }

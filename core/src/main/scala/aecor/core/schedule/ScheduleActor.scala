@@ -4,7 +4,8 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{LocalDateTime, ZoneId}
 
-import aecor.core.aggregate.NowOrLater.Now
+import aecor.core.actor.{EventsourcedActor, NowOrDeferred}
+import aecor.core.actor.NowOrDeferred.Now
 import aecor.core.aggregate._
 import aecor.core.message.ExtractShardId
 import akka.actor.{Actor, ActorRef, Props}
@@ -101,7 +102,7 @@ object ScheduleBehavior {
     override type Cmd = ScheduleCommand
     override type Evt = ScheduleEvent
     override type Rjn = Nothing
-    override def handleCommand(a: ScheduleBehavior)(command: ScheduleCommand): NowOrLater[AggregateDecision[Nothing, ScheduleEvent]] =
+    override def handleCommand(a: ScheduleBehavior)(command: ScheduleCommand): NowOrDeferred[AggregateDecision[Nothing, ScheduleEvent]] =
       Now(Accept(a.handleCommand(command)))
     override def applyEvent(a: ScheduleBehavior)(e: ScheduleEvent): ScheduleBehavior =
       a.applyEvent(e)
@@ -121,6 +122,6 @@ object ScheduleActor {
 }
 
 private[aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
-  extends EventsourcedActor[DefaultBehavior[ScheduleBehavior], AggregateCommand[ScheduleCommand], AggregateEvent[ScheduleEvent], AggregateResponse[Nothing]]("Schedule", DefaultBehavior(ScheduleBehavior(ScheduleState.empty(scheduleName))), 60.seconds) {
+  extends EventsourcedActor[AggregateEventsourcedActorBehavior[ScheduleBehavior], AggregateCommand[ScheduleCommand], AggregateEvent[ScheduleEvent], AggregateResponse[Nothing]]("Schedule", AggregateEventsourcedActorBehavior(ScheduleBehavior(ScheduleState.empty(scheduleName))), 60.seconds) {
   override protected val entityId: String = scheduleName + "-" + timeBucket
 }

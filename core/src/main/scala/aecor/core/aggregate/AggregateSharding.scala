@@ -1,5 +1,6 @@
 package aecor.core.aggregate
 
+import aecor.core.actor.EventsourcedActor
 import aecor.core.message.Correlation
 import akka.actor.{ActorRef, ActorSystem}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
@@ -28,14 +29,14 @@ class AggregateSharding(actorSystem: ActorSystem) {
 
     scala.reflect.classTag[AggregateCommand[Command]]
 
-    val props = EventsourcedActor.props(DefaultBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
+    val props = EventsourcedActor.props(AggregateEventsourcedActorBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
 
     val shardRegionRef = ClusterSharding(actorSystem).start(
       typeName = entityName.value,
       entityProps = props,
       settings = ClusterShardingSettings(actorSystem).withRememberEntities(false),
-      extractEntityId = EventsourcedActor.extractEntityId[AggregateCommand[Command]],
-      extractShardId = EventsourcedActor.extractShardId[AggregateCommand[Command]](settings.numberOfShards)
+      extractEntityId = EventsourcedActor.extractEntityId[AggregateCommand[Command]](a => correlation(a.command)),
+      extractShardId = EventsourcedActor.extractShardId[AggregateCommand[Command]](settings.numberOfShards)(a => correlation(a.command))
     )
 
     new AggregateRef[Aggregate] {

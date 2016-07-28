@@ -1,11 +1,11 @@
-package aecor.core.process
+package aecor.core.streaming
 
 import java.nio.ByteBuffer
 
-import cats.std.function._
-import cats.syntax.functor._
 import aecor.core.aggregate.{AggregateName, EventContract}
 import aecor.core.serialization.Decoder
+import cats.std.function._
+import cats.syntax.functor._
 import shapeless.{:+:, ::, CNil, Coproduct, Generic, HList, HNil}
 
 
