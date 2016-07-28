@@ -34,10 +34,6 @@ object Result {
 
 }
 
-case class HandlerResult[Response, Event](response: Response, events: Seq[Event])
-
-case class AggregateResult[+R, +E](response: AggregateResponse[R], events: Seq[AggregateEvent[E]])
-
 sealed trait AggregateDecision[+R, +E]
 case class Accept[+E](events: Seq[E]) extends AggregateDecision[Nothing, E]
 case class Reject[+R](rejection: R) extends AggregateDecision[R, Nothing]

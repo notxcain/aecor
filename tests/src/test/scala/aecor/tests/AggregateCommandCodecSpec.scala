@@ -4,7 +4,7 @@ import aecor.core.aggregate.serialization.AggregateCommandCodec
 import aecor.core.aggregate.{AggregateCommand, CommandId}
 import akka.actor.ExtendedActorSystem
 
-class CommandMessageCodecSpec extends AkkaSpec {
+class AggregateCommandCodecSpec extends AkkaSpec {
 
   val codec = new AggregateCommandCodec(system.asInstanceOf[ExtendedActorSystem])
 

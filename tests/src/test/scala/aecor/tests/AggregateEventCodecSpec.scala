@@ -2,13 +2,13 @@ package aecor.tests
 
 import java.time.Instant
 
-import aecor.core.aggregate.serialization.PersistentEntityEventEnvelopeCodec
+import aecor.core.aggregate.serialization.AggregateEventCodec
 import aecor.core.aggregate.{AggregateEvent, CommandId, EventId}
 import akka.actor.ExtendedActorSystem
 
-class PersistentEntityEventEnvelopeCodecSpec extends AkkaSpec {
+class AggregateEventCodecSpec extends AkkaSpec {
 
-  val codec = new PersistentEntityEventEnvelopeCodec(system.asInstanceOf[ExtendedActorSystem])
+  val codec = new AggregateEventCodec(system.asInstanceOf[ExtendedActorSystem])
 
   "PersistentEntityEventEnvelopeCodec" must {
     "be able to encode/decode PersistentEntityEventEnvelope" in {

@@ -12,7 +12,7 @@ import com.google.protobuf.ByteString
 
 import scala.util.Try
 
-class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateEvent[AnyRef]] {
+class AggregateEventCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateEvent[AnyRef]] {
 
   lazy val serialization = SerializationExtension(actorSystem)
 
@@ -39,5 +39,5 @@ class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) exten
   }
 }
 
-class PersistentEntityEventEnvelopeSerializer(actorSystem: ExtendedActorSystem)
-  extends CodecSerializer[AggregateEvent[AnyRef]](actorSystem, new PersistentEntityEventEnvelopeCodec(actorSystem))
+class AggregateEventSerializer(actorSystem: ExtendedActorSystem)
+  extends CodecSerializer[AggregateEvent[AnyRef]](actorSystem, new AggregateEventCodec(actorSystem))
