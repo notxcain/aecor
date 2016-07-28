@@ -106,7 +106,8 @@ lazy val coreSettings = Seq(
     version in PB.protobufConfig := "2.6.1",
     javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
     scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
-    PB.flatPackage in PB.protobufConfig := true
+    PB.flatPackage in PB.protobufConfig := true,
+    PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v261" +: args.toArray))
   )
 
 lazy val apiSettings = Seq(

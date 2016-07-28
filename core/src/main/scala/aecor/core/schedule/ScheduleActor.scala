@@ -122,6 +122,6 @@ object ScheduleActor {
 }
 
 private[aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
-  extends EventsourcedActor[AggregateEventsourcedActorBehavior[ScheduleBehavior], AggregateCommand[ScheduleCommand], AggregateEvent[ScheduleEvent], AggregateResponse[Nothing]]("Schedule", AggregateEventsourcedActorBehavior(ScheduleBehavior(ScheduleState.empty(scheduleName))), 60.seconds) {
+  extends EventsourcedActor[AggregateEventsourcedBehavior[ScheduleBehavior], AggregateCommand[ScheduleCommand], AggregateEvent[ScheduleEvent], AggregateResponse[Nothing]]("Schedule", AggregateEventsourcedBehavior(ScheduleBehavior(ScheduleState.empty(scheduleName))), 60.seconds) {
   override protected val entityId: String = scheduleName + "-" + timeBucket
 }

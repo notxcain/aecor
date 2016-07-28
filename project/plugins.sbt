@@ -7,3 +7,5 @@ addSbtPlugin("com.github.gseitz"    % "sbt-release"           % "1.0.0")
 addSbtPlugin("pl.project13.scala"   % "sbt-jmh"               % "0.2.6")
 addSbtPlugin("org.scalastyle"      %% "scalastyle-sbt-plugin" % "0.8.0")
 addSbtPlugin("com.typesafe.sbt"     % "sbt-git"               % "0.8.4")
+
+libraryDependencies += "com.github.os72" % "protoc-jar" % "3.0.0-b2"

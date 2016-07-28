@@ -29,7 +29,7 @@ class AggregateSharding(actorSystem: ActorSystem) {
 
     scala.reflect.classTag[AggregateCommand[Command]]
 
-    val props = EventsourcedActor.props(AggregateEventsourcedActorBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
+    val props = EventsourcedActor.props(AggregateEventsourcedBehavior(aggregate))(entityName.value, settings.idleTimeout(entityName.value))
 
     val shardRegionRef = ClusterSharding(actorSystem).start(
       typeName = entityName.value,

@@ -67,16 +67,16 @@ object AggregateBehavior {
   }
 }
 
-case class AggregateEventsourcedActorBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
+case class AggregateEventsourcedBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
 
-object AggregateEventsourcedActorBehavior {
-  implicit def instance[A](implicit A: AggregateBehavior[A]): EventsourcedBehavior.Aux[AggregateEventsourcedActorBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
-    new EventsourcedBehavior[AggregateEventsourcedActorBehavior[A]] {
+object AggregateEventsourcedBehavior {
+  implicit def instance[A](implicit A: AggregateBehavior[A]): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
+    new EventsourcedBehavior[AggregateEventsourcedBehavior[A]] {
       override type Command = AggregateCommand[A.Cmd]
       override type Response = AggregateResponse[A.Rjn]
       override type Event = AggregateEvent[A.Evt]
 
-      override def handleCommand(a: AggregateEventsourcedActorBehavior[A])(command: AggregateCommand[A.Cmd]): NowOrDeferred[(AggregateResponse[A.Rjn], Seq[AggregateEvent[A.Evt]])] =
+      override def handleCommand(a: AggregateEventsourcedBehavior[A])(command: AggregateCommand[A.Cmd]): NowOrDeferred[(AggregateResponse[A.Rjn], Seq[AggregateEvent[A.Evt]])] =
         if (a.processedCommands.contains(command.id)) {
           Now(AggregateResponse(command.id, Result.Accepted) -> Seq.empty)
         } else {
@@ -88,13 +88,13 @@ object AggregateEventsourcedActorBehavior {
           }
         }
 
-      override def applyEvent(a: AggregateEventsourcedActorBehavior[A])(event: AggregateEvent[A.Evt]): AggregateEventsourcedActorBehavior[A] =
+      override def applyEvent(a: AggregateEventsourcedBehavior[A])(event: AggregateEvent[A.Evt]): AggregateEventsourcedBehavior[A] =
         a.copy(
           aggregate = A.applyEvent(a.aggregate)(event.event),
           processedCommands = a.processedCommands + event.causedBy
         )
     }
 
-  def apply[Aggregate](aggregate: Aggregate): AggregateEventsourcedActorBehavior[Aggregate] = AggregateEventsourcedActorBehavior(aggregate, Set.empty)
+  def apply[Aggregate](aggregate: Aggregate): AggregateEventsourcedBehavior[Aggregate] = AggregateEventsourcedBehavior(aggregate, Set.empty)
 }
 
