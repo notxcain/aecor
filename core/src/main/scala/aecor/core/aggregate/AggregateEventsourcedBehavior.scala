@@ -27,6 +27,8 @@ case class AggregateResponse[+Rejection](causedBy: CommandId, result: Result[Rej
 sealed trait Result[+Rejection]
 
 object Result {
+  def accepted[R]: Result[R] = Accepted
+  def rejected[R](rejection: R): Result[R] = Rejected(rejection)
 
   case object Accepted extends Result[Nothing]
 

@@ -1,17 +1,17 @@
 package aecor.core.aggregate.serialization
 
-import aecor.core.aggregate.{CommandId, AggregateCommand}
-import aecor.core.serialization.akka.{Codec, CodecSerializer}
+import aecor.core.aggregate.{AggregateCommand, CommandId}
+import aecor.core.serialization.akka.{Codec, CodecSerializer, SerializationHelper}
 import aecor.core.serialization.{protobuf => pb}
 import akka.actor.ExtendedActorSystem
-import akka.persistence.PersistentRepr
-import akka.serialization.{SerializationExtension, SerializerWithStringManifest}
+import akka.serialization.SerializationExtension
 import com.google.protobuf.ByteString
 
 import scala.util.Try
 
 class AggregateCommandCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateCommand[AnyRef]] {
   lazy val serialization = SerializationExtension(actorSystem)
+  lazy val helper = SerializationHelper(serialization)
 
   override def manifest(o: AggregateCommand[AnyRef]): String = ""
 
@@ -24,15 +24,8 @@ class AggregateCommandCodec(actorSystem: ExtendedActorSystem) extends Codec[Aggr
 
   override def encode(o: AggregateCommand[AnyRef]): Array[Byte] = {
     import o._
-    val serializer = serialization.findSerializerFor(command)
-    val serManifest = serializer match {
-      case ser2: SerializerWithStringManifest ⇒
-        ser2.manifest(command)
-      case _ ⇒
-        if (serializer.includeManifest) command.getClass.getName
-        else PersistentRepr.Undefined
-    }
-    pb.AggregateCommand(o.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(command))).toByteArray
+    val commandRepr = helper.serialize(command)
+    pb.AggregateCommand(o.id.value, commandRepr.serializerId, commandRepr.manifest, ByteString.copyFrom(commandRepr.bytes)).toByteArray
   }
 }
 

@@ -3,11 +3,10 @@ package aecor.core.aggregate.serialization
 import java.time.Instant
 
 import aecor.core.aggregate.{AggregateEvent, CommandId, EventId}
-import aecor.core.serialization.akka.{Codec, CodecSerializer}
+import aecor.core.serialization.akka.{Codec, CodecSerializer, SerializationHelper}
 import aecor.core.serialization.{protobuf => pb}
 import akka.actor.ExtendedActorSystem
-import akka.persistence.PersistentRepr
-import akka.serialization.{SerializationExtension, SerializerWithStringManifest}
+import akka.serialization.SerializationExtension
 import com.google.protobuf.ByteString
 
 import scala.util.Try
@@ -15,6 +14,7 @@ import scala.util.Try
 class AggregateEventCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateEvent[AnyRef]] {
 
   lazy val serialization = SerializationExtension(actorSystem)
+  lazy val helper = SerializationHelper(serialization)
 
   override def manifest(o: AggregateEvent[AnyRef]): String = ""
 
@@ -27,15 +27,8 @@ class AggregateEventCodec(actorSystem: ExtendedActorSystem) extends Codec[Aggreg
 
   override def encode(e: AggregateEvent[AnyRef]): Array[Byte] = {
     import e._
-    val serializer = serialization.findSerializerFor(event)
-    val serManifest = serializer match {
-      case ser2: SerializerWithStringManifest ⇒
-        ser2.manifest(event)
-      case _ ⇒
-        if (serializer.includeManifest) event.getClass.getName
-        else PersistentRepr.Undefined
-    }
-    pb.AggregateEvent(e.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(event)), timestamp.toEpochMilli, causedBy.value).toByteArray
+    val eventRepr = helper.serialize(event)
+    pb.AggregateEvent(e.id.value, eventRepr.serializerId, eventRepr.manifest, ByteString.copyFrom(eventRepr.bytes), timestamp.toEpochMilli, causedBy.value).toByteArray
   }
 }
 

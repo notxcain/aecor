@@ -10,8 +10,8 @@ class AggregateEventCodecSpec extends AkkaSpec {
 
   val codec = new AggregateEventCodec(system.asInstanceOf[ExtendedActorSystem])
 
-  "PersistentEntityEventEnvelopeCodec" must {
-    "be able to encode/decode PersistentEntityEventEnvelope" in {
+  "AggregateEventCodec" must {
+    "be able to encode/decode AggregateEvent" in {
       val obj = AggregateEvent(EventId("id"), null, Instant.now(), CommandId("causedBy"))
       val blob = codec.encode(obj)
       val ref = codec.decode(blob, codec.manifest(obj))

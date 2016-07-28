@@ -1,17 +1,17 @@
 package aecor.core.serialization.protobuf;
 option optimize_for = SPEED;
 
+message EventEnvelope {
+  required string id = 1;
+  required bytes event = 2;
+  required uint64 timestamp = 3; //UTC millis
+}
+
 message AggregateCommand {
   required string id = 1;
   required uint32 serializerId = 2;
   required string manifest = 3;
   required bytes payload = 4;
-}
-
-message EventEnvelope {
-  required string id = 1;
-  required bytes event = 2;
-  required uint64 timestamp = 3; //UTC millis
 }
 
 message AggregateEvent {
@@ -22,3 +22,14 @@ message AggregateEvent {
   required uint64 timestamp = 5; //UTC millis
   required string causedBy = 6;
 }
+
+message AggregateResponse {
+  required string causedBy = 1;
+  optional Rejection rejection = 2;
+  message Rejection {
+    required uint32 serializerId = 2;
+    required string manifest = 3;
+    required bytes payload = 4;
+  }
+}
+

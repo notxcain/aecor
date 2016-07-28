@@ -8,8 +8,8 @@ class AggregateCommandCodecSpec extends AkkaSpec {
 
   val codec = new AggregateCommandCodec(system.asInstanceOf[ExtendedActorSystem])
 
-  "CommandMessageCodec" must {
-    "be able to encode/decode CommandMessage" in {
+  "AggregateCommandCodec" must {
+    "be able to encode/decode AggregateCommand" in {
       val obj = AggregateCommand(CommandId("id"), null)
       val blob = codec.encode(obj)
       val ref = codec.decode(blob, codec.manifest(obj))
