@@ -19,7 +19,7 @@ class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) exten
   override def manifest(o: AggregateEvent[AnyRef]): String = ""
 
   override def decode(bytes: Array[Byte], manifest: String): Try[AggregateEvent[AnyRef]] =
-    pb.PersistentAggregateEventEnvelope.validate(bytes).flatMap { dto =>
+    pb.AggregateEvent.validate(bytes).flatMap { dto =>
       serialization.deserialize(dto.payload.toByteArray, dto.serializerId, dto.manifest).map { event =>
         AggregateEvent(EventId(dto.id), event, Instant.ofEpochMilli(dto.timestamp), CommandId(dto.causedBy))
       }
@@ -35,7 +35,7 @@ class PersistentEntityEventEnvelopeCodec(actorSystem: ExtendedActorSystem) exten
         if (serializer.includeManifest) event.getClass.getName
         else PersistentRepr.Undefined
     }
-    pb.PersistentAggregateEventEnvelope(e.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(event)), timestamp.toEpochMilli, causedBy.value).toByteArray
+    pb.AggregateEvent(e.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(event)), timestamp.toEpochMilli, causedBy.value).toByteArray
   }
 }
 

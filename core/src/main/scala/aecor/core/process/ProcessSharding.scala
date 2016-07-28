@@ -82,7 +82,7 @@ class ProcessSharding(actorSystem: ActorSystem) {
     val processRegion = ClusterSharding(actorSystem).start(
       typeName = name,
       entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior, Set.empty))(name, settings.idleTimeout(name)),
-      settings = ClusterShardingSettings(actorSystem).withRememberEntities(true),
+      settings = ClusterShardingSettings(actorSystem),
       extractEntityId = EventsourcedActor.extractEntityId[HandleEvent[Input]](x => correlation(x.event)),
       extractShardId = EventsourcedActor.extractShardId[HandleEvent[Input]](settings.numberOfShards)(x => correlation(x.event))
     )

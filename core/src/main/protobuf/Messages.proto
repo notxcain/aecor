@@ -1,7 +1,7 @@
 package aecor.core.serialization.protobuf;
 option optimize_for = SPEED;
 
-message CommandMessage {
+message AggregateCommand {
   required string id = 1;
   required uint32 serializerId = 2;
   required string manifest = 3;
@@ -14,7 +14,7 @@ message EventEnvelope {
   required uint64 timestamp = 3; //UTC millis
 }
 
-message PersistentAggregateEventEnvelope {
+message AggregateEvent {
   required string id = 1;
   required uint32 serializerId = 2;
   required string manifest = 3;

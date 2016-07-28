@@ -10,13 +10,13 @@ import com.google.protobuf.ByteString
 
 import scala.util.Try
 
-class HandleCommandCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateCommand[AnyRef]] {
+class AggregateCommandCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateCommand[AnyRef]] {
   lazy val serialization = SerializationExtension(actorSystem)
 
   override def manifest(o: AggregateCommand[AnyRef]): String = ""
 
   override def decode(bytes: Array[Byte], manifest: String): Try[AggregateCommand[AnyRef]] =
-    pb.CommandMessage.validate(bytes).flatMap { dto =>
+    pb.AggregateCommand.validate(bytes).flatMap { dto =>
       serialization.deserialize(dto.payload.toByteArray, dto.serializerId, dto.manifest).map { command =>
         AggregateCommand(CommandId(dto.id), command)
       }
@@ -32,8 +32,8 @@ class HandleCommandCodec(actorSystem: ExtendedActorSystem) extends Codec[Aggrega
         if (serializer.includeManifest) command.getClass.getName
         else PersistentRepr.Undefined
     }
-    pb.CommandMessage(o.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(command))).toByteArray
+    pb.AggregateCommand(o.id.value, serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(command))).toByteArray
   }
 }
 
-class HandleCommandSerializer(system: ExtendedActorSystem) extends CodecSerializer(system, new HandleCommandCodec(system))
+class AggregateCommandSerializer(system: ExtendedActorSystem) extends CodecSerializer(system, new AggregateCommandCodec(system))
