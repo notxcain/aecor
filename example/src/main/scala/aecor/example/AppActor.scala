@@ -2,7 +2,7 @@ package aecor.example
 
 import aecor.api.Router.ops._
 import aecor.core.aggregate._
-import aecor.core.process.CompositeConsumerSettingsSyntax._
+import aecor.core.streaming.CompositeConsumerSettingsSyntax._
 import aecor.core.process.{HandleEvent, ProcessSharding}
 import aecor.core.serialization.CirceSupport._
 import aecor.core.serialization.kafka.EventEnvelopeSerializer
@@ -74,11 +74,11 @@ class AppActor extends Actor with ActorLogging {
 
     val directSource = accountEvents.merge(caEvents)
 
+
     val sink = process.committableSink(
                              name = AuthorizationProcess.name,
-                             behavior = AuthorizationProcess.behavior(accountRegion, authorizationRegion),
-                             correlation = AuthorizationProcess.correlation,
-                             idleTimeout = AuthorizationProcess.idleTimeout
+                             behavior = AuthorizationProcess(accountRegion, authorizationRegion, AuthorizationProcess.Initial),
+                             correlation = AuthorizationProcess.correlation
                            )
     directSource.to(sink)
   }

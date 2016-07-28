@@ -2,7 +2,8 @@ package aecor.core.aggregate
 
 import java.time.Instant
 
-import aecor.core.aggregate.NowOrLater.{Deferred, Now}
+import aecor.core.actor.{EventsourcedBehavior, NowOrDeferred}
+import aecor.core.actor.NowOrDeferred.{Deferred, Now}
 import aecor.core.message.Correlation
 import aecor.util._
 
@@ -26,18 +27,14 @@ case class AggregateResponse[+Rejection](causedBy: CommandId, result: Result[Rej
 sealed trait Result[+Rejection]
 
 object Result {
+  def accepted[R]: Result[R] = Accepted
+  def rejected[R](rejection: R): Result[R] = Rejected(rejection)
 
   case object Accepted extends Result[Nothing]
 
   case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
 
 }
-
-case class HandlerResult[Response, Event](response: Response, events: Seq[Event])
-
-case class DefaultBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
-
-case class AggregateResult[+R, +E](response: AggregateResponse[R], events: Seq[AggregateEvent[E]])
 
 sealed trait AggregateDecision[+R, +E]
 case class Accept[+E](events: Seq[E]) extends AggregateDecision[Nothing, E]
@@ -47,7 +44,7 @@ trait AggregateBehavior[A] {
   type Cmd
   type Evt
   type Rjn
-  def handleCommand(a: A)(command: Cmd): NowOrLater[AggregateDecision[Rjn, Evt]]
+  def handleCommand(a: A)(command: Cmd): NowOrDeferred[AggregateDecision[Rjn, Evt]]
   def applyEvent(a: A)(e: Evt): A
 }
 
@@ -55,11 +52,11 @@ object AggregateBehavior {
   object syntax {
     def accept[R, E](events: E*): Now[AggregateDecision[R, E]] = Now(Accept(events.toVector))
     def reject[R, E](rejection: R): Now[AggregateDecision[R, E]] = Now(Reject(rejection))
-    def defer[R, E](f: ExecutionContext => Future[AggregateDecision[R, E]]): NowOrLater[AggregateDecision[R, E]] = Deferred(f)
+    def defer[R, E](f: ExecutionContext => Future[AggregateDecision[R, E]]): NowOrDeferred[AggregateDecision[R, E]] = Deferred(f)
 
     implicit def fromNow[A](now: Now[A]): A = now.value
 
-    def handle[State, In, Out](state: State, command: In)(f: State => In => Out): Out = f(state)(command)
+    def handle[State, In, Out](state: State, in: In)(f: State => In => Out): Out = f(state)(in)
   }
   type Aux[A, Command0, Rejection0, Event0] = AggregateBehavior[A] {
     type Cmd = Command0
@@ -68,14 +65,16 @@ object AggregateBehavior {
   }
 }
 
-object DefaultBehavior {
-  implicit def instance[A](implicit A: AggregateBehavior[A]): EventsourcedActorBehavior.Aux[DefaultBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
-    new EventsourcedActorBehavior[DefaultBehavior[A]] {
+case class AggregateEventsourcedBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
+
+object AggregateEventsourcedBehavior {
+  implicit def instance[A](implicit A: AggregateBehavior[A]): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
+    new EventsourcedBehavior[AggregateEventsourcedBehavior[A]] {
       override type Command = AggregateCommand[A.Cmd]
       override type Response = AggregateResponse[A.Rjn]
       override type Event = AggregateEvent[A.Evt]
 
-      override def handleCommand(a: DefaultBehavior[A])(command: AggregateCommand[A.Cmd]): NowOrLater[(AggregateResponse[A.Rjn], Seq[AggregateEvent[A.Evt]])] =
+      override def handleCommand(a: AggregateEventsourcedBehavior[A])(command: AggregateCommand[A.Cmd]): NowOrDeferred[(AggregateResponse[A.Rjn], Seq[AggregateEvent[A.Evt]])] =
         if (a.processedCommands.contains(command.id)) {
           Now(AggregateResponse(command.id, Result.Accepted) -> Seq.empty)
         } else {
@@ -87,13 +86,13 @@ object DefaultBehavior {
           }
         }
 
-      override def applyEvent(a: DefaultBehavior[A])(event: AggregateEvent[A.Evt]): DefaultBehavior[A] =
+      override def applyEvent(a: AggregateEventsourcedBehavior[A])(event: AggregateEvent[A.Evt]): AggregateEventsourcedBehavior[A] =
         a.copy(
           aggregate = A.applyEvent(a.aggregate)(event.event),
           processedCommands = a.processedCommands + event.causedBy
         )
     }
 
-  def apply[Aggregate](aggregate: Aggregate): DefaultBehavior[Aggregate] = DefaultBehavior(aggregate, Set.empty)
+  def apply[Aggregate](aggregate: Aggregate): AggregateEventsourcedBehavior[Aggregate] = AggregateEventsourcedBehavior(aggregate, Set.empty)
 }
 

@@ -1,6 +1,7 @@
 package aecor.example.domain
 import java.util.UUID
 
+import aecor.core.actor.NowOrDeferred
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
@@ -13,6 +14,7 @@ object CardAuthorization {
   sealed trait DeclineReason
   case object InsufficientFunds extends DeclineReason
   case object AccountDoesNotExist extends DeclineReason
+  case object Unknown extends DeclineReason
 
   sealed trait Command[Rejection] {
     def cardAuthorizationId: CardAuthorizationId
@@ -55,7 +57,7 @@ object CardAuthorization {
       type Cmd = Command[R0]
       type Evt = Event
       type Rjn = R0
-      override def handleCommand(a: CardAuthorization)(command: Command[R0]): NowOrLater[AggregateDecision[R0, Event]] =
+      override def handleCommand(a: CardAuthorization)(command: Command[R0]): NowOrDeferred[AggregateDecision[R0, Event]] =
         a.handleCommand(command)
       override def applyEvent(a: CardAuthorization)(event: Event): CardAuthorization =
         a.applyEvent(event)
@@ -72,7 +74,7 @@ case class TerminalId(value: Long) extends AnyVal
 import CardAuthorization._
 
 case class CardAuthorization(state: State) {
-  def handleCommand[R](command: Command[R]): NowOrLater[AggregateDecision[R, Event]] =
+  def handleCommand[R](command: Command[R]): NowOrDeferred[AggregateDecision[R, Event]] =
     handle(state, command) {
       case Initial => {
         case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
