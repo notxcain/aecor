@@ -63,15 +63,10 @@ class ProcessSharding(actorSystem: ActorSystem) {
                            .withProperty("auto.offset.reset", "earliest")
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(processStreamConfig.keySet))
-    .flatMapConcat {
-      case ConsumerMessage.CommittableMessage(_, envelopeOption, offset) =>
-        envelopeOption match {
-          case Some(envelope) =>
-            Source.single(CommittableMessage(offset, HandleEvent(envelope.eventId, envelope.input)))
-          case None =>
-            Source.fromFuture(offset.commitScaladsl()).flatMapConcat(_ => Source.empty)
-        }
-    }
+      .collect {
+        case ConsumerMessage.CommittableMessage(_, Some(envelope), offset) =>
+          CommittableMessage(offset, HandleEvent(envelope.eventId, envelope.input))
+      }
   }
 
   def flow[Behavior, Input, State, PassThrough]

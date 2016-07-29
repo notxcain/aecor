@@ -1,3 +1,6 @@
+
+[![Join the chat at https://gitter.im/notxcain/akka-ddd](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/notxcain/aecor)
+
 # Aecor
 ### Scalable, type safe CQRS DDD framework
 
