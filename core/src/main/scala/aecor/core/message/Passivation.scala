@@ -7,7 +7,7 @@ import akka.cluster.sharding.ShardRegion.Passivate
 import scala.concurrent.duration.FiniteDuration
 
 object Passivation {
-  private case object Stop
+  case object Stop
 }
 
 trait Passivation { this: Actor with ActorLogging =>

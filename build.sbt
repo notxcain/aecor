@@ -8,8 +8,8 @@ lazy val buildSettings = Seq(
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
-//    "Twitter Repository"               at "http://maven.twttr.com",
-    "Websudos releases"                at "https://dl.bintray.com/websudos/oss-releases/"
+    "Websudos releases" at "https://dl.bintray.com/websudos/oss-releases/",
+    Resolver.bintrayRepo("hseeberger", "maven")
   ),
   libraryDependencies ++= Seq(
     "com.github.mpilquist" %% "simulacrum" % "0.7.0",
@@ -19,54 +19,54 @@ lazy val commonSettings = Seq(
     compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
   ),
   parallelExecution in Test := false,
-  scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value.filter(_ != "-Xfatal-warnings")
+  scalacOptions in(Compile, doc) := (scalacOptions in(Compile, doc)).value.filter(_ != "-Xfatal-warnings")
 ) ++ warnUnusedImport
 
 lazy val aecorSettings = buildSettings ++ commonSettings
 
 lazy val aecor = project.in(file("."))
-  .settings(moduleName := "aecor")
-  .settings(aecorSettings)
-  .aggregate(core, api, circe, example, tests, bench)
-  .dependsOn(core, api, circe, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
+                 .settings(moduleName := "aecor")
+                 .settings(aecorSettings)
+                 .aggregate(core, api, circe, example, tests, bench)
+                 .dependsOn(core, api, circe, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
 lazy val core = project
-  .settings(moduleName := "aecor-core")
-  .settings(aecorSettings)
-  .settings(coreSettings)
-  .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test")
+                .settings(moduleName := "aecor-core")
+                .settings(aecorSettings)
+                .settings(coreSettings)
+                .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test")
 
-lazy val api = project
-  .settings(moduleName := "aecor-api")
-  .settings(aecorSettings)
-    .settings(apiSettings)
+lazy val api = project.dependsOn(core)
+               .settings(moduleName := "aecor-api")
+               .settings(aecorSettings)
+               .settings(apiSettings)
 
 lazy val bench = project.dependsOn(core, example)
-  .settings(moduleName := "aecor-bench")
-  .settings(aecorSettings)
-  .enablePlugins(JmhPlugin)
+                 .settings(moduleName := "aecor-bench")
+                 .settings(aecorSettings)
+                 .enablePlugins(JmhPlugin)
 
 lazy val tests = project.dependsOn(core, example)
-  .settings(moduleName := "aecor-tests")
-  .settings(aecorSettings)
-  .settings(testingSettings)
+                 .settings(moduleName := "aecor-tests")
+                 .settings(aecorSettings)
+                 .settings(testingSettings)
 
 lazy val circe = project.dependsOn(core)
-  .settings(moduleName := "aecor-circe")
-  .settings(aecorSettings)
-  .settings(circeSettings)
+                 .settings(moduleName := "aecor-circe")
+                 .settings(aecorSettings)
+                 .settings(circeSettings)
 
 lazy val example = project.dependsOn(core, api, circe)
-  .settings(moduleName := "aecor-example")
-  .settings(aecorSettings)
-  .settings(exampleSettings)
+                   .settings(moduleName := "aecor-example")
+                   .settings(aecorSettings)
+                   .settings(exampleSettings)
 
 val circeVersion = "0.5.0-M2"
 val akkaVersion = "2.4.8"
 val reactiveKafka = "0.11-M4"
 val akkaPersistenceCassandra = "0.17"
 val catsVersion = "0.6.0"
-val akkaHttpJson = "1.6.0"
+val akkaHttpJson = "1.8.0"
 val kamonVersion = "0.6.1"
 lazy val scalacheckVersion = "1.13.0"
 val shapelessVersion = "2.3.1"
@@ -77,8 +77,8 @@ lazy val coreSettings = Seq(
   libraryDependencies ++= dependency("com.typesafe.akka")(
     "akka-cluster-sharding",
     "akka-persistence",
-    "akka-slf4j",
-    "akka-contrib"
+    "akka-persistence-query-experimental",
+    "akka-slf4j"
   )(akkaVersion),
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
@@ -88,7 +88,7 @@ lazy val coreSettings = Seq(
   ),
 
   libraryDependencies ++= Seq(
-    "com.chuusai" %% "shapeless" % "2.3.1"
+    "com.chuusai" %% "shapeless" % shapelessVersion
   ),
 
   libraryDependencies ++= Seq(
@@ -112,14 +112,16 @@ lazy val coreSettings = Seq(
 
 lazy val apiSettings = Seq(
   libraryDependencies ++= Seq(
-    "com.chuusai" %% "shapeless" % shapelessVersion,
-    "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
-    "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
+    "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion
   )
 )
 
 lazy val exampleSettings = Seq(
-  libraryDependencies += "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1"
+  libraryDependencies ++= Seq(
+    "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1",
+    "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
+    "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
+  )
 )
 
 lazy val circeSettings = Seq(
@@ -157,6 +159,8 @@ lazy val commonScalacOptions = Seq(
 )
 
 lazy val warnUnusedImport = Seq(
-  scalacOptions in (Compile, console) ~= {_.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))},
-  scalacOptions in (Test, console) <<= (scalacOptions in (Compile, console))
+  scalacOptions in(Compile, console) ~= {
+    _.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))
+  },
+  scalacOptions in(Test, console) <<= (scalacOptions in(Compile, console))
 )

@@ -13,11 +13,12 @@ trait ProcessSyntax extends FunctionBuilderSyntax {
   }
 
   implicit class futureResultOps[R](f: Future[Result[R]])(implicit ec: ExecutionContext) {
-    def handlingRejection[S](whenAccepted: S)(handler: R => Future[S]) = f.flatMap {
-      case Accepted => Future.successful(whenAccepted)
-      case Rejected(rejection) => handler(rejection)
-    }
-    def ignoringRejection[S](s: S): Future[S] = f.map(_ => s)
+    def ignoreRejection[S](s: S): Future[S] = f.map(_ => s)
+    def handleResult[S](whenAccepted: => S)(whenRejected: R => Future[S]) =
+      f.flatMap {
+        case Accepted => Future.successful(whenAccepted)
+        case Rejected(rejection) => whenRejected(rejection)
+      }
   }
 
   def handleF[State, In, Out, H](state: State, in: In)(f: State => H)(implicit H: FunctionBuilder[H, In, Out]): Out = H(f(state))(in)

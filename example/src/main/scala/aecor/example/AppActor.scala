@@ -2,10 +2,11 @@ package aecor.example
 
 import aecor.api.Router.ops._
 import aecor.core.aggregate._
-import aecor.core.streaming.CompositeConsumerSettingsSyntax._
 import aecor.core.process.{HandleEvent, ProcessSharding}
+import aecor.core.schedule._
 import aecor.core.serialization.CirceSupport._
 import aecor.core.serialization.kafka.EventEnvelopeSerializer
+import aecor.core.streaming.CompositeConsumerSettingsSyntax._
 import aecor.core.streaming._
 import aecor.example.domain.Account.TransactionAuthorized
 import aecor.example.domain.CardAuthorization.CardAuthorizationCreated
@@ -22,6 +23,8 @@ import akka.stream.ActorMaterializer
 import org.apache.kafka.common.serialization.StringSerializer
 import shapeless.{Coproduct, HNil}
 
+import scala.concurrent.duration._
+
 object AppActor {
   def props: Props = Props(new AppActor)
 }
@@ -35,6 +38,10 @@ class AppActor extends Actor with ActorLogging {
 
   val config = system.settings.config
 
+  val cassandraReadJournal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+  val extendedCassandraReadJournal = new CassandraReadJournalExtension(system, cassandraReadJournal)
+  val journal = AggregateJournal(system, cassandraReadJournal)
+
   val kafkaAddress = "localhost"
 
   val producerSettings = ProducerSettings(system, new StringSerializer, new EventEnvelopeSerializer).withBootstrapServers(s"$kafkaAddress:9092")
@@ -45,9 +52,18 @@ class AppActor extends Actor with ActorLogging {
   val accountRegion: AggregateRef[Account] =
     AggregateSharding(system).start(Account())
 
-  val cassandraReadJournal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
-  val journal = AggregateJournal(system, cassandraReadJournal)
+  val scheduleEntityName = "Schedule3"
+
+
+  val schedule: Schedule = Schedule(system, scheduleEntityName, 1.day)
+  val scheduleJournal: ScheduleJournal = ScheduleJournal(system, cassandraReadJournal)
+
+  scheduleJournal.committableEvents(scheduleEntityName, "example", "example").collect {
+    case CommittableJournalEntry(_, _, _, e: ScheduleEntryFired)  => e
+  }.runForeach { x =>
+    log.debug("Scheduler event [{}]", x)
+  }
 
   journal.committableEventSourceFor[Account](consumerId = "kafka_replicator").to(Kafka.eventSink(producerSettings, "Account")).run()
   journal.committableEventSourceFor[CardAuthorization](consumerId = "kafka_replicator").to(Kafka.eventSink(producerSettings, "CardAuthorization")).run()

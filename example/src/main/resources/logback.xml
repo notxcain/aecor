@@ -19,4 +19,5 @@
     <logger name="com.datastax.driver.core.Connection" level="WARN" />
     <logger name="com.websudos.phantom" level="WARN" />
     <logger name="akka.persistence.cassandra.query.EventsByTagPublisher" level="INFO" />
+    <logger name="aecor.core.schedule.ScheduleActor" level="INFO" />
 </configuration>

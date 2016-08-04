@@ -20,20 +20,11 @@ trait CommittableUUIDOffset extends Committable {
 final case class CommittableUUIDOffsetImpl(override val offset: UUID)(committer: UUID => Future[Done])
   extends CommittableUUIDOffset {
   override def commitScaladsl(): Future[Done] = committer(offset)
+
   override def commitJavadsl(): CompletionStage[Done] = commitScaladsl().toJava
 }
 
-case class CommittableJournalEntry[+A](
-  committableOffset: CommittableUUIDOffset,
-  persistenceId: String,
-  sequenceNr: Long,
-  value: A
-) {
-  def collect[B](pf: PartialFunction[A, B]): Option[CommittableJournalEntry[B]] =
-    Some(value).collect(pf).map(b => copy(value = b))
-  def map[B](f: A => B): CommittableJournalEntry[B] =
-    copy(value = f(value))
-}
+case class CommittableJournalEntry[+A](committableOffset: CommittableUUIDOffset, persistenceId: String, sequenceNr: Long, value: A)
 
 class CassandraReadJournalExtension(actorSystem: ActorSystem, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext) {
 

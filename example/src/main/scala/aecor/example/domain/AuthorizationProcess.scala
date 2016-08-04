@@ -28,7 +28,7 @@ case class AuthorizationProcess(accounts: AggregateRef[Account], cardAuthorizati
               case Account.InsufficientFunds => CardAuthorization.InsufficientFunds
               case other => CardAuthorization.Unknown
             }
-            cardAuthorizations.handle(s"Decline-$cardAuthorizationId", DeclineCardAuthorization(cardAuthorizationId, reason)).ignoringRejection(state)
+            cardAuthorizations.handle(s"Decline-$cardAuthorizationId", DeclineCardAuthorization(cardAuthorizationId, reason)).ignoreRejection(state)
         }
       } ::
       when[TransactionAuthorized] { case TransactionAuthorized(accountId, transactionId, amount) =>
@@ -62,9 +62,9 @@ case class AuthorizationProcess(accounts: AggregateRef[Account], cardAuthorizati
   }
 
   def acceptAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, transactionId: TransactionId)(implicit ec: ExecutionContext): Future[State] = {
-    cardAuthorizations.handle(s"Accept", AcceptCardAuthorization(cardAuthorizationId)).handlingRejection(Finished) {
-      case AlreadyDeclined => accounts.handle(s"Void-$transactionId", VoidTransaction(accountId, transactionId)).ignoringRejection(Finished)
-      case DoesNotExists => accounts.handle(s"Void-$transactionId", VoidTransaction(accountId, transactionId)).ignoringRejection(Finished)
+    cardAuthorizations.handle(s"Accept", AcceptCardAuthorization(cardAuthorizationId)).handleResult(Finished) {
+      case AlreadyDeclined => accounts.handle(s"Void-$transactionId", VoidTransaction(accountId, transactionId)).ignoreRejection(Finished)
+      case DoesNotExists => accounts.handle(s"Void-$transactionId", VoidTransaction(accountId, transactionId)).ignoreRejection(Finished)
       case AlreadyAccepted => Future.successful(Finished)
     }
   }

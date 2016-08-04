@@ -72,11 +72,12 @@ class ProcessSharding(actorSystem: ActorSystem) {
   def flow[Behavior, Input, State, PassThrough]
   (name: String, behavior: Behavior, correlation: Correlation[Input])
   (implicit Input: ClassTag[Input], ec: ExecutionContext, Behavior: ProcessBehavior.Aux[Behavior, Input, State]): Flow[ProcessSharding.Message[Input, PassThrough], PassThrough, ProcessSharding.Control] = {
+
     val settings = new ProcessShardingSettings(actorSystem.settings.config.getConfig("aecor.process"))
 
     val processRegion = ClusterSharding(actorSystem).start(
       typeName = name,
-      entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior, Set.empty))(name, settings.idleTimeout(name)),
+      entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior, Set.empty), name, settings.idleTimeout(name)),
       settings = ClusterShardingSettings(actorSystem),
       extractEntityId = EventsourcedActor.extractEntityId[HandleEvent[Input]](x => correlation(x.event)),
       extractShardId = EventsourcedActor.extractShardId[HandleEvent[Input]](settings.numberOfShards)(x => correlation(x.event))

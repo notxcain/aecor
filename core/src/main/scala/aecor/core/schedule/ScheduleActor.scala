@@ -4,16 +4,17 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{LocalDateTime, ZoneId}
 
-import aecor.core.actor.{EventsourcedActor, NowOrDeferred}
 import aecor.core.actor.NowOrDeferred.Now
-import aecor.core.aggregate._
-import aecor.core.message.ExtractShardId
-import akka.actor.{Actor, ActorRef, Props}
-import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId}
+import aecor.core.actor.{EventsourcedActor, EventsourcedBehavior, NowOrDeferred}
+import aecor.core.message.Correlation.CorrelationId
+import aecor.core.message.{ExtractShardId, Passivation}
+import akka.actor.{Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated}
+import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId, Passivate}
 import akka.stream.scaladsl.{Keep, Sink, Source}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.{Done, NotUsed}
 
+import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 
 object ScheduleActorSupervisor {
@@ -22,20 +23,20 @@ object ScheduleActorSupervisor {
   }
 
   def extractEntityId(bucketLength: FiniteDuration): ExtractEntityId = {
-    case c@AddScheduleEntry(scheduleName, entryId, dueDate) =>
-      (scheduleName + "-" + calculateTimeBucket(dueDate, bucketLength), c)
+    case c: AddScheduleEntry =>
+      (c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), c)
   }
 
   def extractShardId(numberOfShards: Int, bucketLength: FiniteDuration): ExtractShardId = {
-    case c@AddScheduleEntry(scheduleName, entryId, dueDate) =>
-      ExtractShardId(scheduleName + "-" + calculateTimeBucket(dueDate, bucketLength), numberOfShards)
+    case c: AddScheduleEntry =>
+      ExtractShardId(c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), numberOfShards)
   }
 
-  def props: Props =
-    Props(new ScheduleActorSupervisor())
+
+  def props(entityName: String): Props = Props(new ScheduleActorSupervisor(entityName))
 }
 
-class ScheduleActorSupervisor extends Actor {
+class ScheduleActorSupervisor(entityName: String) extends Actor {
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system), "ScheduleActorSupervisor")
 
@@ -45,7 +46,8 @@ class ScheduleActorSupervisor extends Actor {
     (components.dropRight(1).mkString("-"), components.last)
   }
 
-  val worker: ActorRef = context.actorOf(ScheduleActor.props(scheduleName, timeBucket), "worker")
+  val worker: ActorRef = context.actorOf(ScheduleActor.props(entityName, scheduleName, timeBucket), "worker")
+
   val tickControl = Source.tick(0.seconds, 1.second, NotUsed).map(_ => FireDueEntries(LocalDateTime.now())).toMat(Sink.actorRef(worker, Done))(Keep.left).run()
 
   @scala.throws[Exception](classOf[Exception])
@@ -55,73 +57,114 @@ class ScheduleActorSupervisor extends Actor {
   }
 
   override def receive: Receive = {
-    case c: AddScheduleEntry => worker.forward(c)
+    case c: AddScheduleEntry =>
+      worker.forward(c)
+    case passivate: Passivate =>
+      context.parent ! passivate
+      context.become(passivating)
+  }
+
+  def passivating: Receive = {
+    case c: AddScheduleEntry =>
+    // ignore
+    case Passivation.Stop =>
+      context.watch(worker)
+      worker ! Passivation.Stop
+    case Terminated(`worker`) =>
+      context.stop(self)
   }
 }
 
-sealed trait ScheduleEvent
-case class ScheduleEntryAdded(scheduleName: String, entryId: String, dueDate: LocalDateTime) extends ScheduleEvent
-case class ScheduleEntryFired(scheduleName: String, entryId: String) extends ScheduleEvent
+sealed trait ScheduleEvent {
+  def scheduleName: String
+}
+
+case class ScheduleCreated(scheduleName: String) extends ScheduleEvent
+
+case class ScheduleEntryAdded(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime) extends ScheduleEvent
+
+case class ScheduleEntryFired(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload) extends ScheduleEvent
 
 sealed trait ScheduleCommand
-case class AddScheduleEntry(scheduleName: String, entryId: String, dueDate: LocalDateTime) extends ScheduleCommand
-private[schedule] case class FireDueEntries(now: LocalDateTime) extends ScheduleCommand
 
-private[aecor] case class ScheduleEntry(id: String, dueDate: LocalDateTime)
+case class AddScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime) extends ScheduleCommand
 
-private[aecor] case class ScheduleState(name: String, entries: List[ScheduleEntry]) {
-  def addEntry(entryId: String, dueDate: LocalDateTime): ScheduleState =
-    copy(entries = ScheduleEntry(entryId, dueDate) :: entries)
+private[schedule] case class FireDueEntries(now: LocalDateTime) extends ScheduleCommand with NotInfluenceReceiveTimeout
+
+case class Payload(value: Option[Array[Byte]]) extends AnyVal
+
+object Payload {
+  def empty: Payload = Payload(None)
+}
+
+private[aecor] case class ScheduleEntry(id: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime)
+
+private[aecor] case class ScheduleState(name: String, entries: List[ScheduleEntry], initialized: Boolean) {
+  def addEntry(entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime): ScheduleState =
+    copy(entries = ScheduleEntry(entryId, correlationId, payload, dueDate) :: entries)
 
   def removeEntry(entryId: String): ScheduleState =
     copy(entries = entries.filterNot(_.id == entryId))
 
   def findEntriesDueTo(date: LocalDateTime): List[ScheduleEntry] =
     entries.filter(_.dueDate.isBefore(date))
+
+  def initialize: ScheduleState = copy(initialized = true)
+}
+
+private[aecor] object ScheduleState {
+  def empty(name: String): ScheduleState = ScheduleState(name, List.empty, initialized = false)
 }
 
 case class ScheduleBehavior(state: ScheduleState) {
   def handleCommand(command: ScheduleCommand): Vector[ScheduleEvent] = command match {
-    case AddScheduleEntry(scheduleName, dueDate, entryId) =>
-      Vector(ScheduleEntryAdded(scheduleName, dueDate, entryId))
+    case AddScheduleEntry(scheduleName, entryId, correlationId, payload, dueDate) =>
+      if (state.initialized) {
+        Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, payload, dueDate))
+      } else {
+        Vector(ScheduleCreated(scheduleName), ScheduleEntryAdded(scheduleName, entryId, correlationId, payload, dueDate))
+      }
     case FireDueEntries(now) =>
-      state.findEntriesDueTo(now)
-      .map(entry => ScheduleEntryFired(state.name, entry.id))
+      state.findEntriesDueTo(now).take(100)
+      .map(entry => ScheduleEntryFired(state.name, entry.id, entry.correlationId, entry.payload))
       .toVector
   }
-  def applyEvent(event: ScheduleEvent): ScheduleBehavior = event match {
-    case ScheduleEntryAdded(scheduleName, entryId, dueDate) =>
-      copy(state = state.addEntry(entryId, dueDate))
-    case ScheduleEntryFired(scheduleName, entryId) =>
-      copy(state = state.removeEntry(entryId))
-  }
+
+  def applyEvent(event: ScheduleEvent): ScheduleBehavior = copy(
+    state = event match {
+      case ScheduleCreated(scheduleName) =>
+        state.initialize
+      case ScheduleEntryAdded(scheduleName, entryId, correlationId, payload, dueDate) =>
+        state.addEntry(entryId, correlationId, payload, dueDate)
+      case e: ScheduleEntryFired =>
+        state.removeEntry(e.entryId)
+    }
+  )
 }
 
 object ScheduleBehavior {
-  implicit def behavior: AggregateBehavior.Aux[ScheduleBehavior, ScheduleCommand, Nothing, ScheduleEvent] = new AggregateBehavior[ScheduleBehavior] {
-    override type Cmd = ScheduleCommand
-    override type Evt = ScheduleEvent
-    override type Rjn = Nothing
-    override def handleCommand(a: ScheduleBehavior)(command: ScheduleCommand): NowOrDeferred[AggregateDecision[Nothing, ScheduleEvent]] =
-      Now(Accept(a.handleCommand(command)))
-    override def applyEvent(a: ScheduleBehavior)(e: ScheduleEvent): ScheduleBehavior =
-      a.applyEvent(e)
-  }
-}
+  implicit val eventsourcedBehavior = new EventsourcedBehavior[ScheduleBehavior] {
+    override type Command = ScheduleCommand
+    override type Response = Done
+    override type Event = ScheduleEvent
 
-private[aecor] object ScheduleState {
-  def empty(name: String): ScheduleState = ScheduleState(name, List.empty)
+    override def handleCommand(a: ScheduleBehavior)(command: ScheduleCommand): NowOrDeferred[(Done, Seq[ScheduleEvent])] =
+      Now(Done -> a.handleCommand(command))
+
+    override def applyEvent(a: ScheduleBehavior)(event: ScheduleEvent): ScheduleBehavior =
+      a.applyEvent(event)
+  }
 }
 
 object ScheduleActor {
-  def props(scheduleName: String, timeBucket: String): Props = {
-
-    val d = new ScheduleActor(scheduleName, timeBucket)
-    Props(new ScheduleActor(scheduleName, timeBucket))
+  def props(entityName: String, scheduleName: String, timeBucket: String): Props = {
+    Props(new ScheduleActor(entityName, scheduleName, timeBucket))
   }
 }
 
-private[aecor] class ScheduleActor(scheduleName: String, timeBucket: String)
-  extends EventsourcedActor[AggregateEventsourcedBehavior[ScheduleBehavior], AggregateCommand[ScheduleCommand], AggregateEvent[ScheduleEvent], AggregateResponse[Nothing]]("Schedule", AggregateEventsourcedBehavior(ScheduleBehavior(ScheduleState.empty(scheduleName))), 60.seconds) {
-  override protected val entityId: String = scheduleName + "-" + timeBucket
+class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String)
+  extends EventsourcedActor[ScheduleBehavior, ScheduleCommand, ScheduleEvent, Done](entityName, ScheduleBehavior(ScheduleState.empty(scheduleName)), 10.seconds) {
+  override protected def entityId: String = scheduleName + "-" + timeBucket
+
+  override def shouldPassivate: Boolean = behavior.state.entries.isEmpty
 }

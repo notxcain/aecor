@@ -6,7 +6,7 @@ import java.time.{Duration, Instant}
 
 import aecor.core.message._
 import akka.NotUsed
-import akka.actor.{ActorLogging, Props, Stash, Status}
+import akka.actor.{Actor, ActorLogging, Props, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{PersistentActor, RecoveryCompleted}
@@ -25,6 +25,7 @@ sealed trait NowOrDeferred[+A] {
       run(ec).map(f)
     }
   }
+
   def flatMap[B](f: A => NowOrDeferred[B]): NowOrDeferred[B] = this match {
     case Now(value) => f(value)
     case Deferred(run) => Deferred { implicit ec =>
@@ -39,6 +40,9 @@ sealed trait NowOrDeferred[+A] {
 }
 
 object NowOrDeferred {
+  def now[A](value: A): NowOrDeferred[A] = Now(value)
+
+  def deferred[A](run: ExecutionContext => Future[A]): NowOrDeferred[A] = Deferred(run)
 
   case class Now[+A](value: A) extends NowOrDeferred[A]
 
@@ -63,26 +67,15 @@ object EventsourcedBehavior {
     type Event = Event0
   }
   type Result[Response, Event] = (Response, Seq[Event])
+
   def apply[A](implicit A: EventsourcedBehavior[A]): EventsourcedBehavior.Aux[A, A.Command, A.Response, A.Event] = A
 }
 
-private[aecor] object EventsourcedActor {
-  trait MkProps[Behavior] {
-    def apply[Command, Event, Response]
-    (entityName: String,
-     idleTimeout: FiniteDuration
-    )(implicit
-      actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, Response, Event],
-      Command: ClassTag[Command],
-      Event: ClassTag[Event]
-    ): Props
-  }
-  def props[Behavior](initialBehavior: Behavior) = new MkProps[Behavior] {
-    override def apply[Command, Event, Response]
-    (entityName: String, idleTimeout: FiniteDuration)
-    (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, Response, Event], Command: ClassTag[Command], Event: ClassTag[Event]): Props =
-      Props(new EventsourcedActor[Behavior, Command, Event, Response](entityName, initialBehavior, idleTimeout))
-  }
+object EventsourcedActor {
+  def props[Behavior, Command, Response, Event]
+  (initialBehavior: Behavior, entityName: String, idleTimeout: FiniteDuration)
+  (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, Response, Event], Command: ClassTag[Command], Event: ClassTag[Event]) =
+    Props(new EventsourcedActor[Behavior, Command, Event, Response](entityName, initialBehavior, idleTimeout) with ClusterShardingEntityId)
 
   def extractEntityId[A: ClassTag](correlation: A => String): ShardRegion.ExtractEntityId = {
     case a: A ⇒ (correlation(a), a)
@@ -93,7 +86,17 @@ private[aecor] object EventsourcedActor {
   }
 }
 
-private[aecor] class EventsourcedActor[Behavior, Command, Event, Response]
+trait ClusterShardingEntityId {
+  this: Actor with IdentifiedEntity =>
+  override protected def entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
+}
+
+trait IdentifiedEntity {
+  this: Actor =>
+  protected def entityId: String
+}
+
+abstract class EventsourcedActor[Behavior, Command, Event, Response]
 (entityName: String,
  initialBehavior: Behavior,
  val idleTimeout: FiniteDuration
@@ -104,20 +107,20 @@ private[aecor] class EventsourcedActor[Behavior, Command, Event, Response]
 ) extends PersistentActor
           with Stash
           with ActorLogging
-          with Passivation {
+          with Passivation
+          with IdentifiedEntity {
 
   import context.dispatcher
 
   private case class HandleResult(result: EventsourcedBehavior.Result[Response, Event])
 
-  protected val entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   override val persistenceId: String = s"$entityName-$entityId"
 
   protected var behavior: Behavior = initialBehavior
 
-  log.debug("[{}] Starting...", persistenceId)
+  log.info("[{}] Starting...", persistenceId)
 
-  private val tags = Set(entityName)
+  protected val tags = Set(entityName)
 
   private val recoveryStartTimestamp: Instant = Instant.now()
 
@@ -126,7 +129,7 @@ private[aecor] class EventsourcedActor[Behavior, Command, Event, Response]
       applyEvent(e)
 
     case RecoveryCompleted =>
-      log.debug("[{}] Recovery completed in [{} ms]", persistenceId, Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
+      log.info("[{}] Recovery to version [{}] completed in [{} ms]", persistenceId, lastSequenceNr, Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
       setIdleTimeout()
   }
 

@@ -22,5 +22,6 @@ trait AggregateJournal {
 }
 
 object AggregateJournal {
-  def apply(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal)(implicit ec: ExecutionContext): AggregateJournal = new CassandraAggregateJournal(actorSystem, cassandraReadJournal)
+  def apply(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal)(implicit ec: ExecutionContext): AggregateJournal =
+    new CassandraAggregateJournal(actorSystem, cassandraReadJournal)
 }
