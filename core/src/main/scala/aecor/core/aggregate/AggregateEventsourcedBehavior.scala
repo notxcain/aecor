@@ -2,9 +2,8 @@ package aecor.core.aggregate
 
 import java.time.Instant
 
-import aecor.core.actor.{EventsourcedBehavior, NowOrDeferred}
 import aecor.core.actor.NowOrDeferred.{Deferred, Now}
-import aecor.core.message.Correlation
+import aecor.core.actor.{EventsourcedBehavior, EventsourcedState, NowOrDeferred}
 import aecor.util._
 
 import scala.collection.immutable.Seq
@@ -14,85 +13,84 @@ case class CommandId(value: String) extends AnyVal
 
 case class EventId(value: String) extends AnyVal
 
-case class AggregateCommand[+A](id: CommandId, command: A)
+case class AggregateEvent[+Event](id: EventId, event: Event, timestamp: Instant)
 
-object AggregateCommand {
-  implicit def correlation[A](implicit A: Correlation[A]): Correlation[AggregateCommand[A]] = Correlation.instance(c => A(c.command))
-}
+sealed trait AggregateResponse[+Rejection]
 
-case class AggregateEvent[+Event](id: EventId, event: Event, timestamp: Instant, causedBy: CommandId)
+object AggregateResponse {
+  def accepted[R]: AggregateResponse[R] = Accepted
 
-case class AggregateResponse[+Rejection](causedBy: CommandId, result: Result[Rejection])
+  def rejected[R](rejection: R): AggregateResponse[R] = Rejected(rejection)
 
-sealed trait Result[+Rejection]
+  case object Accepted extends AggregateResponse[Nothing]
 
-object Result {
-  def accepted[R]: Result[R] = Accepted
-  def rejected[R](rejection: R): Result[R] = Rejected(rejection)
-
-  case object Accepted extends Result[Nothing]
-
-  case class Rejected[+Rejection](rejection: Rejection) extends Result[Rejection]
+  case class Rejected[+Rejection](rejection: Rejection) extends AggregateResponse[Rejection]
 
 }
 
-sealed trait AggregateDecision[+R, +E]
-case class Accept[+E](events: Seq[E]) extends AggregateDecision[Nothing, E]
-case class Reject[+R](rejection: R) extends AggregateDecision[R, Nothing]
+trait AggregateBehavior[A, Command[_]] {
+  type State
+  type Event
 
-trait AggregateBehavior[A] {
-  type Cmd
-  type Evt
-  type Rjn
-  def handleCommand(a: A)(command: Cmd): NowOrDeferred[AggregateDecision[Rjn, Evt]]
-  def applyEvent(a: A)(e: Evt): A
+  def handleCommand[Response](a: A)(state: State, command: Command[Response]): NowOrDeferred[(Response, Seq[Event])]
+
+  def init(a: A): State
+
+  def applyEvent(state: State, event: Event): State
 }
 
 object AggregateBehavior {
+  type AggregateDecision[Rejection, Event] = (AggregateResponse[Rejection], Seq[Event])
+
   object syntax {
-    def accept[R, E](events: E*): Now[AggregateDecision[R, E]] = Now(Accept(events.toVector))
-    def reject[R, E](rejection: R): Now[AggregateDecision[R, E]] = Now(Reject(rejection))
+    def accept[R, E](events: E*): Now[AggregateDecision[R, E]] = Now(AggregateResponse.accepted -> events.toVector)
+
+    def reject[R, E](rejection: R): Now[AggregateDecision[R, E]] = Now(AggregateResponse.rejected(rejection) -> Vector.empty)
+
     def defer[R, E](f: ExecutionContext => Future[AggregateDecision[R, E]]): NowOrDeferred[AggregateDecision[R, E]] = Deferred(f)
+
+    object now {
+      def accept[R, E](events: E*): AggregateDecision[R, E] = AggregateResponse.accepted -> events.toVector
+
+      def reject[R, E](rejection: R): AggregateDecision[R, E] = AggregateResponse.rejected(rejection) -> Vector.empty
+    }
 
     implicit def fromNow[A](now: Now[A]): A = now.value
 
-    def handle[State, In, Out](state: State, in: In)(f: State => In => Out): Out = f(state)(in)
+    def handle[A, B, Out](a: A, b: B)(f: A => B => Out): Out = f(a)(b)
   }
-  type Aux[A, Command0, Rejection0, Event0] = AggregateBehavior[A] {
-    type Cmd = Command0
-    type Evt = Event0
-    type Rjn = Rejection0
+
+  type Aux[A, Command[_], State0, Event0] = AggregateBehavior[A, Command] {
+    type State = State0
+    type Event = Event0
   }
 }
 
-case class AggregateEventsourcedBehavior[Aggregate](aggregate: Aggregate, processedCommands: Set[CommandId])
+case class AggregateEventsourcedBehavior[Aggregate](aggregate: Aggregate)
 
 object AggregateEventsourcedBehavior {
-  implicit def instance[A](implicit A: AggregateBehavior[A]): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], AggregateCommand[A.Cmd], AggregateResponse[A.Rjn], AggregateEvent[A.Evt]] =
-    new EventsourcedBehavior[AggregateEventsourcedBehavior[A]] {
-      override type Command = AggregateCommand[A.Cmd]
-      override type Response = AggregateResponse[A.Rjn]
-      override type Event = AggregateEvent[A.Evt]
 
-      override def handleCommand(a: AggregateEventsourcedBehavior[A])(command: AggregateCommand[A.Cmd]): NowOrDeferred[(AggregateResponse[A.Rjn], Seq[AggregateEvent[A.Evt]])] =
-        if (a.processedCommands.contains(command.id)) {
-          Now(AggregateResponse(command.id, Result.Accepted) -> Seq.empty)
-        } else {
-          A.handleCommand(a.aggregate)(command.command).map {
-            case a@Accept(events) =>
-              AggregateResponse(command.id, Result.Accepted) -> events.map(event => AggregateEvent(generate[EventId], event, Instant.now(), command.id))
-            case r@Reject(rejection) =>
-              AggregateResponse(command.id, Result.Rejected(rejection)) -> Seq.empty
-          }
-        }
+  case class State[Inner](underlying: Inner)
 
-      override def applyEvent(a: AggregateEventsourcedBehavior[A])(event: AggregateEvent[A.Evt]): AggregateEventsourcedBehavior[A] =
-        a.copy(
-          aggregate = A.applyEvent(a.aggregate)(event.event),
-          processedCommands = a.processedCommands + event.causedBy
-        )
+  implicit def instance[A, Command[_]]
+  (implicit A: AggregateBehavior[A, Command], ec: ExecutionContext): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], Command, AggregateEventsourcedBehavior.State[A.State], AggregateEvent[A.Event]] =
+    new EventsourcedBehavior[AggregateEventsourcedBehavior[A], Command] {
+      override type Event = AggregateEvent[A.Event]
+      override type State = AggregateEventsourcedBehavior.State[A.State]
+
+      override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): Future[(R, Seq[AggregateEvent[A.Event]])] =
+        A.handleCommand(a.aggregate)(state.underlying, command).map {
+          case (x, events) => x -> events.map(event => AggregateEvent(generate[EventId], event, Instant.now()))
+        }.asFuture
+
+      override def init(a: AggregateEventsourcedBehavior[A]): State =
+        AggregateEventsourcedBehavior.State(A.init(a.aggregate))
     }
 
-  def apply[Aggregate](aggregate: Aggregate): AggregateEventsourcedBehavior[Aggregate] = AggregateEventsourcedBehavior(aggregate, Set.empty)
+  implicit def projection[A, Command[_]](implicit A: AggregateBehavior[A, Command]): EventsourcedState[AggregateEventsourcedBehavior.State[A.State], AggregateEvent[A.Event]] =
+    new EventsourcedState[AggregateEventsourcedBehavior.State[A.State], AggregateEvent[A.Event]] {
+      override def applyEvent(a: State[A.State], e: AggregateEvent[A.Event]): State[A.State] =
+        a.copy(underlying = A.applyEvent(a.underlying, e.event))
+    }
 }
 

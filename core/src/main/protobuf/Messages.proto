@@ -7,13 +7,6 @@ message EventEnvelope {
   required uint64 timestamp = 3; //UTC millis
 }
 
-message AggregateCommand {
-  required string id = 1;
-  required uint32 serializerId = 2;
-  required string manifest = 3;
-  required bytes payload = 4;
-}
-
 message AggregateEvent {
   required string id = 1;
   required uint32 serializerId = 2;
@@ -23,13 +16,9 @@ message AggregateEvent {
   required string causedBy = 6;
 }
 
-message AggregateResponse {
-  required string causedBy = 1;
-  optional Rejection rejection = 2;
-  message Rejection {
-    required uint32 serializerId = 2;
-    required string manifest = 3;
-    required bytes payload = 4;
-  }
+message Rejection {
+  required uint32 serializerId = 2;
+  required string manifest = 3;
+  required bytes payload = 4;
 }
 

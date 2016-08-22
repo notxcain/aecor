@@ -1,8 +1,6 @@
 package aecor.example.domain
 
-import aecor.core.actor.NowOrDeferred
-import aecor.core.actor.NowOrDeferred.Deferred
-import aecor.core.aggregate.{AggregateRef, Result}
+import aecor.core.aggregate.{AggregateRegionRef, AggregateResponse}
 import aecor.core.message.Correlation
 import aecor.core.process.ProcessBehavior
 import aecor.core.process.ProcessSyntax._
@@ -15,20 +13,20 @@ import shapeless._
 import scala.concurrent.{ExecutionContext, Future}
 
 
-case class AuthorizationProcess(accounts: AggregateRef[Account], cardAuthorizations: AggregateRef[CardAuthorization], state: State) {
+class AuthorizationProcess(accounts: AggregateRegionRef[Account.Command], cardAuthorizations: AggregateRegionRef[CardAuthorization.Command])(implicit ec: ExecutionContext) {
 
-  def handleEvent(input: Input)(implicit ec: ExecutionContext): Future[State] = handleF(state, input) {
+  def handleEvent(state: State, input: Input): Future[State] = handleF(state, input) {
     case Initial =>
       when[CardAuthorizationCreated] { case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, _, _, transactionId) =>
-        accounts.handle(s"Authorize-$transactionId", AuthorizeTransaction(accountId, transactionId, amount)).flatMap {
-          case Result.Accepted => Future.successful(AwaitingTransactionAuthorized(cardAuthorizationId))
-          case Result.Rejected(rejection) =>
+        accounts.ask(AuthorizeTransaction(accountId, transactionId, amount)).flatMap {
+          case AggregateResponse.Accepted => Future.successful(AwaitingTransactionAuthorized(cardAuthorizationId))
+          case AggregateResponse.Rejected(rejection) =>
             val reason = rejection match {
               case Account.AccountDoesNotExist => CardAuthorization.AccountDoesNotExist
               case Account.InsufficientFunds => CardAuthorization.InsufficientFunds
               case other => CardAuthorization.Unknown
             }
-            cardAuthorizations.handle(s"Decline-$cardAuthorizationId", DeclineCardAuthorization(cardAuthorizationId, reason)).ignoreRejection(state)
+            cardAuthorizations.ask(DeclineCardAuthorization(cardAuthorizationId, reason)).ignoreRejection(state)
         }
       } ::
       when[TransactionAuthorized] { case TransactionAuthorized(accountId, transactionId, amount) =>
@@ -62,14 +60,12 @@ case class AuthorizationProcess(accounts: AggregateRef[Account], cardAuthorizati
   }
 
   def acceptAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, transactionId: TransactionId)(implicit ec: ExecutionContext): Future[State] = {
-    cardAuthorizations.handle(s"Accept", AcceptCardAuthorization(cardAuthorizationId)).handleResult(Finished) {
-      case AlreadyDeclined => accounts.handle(s"Void-$transactionId", VoidTransaction(accountId, transactionId)).ignoreRejection(Finished)
-      case DoesNotExists => accounts.handle(s"Void-$transactionId", VoidTransaction(accountId, transactionId)).ignoreRejection(Finished)
+    cardAuthorizations.ask(AcceptCardAuthorization(cardAuthorizationId)).handleResult(Finished) {
+      case AlreadyDeclined => accounts.ask(VoidTransaction(accountId, transactionId)).ignoreRejection(Finished)
+      case DoesNotExists => accounts.ask(VoidTransaction(accountId, transactionId)).ignoreRejection(Finished)
       case AlreadyAccepted => Future.successful(Finished)
     }
   }
-
-  def withState(state: State) = copy(state = state)
 }
 
 object AuthorizationProcess {
@@ -95,9 +91,9 @@ object AuthorizationProcess {
     override type Event = AuthorizationProcess.Input
     override type State = AuthorizationProcess.State
 
-    override def withState(a: AuthorizationProcess)(state: State): AuthorizationProcess = a.copy(state = state)
+    override def init(a: AuthorizationProcess): State = Initial
 
-
-    override def handleEvent(a: AuthorizationProcess)(event: Event): NowOrDeferred[State] = Deferred(ec => a.handleEvent(event)(ec))
+    override def handleEvent(a: AuthorizationProcess)(state: State, event: Input): Future[State] =
+       a.handleEvent(state, event)
   }
 }

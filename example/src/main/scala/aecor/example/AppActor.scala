@@ -46,10 +46,10 @@ class AppActor extends Actor with ActorLogging {
 
   val producerSettings = ProducerSettings(system, new StringSerializer, new EventEnvelopeSerializer).withBootstrapServers(s"$kafkaAddress:9092")
 
-  val authorizationRegion: AggregateRef[CardAuthorization] =
+  val authorizationRegion: AggregateRegionRef[CardAuthorization.Command] =
     AggregateSharding(system).start(CardAuthorization())
 
-  val accountRegion: AggregateRef[Account] =
+  val accountRegion: AggregateRegionRef[Account.Command] =
     AggregateSharding(system).start(Account())
 
 
@@ -79,12 +79,12 @@ class AppActor extends Actor with ActorLogging {
 
     val accountEvents =
       journal.committableEventSourceFor[Account](consumerId = "CardAuthorizationProcess").collect {
-        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: Account.TransactionAuthorized, ts, causedBy)) =>
+        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: Account.TransactionAuthorized, ts)) =>
           ProcessSharding.Message(HandleEvent(id, Coproduct[AuthorizationProcess.Input](event)), offset)
       }
     val caEvents =
       journal.committableEventSourceFor[CardAuthorization](consumerId = "CardAuthorizationProcess").collect {
-        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: CardAuthorizationCreated, ts, causedBy)) =>
+        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: CardAuthorizationCreated, ts)) =>
           ProcessSharding.Message(HandleEvent(id, Coproduct[AuthorizationProcess.Input](event)), offset)
       }
 
@@ -93,7 +93,7 @@ class AppActor extends Actor with ActorLogging {
 
     val sink = process.committableSink(
                              name = AuthorizationProcess.name,
-                             behavior = AuthorizationProcess(accountRegion, authorizationRegion, AuthorizationProcess.Initial),
+                             behavior = new AuthorizationProcess(accountRegion, authorizationRegion),
                              correlation = AuthorizationProcess.correlation
                            )
     directSource.to(sink)

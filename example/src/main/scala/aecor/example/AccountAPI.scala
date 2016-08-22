@@ -1,9 +1,7 @@
 package aecor.example
 
-import java.util.UUID
-
 import aecor.api.Router
-import aecor.core.aggregate.{AggregateRef, Result}
+import aecor.core.aggregate.{AggregateRegionRef, AggregateResponse}
 import aecor.example.domain.{Account, AccountId, Amount, TransactionId}
 import akka.Done
 import akka.http.scaladsl.model.StatusCodes
@@ -14,18 +12,18 @@ import de.heikoseeberger.akkahttpcirce.CirceSupport._
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class AccountAPI(account: AggregateRef[Account]) {
+class AccountAPI(account: AggregateRegionRef[Account.Command]) {
 
   import AccountAPI._
 
   def openAccount(dto: DTO.OpenAccount)(implicit ec: ExecutionContext): Future[String Xor Done] = dto match {
     case DTO.OpenAccount(accountId) =>
       account
-      .handle(UUID.randomUUID.toString, Account.OpenAccount(AccountId(accountId)))
+      .ask(Account.OpenAccount(AccountId(accountId)))
       .flatMap {
-        case Result.Accepted =>
+        case AggregateResponse.Accepted =>
           Future.successful(Xor.Right(Done: Done))
-        case Result.Rejected(rejection) =>
+        case AggregateResponse.Rejected(rejection) =>
           Future.successful(Xor.Left(rejection.toString))
       }
   }
@@ -33,11 +31,11 @@ class AccountAPI(account: AggregateRef[Account]) {
   def creditAccount(dto: DTO.CreditAccount)(implicit ec: ExecutionContext): Future[String Xor Done] = dto match {
     case DTO.CreditAccount(accountId, transactionId, amount) =>
       account
-      .handle(UUID.randomUUID().toString, Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
+      .ask(Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
       .flatMap {
-        case Result.Accepted =>
+        case AggregateResponse.Accepted =>
           Future.successful(Xor.Right(Done: Done))
-        case Result.Rejected(rejection) =>
+        case AggregateResponse.Rejected(rejection) =>
           Future.successful(Xor.Left(rejection.toString))
       }
   }

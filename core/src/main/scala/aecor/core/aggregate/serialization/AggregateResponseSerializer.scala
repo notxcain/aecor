@@ -1,7 +1,7 @@
 package aecor.core.aggregate.serialization
 
-import aecor.core.aggregate.Result.{Accepted, Rejected}
-import aecor.core.aggregate.{AggregateResponse, CommandId, Result}
+import aecor.core.aggregate.AggregateResponse
+import aecor.core.aggregate.AggregateResponse.{Accepted, Rejected}
 import aecor.core.serialization.akka.{Codec, CodecSerializer, SerializationHelper}
 import aecor.core.serialization.{protobuf => pb}
 import akka.actor.ExtendedActorSystem
@@ -17,24 +17,23 @@ class AggregateResponseCodec(system: ExtendedActorSystem) extends Codec[Aggregat
   override def manifest(o: AggregateResponse[AnyRef]): String = ""
 
   override def decode(bytes: Array[Byte], manifest: String): Try[AggregateResponse[AnyRef]] =
-    pb.AggregateResponse.validate(bytes).flatMap { dto =>
-      dto.rejection.map { rejectionDto =>
-         serialization
-         .deserialize(rejectionDto.payload.toByteArray, rejectionDto.serializerId, rejectionDto.manifest)
-         .map(Result.rejected)
-      }.getOrElse(Success(Result.accepted)).map { result =>
-        AggregateResponse(CommandId(dto.causedBy), result)
+    if (bytes.isEmpty) {
+      Success(AggregateResponse.accepted)
+    } else {
+      pb.Rejection.validate(bytes).flatMap { rejectionDto =>
+        serialization
+        .deserialize(rejectionDto.payload.toByteArray, rejectionDto.serializerId, rejectionDto.manifest)
+        .map(AggregateResponse.rejected)
       }
     }
 
   override def encode(o: AggregateResponse[AnyRef]): Array[Byte] = {
-    val rejectionDto = o.result match {
-      case Accepted => Option.empty
+    o match {
+      case Accepted => Array.empty[Byte]
       case Rejected(rejection) =>
         val rejectionRepr = helper.serialize(rejection)
-        Some(pb.AggregateResponse.Rejection(rejectionRepr.serializerId, rejectionRepr.manifest, ByteString.copyFrom(rejectionRepr.bytes)))
+        pb.Rejection(rejectionRepr.serializerId, rejectionRepr.manifest, ByteString.copyFrom(rejectionRepr.bytes)).toByteArray
     }
-    pb.AggregateResponse(o.causedBy.value, rejectionDto).toByteArray
   }
 }
 

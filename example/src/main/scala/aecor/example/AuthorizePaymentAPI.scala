@@ -1,9 +1,7 @@
 package aecor.example
 
-import java.util.UUID
-
 import aecor.api.Router
-import aecor.core.aggregate.{AggregateRef,Result}
+import aecor.core.aggregate.{AggregateRegionRef,AggregateResponse}
 import aecor.example.AuthorizePaymentAPI._
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
@@ -17,7 +15,7 @@ import io.circe.generic.JsonCodec
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
-class AuthorizePaymentAPI(authorization: AggregateRef[CardAuthorization], eventStream: EventStream[CardAuthorization.Event], log: LoggingAdapter) {
+class AuthorizePaymentAPI(authorization: AggregateRegionRef[CardAuthorization.Command], eventStream: EventStream[CardAuthorization.Event], log: LoggingAdapter) {
 
   import DTO._
 
@@ -32,16 +30,15 @@ class AuthorizePaymentAPI(authorization: AggregateRef[CardAuthorization], eventS
                                            )
       log.debug("Sending command [{}]", command)
       val start = System.nanoTime()
-      val id = UUID.randomUUID.toString
       eventStream.registerObserver(30.seconds) {
         case e: CardAuthorizationDeclined if e.cardAuthorizationId.value == cardAuthorizationId => AuthorizePaymentAPI.ApiResult.Declined(e.reason.toString)
         case e: CardAuthorizationAccepted if e.cardAuthorizationId.value == cardAuthorizationId => AuthorizePaymentAPI.ApiResult.Authorized
       }.flatMap { observer =>
         authorization
-        .handle(id, command)
+        .ask(command)
         .flatMap {
-          case Result.Rejected(rejection) => Future.successful(Xor.left(rejection))
-          case Result.Accepted => observer.result.map(Xor.right)
+          case AggregateResponse.Rejected(rejection) => Future.successful(Xor.left(rejection))
+          case AggregateResponse.Accepted => observer.result.map(Xor.right)
         }.map { x =>
           log.debug("Command [{}] processed with result [{}] in [{}]", command, x, (System.nanoTime() - start) / 1000000)
           x

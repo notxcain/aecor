@@ -20,7 +20,7 @@ class CassandraAggregateJournal(actorSystem: ActorSystem, cassandraReadJournal: 
         E: ClassTag[E]
       ): Source[CommittableJournalEntry[AggregateEvent[E]], NotUsed] =
       extendedCassandraReadJournal.committableEventsByTag(name.value, consumerId).collect {
-        case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: E, timestamp, causedBy)) =>
+        case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: E, timestamp)) =>
           m.asInstanceOf[CommittableJournalEntry[AggregateEvent[E]]]
       }
   }

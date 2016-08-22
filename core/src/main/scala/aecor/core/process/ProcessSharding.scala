@@ -2,7 +2,7 @@ package aecor.core.process
 
 import java.util.UUID
 
-import aecor.core.actor.EventsourcedActor
+import aecor.core.actor.{EventsourcedActor, Identity}
 import aecor.core.aggregate.EventId
 import aecor.core.message._
 import aecor.core.process.ProcessSharding.{Control, TopicName}
@@ -14,7 +14,7 @@ import akka.actor.{Actor, ActorRef, ActorSystem, PoisonPill, Props, Terminated}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings, ShardRegion}
 import akka.kafka.ConsumerMessage.Committable
 import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerMessage, ConsumerSettings, Subscriptions}
+import akka.kafka.{ConsumerSettings, Subscriptions}
 import akka.pattern.{after, ask}
 import akka.stream.scaladsl.{Flow, Keep, Sink, Source}
 import akka.util.Timeout
@@ -63,8 +63,9 @@ class ProcessSharding(actorSystem: ActorSystem) {
                            .withProperty("auto.offset.reset", "earliest")
 
     Consumer.committableSource(consumerSettings, Subscriptions.topics(processStreamConfig.keySet))
+      .map(x => x.committableOffset -> x.record.value())
       .collect {
-        case ConsumerMessage.CommittableMessage(_, Some(envelope), offset) =>
+        case (offset, Some(envelope)) =>
           CommittableMessage(offset, HandleEvent(envelope.eventId, envelope.input))
       }
   }
@@ -77,7 +78,7 @@ class ProcessSharding(actorSystem: ActorSystem) {
 
     val processRegion = ClusterSharding(actorSystem).start(
       typeName = name,
-      entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior, Set.empty), name, settings.idleTimeout(name)),
+      entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior), name, Identity.FromPathName, settings.snapshotPolicy(name), settings.idleTimeout(name)),
       settings = ClusterShardingSettings(actorSystem),
       extractEntityId = EventsourcedActor.extractEntityId[HandleEvent[Input]](x => correlation(x.event)),
       extractShardId = EventsourcedActor.extractShardId[HandleEvent[Input]](settings.numberOfShards)(x => correlation(x.event))

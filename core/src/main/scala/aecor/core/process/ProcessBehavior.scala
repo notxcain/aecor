@@ -1,16 +1,16 @@
 package aecor.core.process
 
-import aecor.core.actor.NowOrDeferred.Now
-import aecor.core.actor.{EventsourcedBehavior, NowOrDeferred}
+import aecor.core.actor.{EventsourcedBehavior, EventsourcedState}
 import aecor.core.aggregate._
 
 import scala.collection.immutable.Seq
+import scala.concurrent.{ExecutionContext, Future}
 
 trait ProcessBehavior[A] {
   type Event
   type State
-  def withState(a: A)(state: State): A
-  def handleEvent(a: A)(event: Event): NowOrDeferred[State]
+  def init(a: A): State
+  def handleEvent(a: A)(state: State, event: Event): Future[State]
 }
 
 object ProcessBehavior {
@@ -20,32 +20,51 @@ object ProcessBehavior {
   }
 }
 
-case class ProcessEventsourcedBehavior[A](a: A, processedEvents: Set[EventId])
+case class ProcessEventsourcedBehavior[A](a: A)
 
-case class HandleEvent[+A](id: EventId, event: A)
+case class ProcessState[A](processedEvents: Set[EventId], state: A)
+
+object ProcessState {
+  implicit def ess[A](implicit ProcessBehavior: ProcessBehavior[A], ec: ExecutionContext) =
+    new EventsourcedState[ProcessState[ProcessBehavior.State], ProcessStateChanged[ProcessBehavior.State]] {
+      override def applyEvent(state: ProcessState[ProcessBehavior.State], event: ProcessStateChanged[ProcessBehavior.State]): ProcessState[ProcessBehavior.State] =
+        state.copy(state = event.state)
+    }
+}
+
+sealed trait ProcessCommand[+E, R]
+case class HandleEvent[+Event](id: EventId, event: Event) extends ProcessCommand[Event, EventHandled]
 case class EventHandled(causedBy: EventId)
 case class ProcessStateChanged[A](state: A, causedBy: EventId)
 
 object ProcessEventsourcedBehavior {
-  implicit def esb[A](implicit ProcessBehavior: ProcessBehavior[A]): EventsourcedBehavior.Aux[ProcessEventsourcedBehavior[A], HandleEvent[ProcessBehavior.Event], EventHandled, ProcessStateChanged[ProcessBehavior.State]] =
-    new EventsourcedBehavior[ProcessEventsourcedBehavior[A]] {
-      override type Command = HandleEvent[ProcessBehavior.Event]
-      override type Response = EventHandled
+
+  implicit def esb[A](implicit ProcessBehavior: ProcessBehavior[A], ec: ExecutionContext):
+  EventsourcedBehavior.Aux[
+    ProcessEventsourcedBehavior[A],
+    ProcessCommand[ProcessBehavior.Event, ?],
+    ProcessState[ProcessBehavior.State],
+    ProcessStateChanged[ProcessBehavior.State]
+    ] =
+    new EventsourcedBehavior[ProcessEventsourcedBehavior[A], ProcessCommand[ProcessBehavior.Event, ?]] {
       override type Event = ProcessStateChanged[ProcessBehavior.State]
+      override type State = ProcessState[ProcessBehavior.State]
 
-      override def handleCommand(a: ProcessEventsourcedBehavior[A])(command: HandleEvent[ProcessBehavior.Event]): NowOrDeferred[(EventHandled, Seq[ProcessStateChanged[ProcessBehavior.State]])] =
-        (if (a.processedEvents.contains(command.id)) {
-          Now(Seq.empty)
-        } else {
-          ProcessBehavior.handleEvent(a.a)(command.event).map { state =>
-            Seq(ProcessStateChanged(state, command.id))
-          }
-        }).map(events => EventHandled(command.id) -> events)
 
-      override def applyEvent(a: ProcessEventsourcedBehavior[A])(event: ProcessStateChanged[ProcessBehavior.State]): ProcessEventsourcedBehavior[A] =
-        a.copy(
-          a = ProcessBehavior.withState(a.a)(event.state),
-          processedEvents = a.processedEvents + event.causedBy
-        )
+      override def handleCommand[R](a: ProcessEventsourcedBehavior[A])(state: ProcessState[ProcessBehavior.State], command: ProcessCommand[ProcessBehavior.Event, R]) =
+        command match {
+          case HandleEvent(id, event) =>
+            (if (state.processedEvents.contains(id)) {
+              Future.successful(Seq.empty)
+            } else {
+              ProcessBehavior.handleEvent(a.a)(state.state, event).map { state =>
+                Seq(ProcessStateChanged(state, id))
+              }
+            }).map(events => EventHandled(id) -> events)
+        }
+
+
+      override def init(a: ProcessEventsourcedBehavior[A]): ProcessState[ProcessBehavior.State] =
+        ProcessState(Set.empty, ProcessBehavior.init(a.a))
     }
 }

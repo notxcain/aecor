@@ -12,7 +12,7 @@ import org.apache.kafka.clients.producer.ProducerRecord
 
 object Kafka {
   def eventSink[A: Encoder](producerSettings: ProducerSettings[String, EventEnvelope], topic: String) = Flow[CommittableJournalEntry[AggregateEvent[A]]].map {
-    case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(eventId, event, timestamp, causedBy)) =>
+    case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(eventId, event, timestamp)) =>
       val payload = EventEnvelope(eventId.value, ByteString.copyFrom(Encoder[A].encode(event)), timestamp.toEpochMilli)
       val producerRecord = new ProducerRecord(topic, null, payload.timestamp, persistenceId, payload)
       ProducerMessage.Message(producerRecord, offset)

@@ -62,12 +62,12 @@ lazy val example = project.dependsOn(core, api, circe)
                    .settings(exampleSettings)
 
 val circeVersion = "0.5.0-M2"
-val akkaVersion = "2.4.8"
-val reactiveKafka = "0.11-M4"
+val akkaVersion = "2.4.9"
+val reactiveKafka = "0.11-RC1"
 val akkaPersistenceCassandra = "0.17"
 val catsVersion = "0.6.0"
 val akkaHttpJson = "1.8.0"
-val kamonVersion = "0.6.1"
+
 lazy val scalacheckVersion = "1.13.0"
 val shapelessVersion = "2.3.1"
 
@@ -83,21 +83,12 @@ lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafka,
-    "org.fusesource" % "sigar" % "1.6.4",
     "ch.qos.logback" % "logback-classic" % "1.1.7"
   ),
 
   libraryDependencies ++= Seq(
     "com.chuusai" %% "shapeless" % shapelessVersion
   ),
-
-  libraryDependencies ++= Seq(
-    "io.kamon" %% "kamon-core",
-    "io.kamon" %% "kamon-jmx",
-    "io.kamon" %% "kamon-akka",
-    "io.kamon" %% "kamon-akka-remote_akka-2.4",
-    "io.kamon" %% "kamon-autoweave"
-  ).map(_ % kamonVersion),
 
   libraryDependencies += "org.typelevel" %% "cats" % catsVersion
 ) ++

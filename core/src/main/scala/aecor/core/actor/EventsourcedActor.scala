@@ -6,76 +6,69 @@ import java.time.{Duration, Instant}
 
 import aecor.core.message._
 import akka.NotUsed
-import akka.actor.{Actor, ActorLogging, Props, Stash, Status}
+import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash, Status}
 import akka.cluster.sharding.ShardRegion
+import akka.pattern.pipe
 import akka.persistence.journal.Tagged
-import akka.persistence.{PersistentActor, RecoveryCompleted}
+import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 
 import scala.collection.immutable.Seq
-import scala.concurrent._
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
-import akka.pattern.pipe
-import NowOrDeferred._
 
-sealed trait NowOrDeferred[+A] {
-  def map[B](f: A => B): NowOrDeferred[B] = this match {
-    case Now(value) => Now(f(value))
-    case Deferred(run) => Deferred { implicit ec =>
-      run(ec).map(f)
-    }
-  }
-
-  def flatMap[B](f: A => NowOrDeferred[B]): NowOrDeferred[B] = this match {
-    case Now(value) => f(value)
-    case Deferred(run) => Deferred { implicit ec =>
-      run(ec).flatMap { a =>
-        f(a) match {
-          case Now(value) => Future.successful(value)
-          case Deferred(x) => x(ec)
-        }
-      }
-    }
-  }
-}
-
-object NowOrDeferred {
-  def now[A](value: A): NowOrDeferred[A] = Now(value)
-
-  def deferred[A](run: ExecutionContext => Future[A]): NowOrDeferred[A] = Deferred(run)
-
-  case class Now[+A](value: A) extends NowOrDeferred[A]
-
-  case class Deferred[+A](run: ExecutionContext => Future[A]) extends NowOrDeferred[A]
-
-}
-
-trait EventsourcedBehavior[A] {
-  type Command
-  type Response
+trait EventsourcedBehavior[A, Command[_]] {
+  type State
   type Event
+  def handleCommand[Response](a: A)(state: State, command: Command[Response]): Future[EventsourcedBehavior.Result[Response, Event]]
+  def init(a: A): State
+}
 
-  def handleCommand(a: A)(command: Command): NowOrDeferred[EventsourcedBehavior.Result[Response, Event]]
-
-  def applyEvent(a: A)(event: Event): A
+trait EventsourcedState[State, Event] {
+  def applyEvent(state: State, event: Event): State
 }
 
 object EventsourcedBehavior {
-  type Aux[A, Command0, Response0, Event0] = EventsourcedBehavior[A] {
-    type Command = Command0
-    type Response = Response0
+  type Aux[A, Command[_], State0, Event0] = EventsourcedBehavior[A, Command] {
+    type State = State0
     type Event = Event0
   }
-  type Result[Response, Event] = (Response, Seq[Event])
 
-  def apply[A](implicit A: EventsourcedBehavior[A]): EventsourcedBehavior.Aux[A, A.Command, A.Response, A.Event] = A
+  type Result[Response, Event] = (Response, Seq[Event])
+}
+
+sealed trait SnapshotPolicy {
+  def shouldSnapshotAtEventCount(eventCount: Long): Boolean
+}
+
+object SnapshotPolicy {
+
+  case object Never extends SnapshotPolicy {
+    override def shouldSnapshotAtEventCount(eventCount: Long): Boolean = false
+  }
+
+  case class After(numberOfEvents: Int) extends SnapshotPolicy {
+    override def shouldSnapshotAtEventCount(eventCount: Long): Boolean =
+      eventCount % numberOfEvents == 0
+  }
+
+}
+
+sealed trait Identity
+
+object Identity {
+
+  case class Provided(value: String) extends Identity
+
+  case object FromPathName extends Identity
+
 }
 
 object EventsourcedActor {
-  def props[Behavior, Command, Response, Event]
-  (initialBehavior: Behavior, entityName: String, idleTimeout: FiniteDuration)
-  (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, Response, Event], Command: ClassTag[Command], Event: ClassTag[Event]) =
-    Props(new EventsourcedActor[Behavior, Command, Event, Response](entityName, initialBehavior, idleTimeout) with ClusterShardingEntityId)
+  def props[Behavior, Command[_], State, Event]
+  (behavior: Behavior, entityName: String, identity: Identity, snapshotPolicy: SnapshotPolicy, idleTimeout: FiniteDuration)
+  (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event], projection: EventsourcedState[State, Event], Command: ClassTag[Command[_]], Event: ClassTag[Event], State: ClassTag[State]) =
+    Props(new EventsourcedActor[Behavior, Command, State, Event](entityName, behavior, identity, snapshotPolicy, idleTimeout))
 
   def extractEntityId[A: ClassTag](correlation: A => String): ShardRegion.ExtractEntityId = {
     case a: A ⇒ (correlation(a), a)
@@ -84,49 +77,53 @@ object EventsourcedActor {
   def extractShardId[A: ClassTag](numberOfShards: Int)(correlation: A => String): ShardRegion.ExtractShardId = {
     case a: A => ExtractShardId(correlation(a), numberOfShards)
   }
+
+  case object Stop
 }
 
-trait ClusterShardingEntityId {
-  this: Actor with IdentifiedEntity =>
-  override protected def entityId: String = URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
-}
-
-trait IdentifiedEntity {
-  this: Actor =>
-  protected def entityId: String
-}
-
-abstract class EventsourcedActor[Behavior, Command, Event, Response]
+class EventsourcedActor[Behavior, Command[_], State, Event]
 (entityName: String,
- initialBehavior: Behavior,
- val idleTimeout: FiniteDuration
+ behavior: Behavior,
+ identity: Identity,
+ snapshotPolicy: SnapshotPolicy,
+ idleTimeout: FiniteDuration
 )(implicit
-  actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, Response, Event],
-  Command: ClassTag[Command],
-  Event: ClassTag[Event]
+  Behavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event],
+  State: EventsourcedState[State, Event],
+  CommandClass: ClassTag[Command[_]],
+  EventClass: ClassTag[Event],
+  StateClass: ClassTag[State]
 ) extends PersistentActor
           with Stash
-          with ActorLogging
-          with Passivation
-          with IdentifiedEntity {
+          with ActorLogging {
 
   import context.dispatcher
 
-  private case class HandleResult(result: EventsourcedBehavior.Result[Response, Event])
+  final private val entityId: String = identity match {
+    case Identity.Provided(value) => value
+    case Identity.FromPathName => URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
+  }
 
-  override val persistenceId: String = s"$entityName-$entityId"
+  private case class HandleResult(result: EventsourcedBehavior.Result[Any, Event])
 
-  protected var behavior: Behavior = initialBehavior
-
-  log.info("[{}] Starting...", persistenceId)
+  final override val persistenceId: String = s"$entityName-$entityId"
 
   protected val tags = Set(entityName)
 
   private val recoveryStartTimestamp: Instant = Instant.now()
 
+  log.info("[{}] Starting...", persistenceId)
+
+  protected var state: State = Behavior.init(behavior)
+
+  private var eventCount = 0L
+
   override def receiveRecover: Receive = {
     case e: Event =>
       applyEvent(e)
+
+    case SnapshotOffer(metadata, snapshot: State) =>
+      state = snapshot
 
     case RecoveryCompleted =>
       log.info("[{}] Recovery to version [{}] completed in [{} ms]", persistenceId, lastSequenceNr, Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
@@ -136,51 +133,75 @@ abstract class EventsourcedActor[Behavior, Command, Event, Response]
   override def receiveCommand: Receive = receivePassivationMessages.orElse(receiveCommandMessage)
 
   def receiveCommandMessage: Receive = {
-    case command: Command =>
-      handleCommand(command)
+    case command if CommandClass.runtimeClass.isAssignableFrom(command.getClass) =>
+      handleCommand(command.asInstanceOf[Command[Any]])
     case other =>
       log.warning("[{}] Unknown message [{}]", persistenceId, other)
   }
 
-  def handleCommand(command: Command) = {
+  def handleCommand(command: Command[Any]) = {
     log.debug("[{}] Received command [{}]", persistenceId, command)
-    actorBehavior.handleCommand(behavior)(command) match {
-      case Now(result) =>
+    Behavior.handleCommand(behavior)(state, command).map(HandleResult).pipeTo(self)(sender)
+    context.become {
+      case HandleResult(result) =>
         runResult(result)
-      case Deferred(deferred) =>
-        deferred(context.dispatcher).map(HandleResult).pipeTo(self)(sender)
-        context.become {
-          case HandleResult(result) =>
-            runResult(result)
-            unstashAll()
-            context.become(receiveCommand)
-          case failure@Status.Failure(e) =>
-            log.error(e, "[{}] Deferred result failed", persistenceId)
-            sender() ! failure
-            unstashAll()
-            context.become(receiveCommand)
-          case _ =>
-            stash()
-        }
+        unstashAll()
+        context.become(receiveCommand)
+      case failure @ Status.Failure(e) =>
+        log.error(e, "[{}] Deferred result failed", persistenceId)
+        sender() ! failure
+        unstashAll()
+        context.become(receiveCommand)
+      case _ =>
+        stash()
     }
+
   }
 
-
-  def runResult(result: EventsourcedBehavior.Result[Response, Event]): Unit = {
+  def runResult(result: EventsourcedBehavior.Result[Any, Event]): Unit = {
     val (response, events) = result
     log.debug("[{}] Command handler result [{}]", persistenceId, result)
     val envelopes = events.map(Tagged(_, tags))
+    var shouldSaveSnapshot = false
     persistAll(envelopes) {
       case Tagged(e: Event, _) =>
         applyEvent(e)
+        if (snapshotPolicy.shouldSnapshotAtEventCount(eventCount))
+          shouldSaveSnapshot = true
     }
     deferAsync(NotUsed) { _ =>
+      if (shouldSaveSnapshot)
+        saveSnapshot(state)
       sender() ! response
     }
   }
 
   def applyEvent(event: Event): Unit = {
-    behavior = actorBehavior.applyEvent(behavior)(event)
+    state = State.applyEvent(state, event)
     log.debug("[{}] New behavior [{}]", persistenceId, behavior)
+    eventCount += 1
+  }
+
+  protected def shouldPassivate: Boolean = true
+
+  private def setIdleTimeout(): Unit = {
+    log.debug("Setting idle timeout to [{}]", idleTimeout)
+    context.setReceiveTimeout(idleTimeout)
+  }
+
+  private def receivePassivationMessages: Receive = {
+    case ReceiveTimeout ⇒
+      if (shouldPassivate) {
+        passivate()
+      } else {
+        setIdleTimeout()
+      }
+    case EventsourcedActor.Stop ⇒
+      context.stop(self)
+  }
+
+  private def passivate(): Unit = {
+    log.debug("Passivating...")
+    context.parent ! ShardRegion.Passivate(EventsourcedActor.Stop)
   }
 }
