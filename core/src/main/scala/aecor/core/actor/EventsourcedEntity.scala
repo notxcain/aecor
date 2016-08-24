@@ -17,19 +17,21 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
-trait EventsourcedBehavior[A, Command[_]] {
+trait EventsourcedBehavior[A] {
+  type Command[_]
   type State
   type Event
   def handleCommand[Response](a: A)(state: State, command: Command[Response]): Future[EventsourcedBehavior.Result[Response, Event]]
-  def init(a: A): State
 }
 
 trait EventsourcedState[State, Event] {
+  def init: State
   def applyEvent(state: State, event: Event): State
 }
 
 object EventsourcedBehavior {
-  type Aux[A, Command[_], State0, Event0] = EventsourcedBehavior[A, Command] {
+  type Aux[A, Command0[_], State0, Event0] = EventsourcedBehavior[A] {
+    type Command[X] = Command0[X]
     type State = State0
     type Event = Event0
   }
@@ -64,11 +66,11 @@ object Identity {
 
 }
 
-object EventsourcedActor {
+object EventsourcedEntity {
   def props[Behavior, Command[_], State, Event]
   (behavior: Behavior, entityName: String, identity: Identity, snapshotPolicy: SnapshotPolicy, idleTimeout: FiniteDuration)
   (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event], projection: EventsourcedState[State, Event], Command: ClassTag[Command[_]], Event: ClassTag[Event], State: ClassTag[State]) =
-    Props(new EventsourcedActor[Behavior, Command, State, Event](entityName, behavior, identity, snapshotPolicy, idleTimeout))
+    Props(new EventsourcedEntity[Behavior, Command, State, Event](entityName, behavior, identity, snapshotPolicy, idleTimeout))
 
   def extractEntityId[A: ClassTag](correlation: A => String): ShardRegion.ExtractEntityId = {
     case a: A ⇒ (correlation(a), a)
@@ -81,7 +83,18 @@ object EventsourcedActor {
   case object Stop
 }
 
-class EventsourcedActor[Behavior, Command[_], State, Event]
+/**
+  *
+  * Actor encapsulating state of event sourced entity behavior [Behavior]
+  *
+  * @param entityName entity name used as persistence prefix and as a tag for all events
+  * @param behavior entity behavior
+  * @param identity describes how to extract entity identifier
+  * @param snapshotPolicy snapshot policy to use
+  * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
+  */
+
+class EventsourcedEntity[Behavior, Command[_], State, Event]
 (entityName: String,
  behavior: Behavior,
  identity: Identity,
@@ -114,7 +127,7 @@ class EventsourcedActor[Behavior, Command[_], State, Event]
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = Behavior.init(behavior)
+  protected var state: State = State.init
 
   private var eventCount = 0L
 
@@ -178,7 +191,7 @@ class EventsourcedActor[Behavior, Command[_], State, Event]
 
   def applyEvent(event: Event): Unit = {
     state = State.applyEvent(state, event)
-    log.debug("[{}] New behavior [{}]", persistenceId, behavior)
+    log.debug("[{}] New state [{}]", persistenceId, state)
     eventCount += 1
   }
 
@@ -196,12 +209,12 @@ class EventsourcedActor[Behavior, Command[_], State, Event]
       } else {
         setIdleTimeout()
       }
-    case EventsourcedActor.Stop ⇒
+    case EventsourcedEntity.Stop ⇒
       context.stop(self)
   }
 
   private def passivate(): Unit = {
     log.debug("Passivating...")
-    context.parent ! ShardRegion.Passivate(EventsourcedActor.Stop)
+    context.parent ! ShardRegion.Passivate(EventsourcedEntity.Stop)
   }
 }

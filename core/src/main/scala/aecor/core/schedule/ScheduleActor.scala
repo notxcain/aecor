@@ -32,7 +32,6 @@ object ScheduleActorSupervisor {
       ExtractShardId(c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), numberOfShards)
   }
 
-
   def props(entityName: String): Props = Props(new ScheduleActorSupervisor(entityName))
 }
 
@@ -67,9 +66,9 @@ class ScheduleActorSupervisor(entityName: String) extends Actor {
   def passivating: Receive = {
     case c: AddScheduleEntry =>
       context.parent ! c
-    case EventsourcedActor.Stop =>
+    case EventsourcedEntity.Stop =>
       context.watch(worker)
-      worker ! EventsourcedActor.Stop
+      worker ! EventsourcedEntity.Stop
     case Terminated(`worker`) =>
       context.stop(self)
   }
@@ -125,6 +124,8 @@ private[aecor] object ScheduleState {
   implicit def state = new EventsourcedState[ScheduleState, ScheduleEvent] {
     override def applyEvent(a: ScheduleState, e: ScheduleEvent): ScheduleState =
       a.applyEvent(e)
+    override def init: ScheduleState =
+      ScheduleState(List.empty, initialized = false)
   }
 }
 
@@ -144,12 +145,10 @@ class ScheduleBehavior {
 }
 
 object ScheduleBehavior {
-  implicit val behavior = new EventsourcedBehavior[ScheduleBehavior, ScheduleCommand] {
+  implicit val behavior = new EventsourcedBehavior[ScheduleBehavior] {
+    override type Command[X] = ScheduleCommand[X]
     override type State = ScheduleState
     override type Event = ScheduleEvent
-
-    override def init(a: ScheduleBehavior): ScheduleState =
-      ScheduleState(List.empty, initialized = false)
 
     override def handleCommand[R](a: ScheduleBehavior)(state: ScheduleState, command: ScheduleCommand[R]): Future[(R, Seq[ScheduleEvent])] =
       Future.successful(a.handleCommand(state, command))
@@ -162,6 +161,6 @@ object ScheduleActor {
   }
 }
 
-class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String) extends EventsourcedActor[ScheduleBehavior, ScheduleCommand, ScheduleState, ScheduleEvent](entityName, new ScheduleBehavior(), Identity.Provided(scheduleName + "-" + timeBucket), SnapshotPolicy.Never, 10.seconds) {
+class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String) extends EventsourcedEntity[ScheduleBehavior, ScheduleCommand, ScheduleState, ScheduleEvent](entityName, new ScheduleBehavior(), Identity.Provided(scheduleName + "-" + timeBucket), SnapshotPolicy.Never, 10.seconds) {
   override def shouldPassivate: Boolean = state.entries.isEmpty
 }

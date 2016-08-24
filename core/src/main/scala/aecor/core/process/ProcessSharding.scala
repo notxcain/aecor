@@ -2,7 +2,7 @@ package aecor.core.process
 
 import java.util.UUID
 
-import aecor.core.actor.{EventsourcedActor, Identity}
+import aecor.core.actor.{EventsourcedEntity, Identity}
 import aecor.core.aggregate.EventId
 import aecor.core.message._
 import aecor.core.process.ProcessSharding.{Control, TopicName}
@@ -78,10 +78,10 @@ class ProcessSharding(actorSystem: ActorSystem) {
 
     val processRegion = ClusterSharding(actorSystem).start(
       typeName = name,
-      entityProps = EventsourcedActor.props(ProcessEventsourcedBehavior(behavior), name, Identity.FromPathName, settings.snapshotPolicy(name), settings.idleTimeout(name)),
+      entityProps = EventsourcedEntity.props(ProcessEventsourcedBehavior(behavior), name, Identity.FromPathName, settings.snapshotPolicy(name), settings.idleTimeout(name)),
       settings = ClusterShardingSettings(actorSystem),
-      extractEntityId = EventsourcedActor.extractEntityId[HandleEvent[Input]](x => correlation(x.event)),
-      extractShardId = EventsourcedActor.extractShardId[HandleEvent[Input]](settings.numberOfShards)(x => correlation(x.event))
+      extractEntityId = EventsourcedEntity.extractEntityId[HandleEvent[Input]](x => correlation(x.event)),
+      extractShardId = EventsourcedEntity.extractShardId[HandleEvent[Input]](settings.numberOfShards)(x => correlation(x.event))
     )
 
     def createControl: Control = new Control {

@@ -1,11 +1,11 @@
 package aecor.core.aggregate
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.{ask => askPattern}
 import akka.util.Timeout
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
-import akka.pattern.{ask => askPattern}
 
 final class AggregateRegionRef[Command[_]](system: ActorSystem, shardRegion: ActorRef, askTimeout: FiniteDuration) {
 

@@ -10,7 +10,7 @@ object Correlation {
   }
 }
 
-trait Correlation[A] extends (A => CorrelationId){
+trait Correlation[A] extends (A => CorrelationId) {
   def apply(a: A): CorrelationId
 }
 

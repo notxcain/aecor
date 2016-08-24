@@ -6,6 +6,7 @@ import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import aecor.example.domain.CardAuthorization.{Event, State}
+import cats.free.Free
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 
@@ -19,8 +20,15 @@ object CardAuthorization {
   case object AccountDoesNotExist extends DeclineReason
   case object Unknown extends DeclineReason
 
+  type DSL[Response] = Free[Command, Response]
+
   sealed trait Command[Response] {
     def cardAuthorizationId: CardAuthorizationId
+    def lift: DSL[Response] = Free.liftF(this)
+  }
+  object Command {
+    def createCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId): DSL[AggregateResponse[CreateCardAuthorizationRejection]] =
+      CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId).lift
   }
   case class CreateCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId) extends Command[AggregateResponse[CreateCardAuthorizationRejection]]
   case class DeclineCardAuthorization(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) extends Command[AggregateResponse[DeclineCardAuthorizationRejection]]
@@ -80,22 +88,21 @@ object CardAuthorization {
 
   implicit val name: AggregateName[CardAuthorization] = AggregateName.instance("CardAuthorization")
 
-  implicit def behavior[R0] =
-    new AggregateBehavior[CardAuthorization, Command] {
-      type Event = CardAuthorization.Event
+  implicit object behavior extends AggregateBehavior[CardAuthorization] {
+    type Command[X] = CardAuthorization.Command[X]
+    type Event = CardAuthorization.Event
 
-      override type State = CardAuthorization.State
+    override type State = CardAuthorization.State
+
+    override def handleCommand[Response](a: CardAuthorization)(state: State, command: Command[Response]) =
+      a.handleCommand(state, command)
 
 
-      override def handleCommand[Response](a: CardAuthorization)(state: State, command: Command[Response]): NowOrDeferred[(Response, Seq[Event])] =
-        a.handleCommand(state, command)
+    override def init: State = Initial
 
-
-      override def init(a: CardAuthorization): State = Initial
-
-      override def applyEvent(state: State, event: Event): State =
-        state.applyEvent(event)
-    }
+    override def applyEvent(state: State, event: Event): State =
+      state.applyEvent(event)
+  }
 
   def apply(): CardAuthorization = new CardAuthorization()
 }

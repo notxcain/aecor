@@ -9,8 +9,8 @@ import scala.concurrent.{ExecutionContext, Future}
 trait ProcessBehavior[A] {
   type Event
   type State
-  def init(a: A): State
-  def handleEvent(a: A)(state: State, event: Event): Future[State]
+  def init: State
+  def handleEvent(a: A)(state: State, event: Event): Future[Option[State]]
 }
 
 object ProcessBehavior {
@@ -29,6 +29,8 @@ object ProcessState {
     new EventsourcedState[ProcessState[ProcessBehavior.State], ProcessStateChanged[ProcessBehavior.State]] {
       override def applyEvent(state: ProcessState[ProcessBehavior.State], event: ProcessStateChanged[ProcessBehavior.State]): ProcessState[ProcessBehavior.State] =
         state.copy(state = event.state)
+      override def init: ProcessState[ProcessBehavior.State] =
+        ProcessState(Set.empty, ProcessBehavior.init)
     }
 }
 
@@ -46,7 +48,8 @@ object ProcessEventsourcedBehavior {
     ProcessState[ProcessBehavior.State],
     ProcessStateChanged[ProcessBehavior.State]
     ] =
-    new EventsourcedBehavior[ProcessEventsourcedBehavior[A], ProcessCommand[ProcessBehavior.Event, ?]] {
+    new EventsourcedBehavior[ProcessEventsourcedBehavior[A]] {
+      override type Command[X] =  ProcessCommand[ProcessBehavior.Event, X]
       override type Event = ProcessStateChanged[ProcessBehavior.State]
       override type State = ProcessState[ProcessBehavior.State]
 
@@ -57,14 +60,9 @@ object ProcessEventsourcedBehavior {
             (if (state.processedEvents.contains(id)) {
               Future.successful(Seq.empty)
             } else {
-              ProcessBehavior.handleEvent(a.a)(state.state, event).map { state =>
-                Seq(ProcessStateChanged(state, id))
-              }
+              ProcessBehavior.handleEvent(a.a)(state.state, event)
+              .map(_.map(ProcessStateChanged(_, id)).toList)
             }).map(events => EventHandled(id) -> events)
         }
-
-
-      override def init(a: ProcessEventsourcedBehavior[A]): ProcessState[ProcessBehavior.State] =
-        ProcessState(Set.empty, ProcessBehavior.init(a.a))
     }
 }

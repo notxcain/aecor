@@ -11,5 +11,5 @@ object EventContract {
   def instance[Entity, Event0]: Aux[Entity, Event0] = new EventContract[Entity] {
     type Event = Event0
   }
-  implicit def fromBehavior[A, C[_]](implicit A: AggregateBehavior[A, C]): Aux[A, A.Event] = instance
+  implicit def fromBehavior[A, C[_]](implicit A: AggregateBehavior[A]): Aux[A, A.Event] = instance
 }
