@@ -3,7 +3,7 @@ package aecor.util
 import shapeless.{:+:, ::, CNil, Coproduct, HList, HNil, Inl, Inr}
 
 trait FunctionBuilder[H, Input, +Out] {
-  def apply(handlers: H): Input => Out
+  def apply(f: H): Input => Out
 }
 
 object FunctionBuilder {
@@ -32,13 +32,17 @@ object FunctionBuilder {
         case Inr(r) => tailBuilder(handlers.tail)(r)
       }
     }
+
+  implicit def function[A, B]: FunctionBuilder[A => B, A, B] = new FunctionBuilder[A => B, A, B] {
+    override def apply(handlers: (A) => B): (A) => B = handlers
+  }
 }
 
 trait FunctionBuilderSyntax {
   trait At[A] {
     def apply[Out](f: A => Out): A => Out
   }
-  final def at[A] = new At[A] {
+  final def at[A]: At[A] = new At[A] {
     override def apply[Out](f: (A) => Out): (A) => Out = f
   }
   final def `if`[A, Out](a: A)(o: Out): A => Out = _ => o

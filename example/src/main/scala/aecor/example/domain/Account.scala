@@ -1,15 +1,15 @@
 package aecor.example.domain
 
-import aecor.core.actor.NowOrDeferred
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import aecor.example.domain.Account.State.{Initial, Open}
 import aecor.example.domain.Account.{AccountCredited, AccountOpened, AuthorizeTransaction, CaptureTransaction, CreditAccount, Event, OpenAccount, State, TransactionAuthorized, TransactionCaptured, TransactionVoided, VoidTransaction}
 import io.circe.{Decoder, Encoder}
+import aecor.util.function._
 import io.circe.generic.auto._
-
 import scala.collection.immutable.Seq
+import scala.concurrent.Future
 
 case class AccountId(value: String) extends AnyVal
 
@@ -94,7 +94,7 @@ object Account {
     override type Event = Account.Event
     override type State = Account.State
 
-    override def handleCommand[Response](a: Account)(state: State, command: Command[Response]): NowOrDeferred[(Response, Seq[Event])] =
+    override def handleCommand[Response](a: Account)(state: State, command: Command[Response]): Future[(Response, Seq[Event])] =
       a.handleCommand(command, state)
 
     override def applyEvent(state: State, event: Event): State =
@@ -110,7 +110,7 @@ object Account {
 import aecor.example.domain.Account._
 
 class Account {
-  def handleCommand[R](command: Command[R], state: State): NowOrDeferred[(R, Seq[Event])] =
+  def handleCommand[R](command: Command[R], state: State): Future[(R, Seq[Event])] = Future.successful {
     handle(command, state) {
       case OpenAccount(accountId) => {
         case Initial =>
@@ -124,12 +124,11 @@ class Account {
         case Open(id, balance, holds, transactions) =>
           if (transactions.contains(transactionId)) {
             reject(DuplicateTransaction)
-          } else
-            if (balance > amount) {
-              accept(TransactionAuthorized(id, transactionId, amount))
-            } else {
-              reject(InsufficientFunds)
-            }
+          } else if (balance > amount) {
+            accept(TransactionAuthorized(id, transactionId, amount))
+          } else {
+            reject(InsufficientFunds)
+          }
       }
       case VoidTransaction(_, transactionId) => {
         case Initial =>
@@ -155,4 +154,5 @@ class Account {
           accept(AccountCredited(state.id, transactionId, amount))
       }
     }
+  }
 }

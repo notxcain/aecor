@@ -1,7 +1,6 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.core.actor.NowOrDeferred
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
@@ -9,8 +8,10 @@ import aecor.example.domain.CardAuthorization.{Event, State}
 import cats.free.Free
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
+import aecor.util.function._
 
 import scala.collection.immutable.Seq
+import scala.concurrent.Future
 
 case class TransactionId(value: String) extends AnyVal
 object CardAuthorization {
@@ -115,7 +116,7 @@ case class TerminalId(value: Long) extends AnyVal
 import aecor.example.domain.CardAuthorization._
 
 class CardAuthorization {
-  def handleCommand[Response](state: State, command: Command[Response]): NowOrDeferred[(Response, Seq[Event])] =
+  def handleCommand[Response](state: State, command: Command[Response]): Future[(Response, Seq[Event])] = Future.successful {
     handle(state, command) {
       case Initial => {
         case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
@@ -144,5 +145,5 @@ class CardAuthorization {
         case e: CreateCardAuthorization => reject(AlreadyExists)
       }
     }
-
+  }
 }

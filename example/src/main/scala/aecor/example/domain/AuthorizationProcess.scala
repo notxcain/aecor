@@ -1,6 +1,6 @@
 package aecor.example.domain
 
-import aecor.core.aggregate.AggregateBehavior.syntax._
+import aecor.util.function._
 import aecor.core.aggregate.{AggregateRegionRef, AggregateResponse}
 import aecor.core.message.Correlation
 import aecor.core.process.ProcessBehavior

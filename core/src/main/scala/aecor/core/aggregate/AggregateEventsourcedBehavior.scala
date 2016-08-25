@@ -2,8 +2,7 @@ package aecor.core.aggregate
 
 import java.time.Instant
 
-import aecor.core.actor.NowOrDeferred.{Deferred, Now}
-import aecor.core.actor.{EventsourcedBehavior, EventsourcedState, NowOrDeferred}
+import aecor.core.actor.{EventsourcedBehavior, EventsourcedState}
 import aecor.util._
 
 import scala.collection.immutable.Seq
@@ -44,7 +43,7 @@ trait AggregateBehavior[A] {
   type State
   type Event
 
-  def handleCommand[Response](a: A)(state: State, command: Command[Response]): NowOrDeferred[(Response, Seq[Event])]
+  def handleCommand[Response](a: A)(state: State, command: Command[Response]): Future[(Response, Seq[Event])]
 
   def init: State
 
@@ -55,21 +54,14 @@ object AggregateBehavior {
   type AggregateDecision[Rejection, Event] = (AggregateResponse[Rejection], Seq[Event])
 
   object syntax {
-    def accept[R, E](events: E*): Now[AggregateDecision[R, E]] = Now(AggregateResponse.accepted -> events.toVector)
+    def accept[R, E](events: E*): AggregateDecision[R, E] = AggregateResponse.accepted -> events.toVector
 
-    def reject[R, E](rejection: R): Now[AggregateDecision[R, E]] = Now(AggregateResponse.rejected(rejection) -> Vector.empty)
+    def reject[R, E](rejection: R): AggregateDecision[R, E] = AggregateResponse.rejected(rejection) -> Vector.empty
 
-    def defer[R, E](f: ExecutionContext => Future[AggregateDecision[R, E]]): NowOrDeferred[AggregateDecision[R, E]] = Deferred(f)
-
-    object now {
-      def accept[R, E](events: E*): AggregateDecision[R, E] = AggregateResponse.accepted -> events.toVector
-
-      def reject[R, E](rejection: R): AggregateDecision[R, E] = AggregateResponse.rejected(rejection) -> Vector.empty
+    implicit class AnyOps[A](a: A) {
+      def withEvents[E](events: E*): (A, Seq[E]) = (a, Seq(events: _*))
+      def noEvents[E]: (A, Seq[E]) = (a, Seq.empty)
     }
-
-    implicit def fromNow[A](now: Now[A]): A = now.value
-
-    def handle[A, B, Out](a: A, b: B)(f: A => B => Out): Out = f(a)(b)
   }
 
   type Aux[A, Command0[_], State0, Event0] = AggregateBehavior[A] {
@@ -93,7 +85,7 @@ object AggregateEventsourcedBehavior {
       override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): Future[(R, Seq[Event])] =
         A.handleCommand(a.aggregate)(state, command).map {
           case (x, events) => x -> events.map(event => AggregateEvent(generate[EventId], event, Instant.now()))
-        }.asFuture
+        }
     }
 
 }
