@@ -1,4 +1,4 @@
-package aecor.core.schedule
+package aecor.schedule
 
 import java.time.LocalDateTime
 

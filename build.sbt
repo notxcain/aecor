@@ -42,6 +42,11 @@ lazy val api = project.dependsOn(core)
                .settings(aecorSettings)
                .settings(apiSettings)
 
+lazy val schedule = project.dependsOn(core)
+                    .settings(moduleName := "aecor-schedule")
+                    .settings(aecorSettings)
+                    .settings(scheduleSettings)
+
 lazy val bench = project.dependsOn(core, example)
                  .settings(moduleName := "aecor-bench")
                  .settings(aecorSettings)
@@ -57,7 +62,7 @@ lazy val circe = project.dependsOn(core)
                  .settings(aecorSettings)
                  .settings(circeSettings)
 
-lazy val example = project.dependsOn(core, api, circe)
+lazy val example = project.dependsOn(core, api, circe, schedule)
                    .settings(moduleName := "aecor-example")
                    .settings(aecorSettings)
                    .settings(exampleSettings)
@@ -93,21 +98,16 @@ lazy val coreSettings = Seq(
   ),
 
   libraryDependencies += "org.typelevel" %% "cats" % catsVersion
-) ++
-  PB.protobufSettings ++
-  Seq(
-    version in PB.protobufConfig := "2.6.1",
-    javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
-    scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
-    PB.flatPackage in PB.protobufConfig := true,
-    PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v261" +: args.toArray))
-  )
+) ++ commonProtobufSettings
+
 
 lazy val apiSettings = Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion
   )
 )
+
+lazy val scheduleSettings = commonProtobufSettings
 
 lazy val exampleSettings = Seq(
   libraryDependencies ++= Seq(
@@ -130,6 +130,17 @@ lazy val testingSettings = Seq(
   libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
   libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
 )
+
+
+lazy val commonProtobufSettings =
+  PB.protobufSettings ++
+    Seq(
+      version in PB.protobufConfig := "2.6.1",
+      javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+      scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+      PB.flatPackage in PB.protobufConfig := true,
+      PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v261" +: args.toArray))
+    )
 
 lazy val commonScalacOptions = Seq(
   "-deprecation",
