@@ -25,12 +25,14 @@ case class ProcessEventsourcedBehavior[A](a: A)
 case class ProcessState[A](processedEvents: Set[EventId], state: A)
 
 object ProcessState {
-  implicit def ess[A](implicit ProcessBehavior: ProcessBehavior[A], ec: ExecutionContext) =
-    new EventsourcedState[ProcessState[ProcessBehavior.State], ProcessStateChanged[ProcessBehavior.State]] {
-      override def applyEvent(state: ProcessState[ProcessBehavior.State], event: ProcessStateChanged[ProcessBehavior.State]): ProcessState[ProcessBehavior.State] =
+  implicit def ess[A, Event, State]
+  (implicit A: ProcessBehavior.Aux[A, Event, State])
+  : EventsourcedState[ProcessState[State], ProcessStateChanged[State]] =
+    new EventsourcedState[ProcessState[State], ProcessStateChanged[State]] {
+      override def applyEvent(state: ProcessState[State], event: ProcessStateChanged[State]): ProcessState[State] =
         state.copy(state = event.state)
-      override def init: ProcessState[ProcessBehavior.State] =
-        ProcessState(Set.empty, ProcessBehavior.init)
+      override def init: ProcessState[State] =
+        ProcessState(Set.empty, A.init)
     }
 }
 
@@ -41,26 +43,26 @@ case class ProcessStateChanged[A](state: A, causedBy: EventId)
 
 object ProcessEventsourcedBehavior {
 
-  implicit def esb[A](implicit ProcessBehavior: ProcessBehavior[A], ec: ExecutionContext):
+  implicit def esb[A, Event0, State0](implicit A: ProcessBehavior.Aux[A, Event0, State0], ec: ExecutionContext):
   EventsourcedBehavior.Aux[
     ProcessEventsourcedBehavior[A],
-    ProcessCommand[ProcessBehavior.Event, ?],
-    ProcessState[ProcessBehavior.State],
-    ProcessStateChanged[ProcessBehavior.State]
+    ProcessCommand[Event0, ?],
+    ProcessState[State0],
+    ProcessStateChanged[State0]
     ] =
     new EventsourcedBehavior[ProcessEventsourcedBehavior[A]] {
-      override type Command[X] =  ProcessCommand[ProcessBehavior.Event, X]
-      override type Event = ProcessStateChanged[ProcessBehavior.State]
-      override type State = ProcessState[ProcessBehavior.State]
+      override type Command[X] =  ProcessCommand[Event0, X]
+      override type Event = ProcessStateChanged[State0]
+      override type State = ProcessState[State0]
 
 
-      override def handleCommand[R](a: ProcessEventsourcedBehavior[A])(state: ProcessState[ProcessBehavior.State], command: ProcessCommand[ProcessBehavior.Event, R]) =
+      override def handleCommand[R](a: ProcessEventsourcedBehavior[A])(state: State, command: Command[R]) =
         command match {
           case HandleEvent(id, event) =>
             (if (state.processedEvents.contains(id)) {
               Future.successful(Seq.empty)
             } else {
-              ProcessBehavior.handleEvent(a.a)(state.state, event)
+              A.handleEvent(a.a)(state.state, event)
               .map(_.map(ProcessStateChanged(_, id)).toList)
             }).map(events => EventHandled(id) -> events)
         }

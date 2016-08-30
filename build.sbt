@@ -5,6 +5,8 @@ lazy val buildSettings = Seq(
   scalaVersion := "2.11.8"
 )
 
+scalaOrganization := "org.typelevel"
+
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
@@ -15,7 +17,6 @@ lazy val commonSettings = Seq(
     "com.github.mpilquist" %% "simulacrum" % "0.7.0",
     "org.typelevel" %% "machinist" % "0.4.1",
     compilerPlugin("org.spire-math" %% "kind-projector" % "0.6.3"),
-    compilerPlugin("com.milessabin" % "si2712fix-plugin" % "1.1.0" cross CrossVersion.full),
     compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
   ),
   parallelExecution in Test := false,
@@ -61,15 +62,16 @@ lazy val example = project.dependsOn(core, api, circe)
                    .settings(aecorSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.0-M2"
+val circeVersion = "0.5.0-M3"
 val akkaVersion = "2.4.9"
 val reactiveKafka = "0.11-RC1"
 val akkaPersistenceCassandra = "0.17"
-val catsVersion = "0.6.0"
-val akkaHttpJson = "1.8.0"
+val catsVersion = "0.7.0"
+val akkaHttpJson = "1.9.0"
 
-lazy val scalacheckVersion = "1.13.0"
-val shapelessVersion = "2.3.1"
+lazy val scalacheckVersion = "1.13.2"
+lazy val scalatestVersion = "3.0.0"
+val shapelessVersion = "2.3.2"
 
 def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
 
@@ -125,7 +127,7 @@ lazy val circeSettings = Seq(
 
 lazy val testingSettings = Seq(
   libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion,
-  libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0-RC1" % Test,
+  libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
   libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
 )
 
