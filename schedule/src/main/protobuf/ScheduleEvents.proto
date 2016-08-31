@@ -1,4 +1,6 @@
 package aecor.schedule.serialization.protobuf;
+
+option java_package = "aecor.schedule.serialization.protobuf.msg";
 option optimize_for = SPEED;
 
 message ScheduleEntryAdded {

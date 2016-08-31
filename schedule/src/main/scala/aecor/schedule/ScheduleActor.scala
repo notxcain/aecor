@@ -33,10 +33,10 @@ object ScheduleActorSupervisor {
       ExtractShardId(c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), numberOfShards)
   }
 
-  def props(entityName: String): Props = Props(new ScheduleActorSupervisor(entityName))
+  def props(entityName: String, tickInterval: FiniteDuration): Props = Props(new ScheduleActorSupervisor(entityName, tickInterval))
 }
 
-class ScheduleActorSupervisor(entityName: String) extends Actor {
+class ScheduleActorSupervisor(entityName: String, tickInterval: FiniteDuration) extends Actor {
 
   implicit val materializer = ActorMaterializer(ActorMaterializerSettings(context.system), "ScheduleActorSupervisor")
 
@@ -48,7 +48,7 @@ class ScheduleActorSupervisor(entityName: String) extends Actor {
 
   val worker: ActorRef = context.actorOf(ScheduleActor.props(entityName, scheduleName, timeBucket), "worker")
 
-  val tickControl = Source.tick(0.seconds, 1.second, NotUsed).map(_ => FireDueEntries(scheduleName, LocalDateTime.now())).toMat(Sink.actorRef(worker, Done))(Keep.left).run()
+  val tickControl = Source.tick(0.seconds, tickInterval, NotUsed).map(_ => FireDueEntries(scheduleName, LocalDateTime.now())).toMat(Sink.actorRef(worker, Done))(Keep.left).run()
 
   @scala.throws[Exception](classOf[Exception])
   override def preRestart(reason: Throwable, message: Option[Any]): Unit = {

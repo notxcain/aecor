@@ -1,4 +1,4 @@
-package aecor.schedule.serialization.protobuf
+package aecor.schedule.protobuf
 
 import aecor.core.serialization.akka.CodecSerializer
 import aecor.schedule.ScheduleEvent

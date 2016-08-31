@@ -6,15 +6,27 @@ import aecor.core.aggregate.{AggregateEvent, EventId}
 import aecor.core.serialization.akka.{Codec, CodecSerializer, SerializationHelper}
 import aecor.core.serialization.{protobuf => pb}
 import akka.actor.ExtendedActorSystem
-import akka.serialization.SerializationExtension
+import akka.serialization.{Serialization, SerializationExtension}
 import com.google.protobuf.ByteString
 
 import scala.util.Try
 
 class AggregateEventCodec(actorSystem: ExtendedActorSystem) extends Codec[AggregateEvent[AnyRef]] {
 
-  lazy val serialization = SerializationExtension(actorSystem)
-  lazy val helper = SerializationHelper(serialization)
+
+  @volatile
+  private var ser: Serialization = _
+  def serialization: Serialization = {
+    if (ser == null) ser = SerializationExtension(actorSystem)
+    ser
+  }
+
+  @volatile
+  private var hel: SerializationHelper = _
+  def helper: SerializationHelper = {
+    if (hel == null) hel = SerializationHelper(serialization)
+    hel
+  }
 
   override def manifest(o: AggregateEvent[AnyRef]): String = ""
 

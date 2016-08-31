@@ -53,7 +53,7 @@ class AppActor extends Actor with ActorLogging {
   val scheduleEntityName = "Schedule3"
 
 
-  val schedule: Schedule = Schedule(system, scheduleEntityName, 1.day)
+  val schedule: Schedule = Schedule(system, scheduleEntityName, 1.day, 10.seconds)
   val scheduleJournal: ScheduleJournal = ScheduleJournal(system, cassandraReadJournal)
 
   journal.committableEventSourceFor[Account](consumerId = "kafka_replicator").to(Kafka.eventSink(producerSettings, "Account")).run()

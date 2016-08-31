@@ -16,14 +16,14 @@ trait Schedule {
 }
 
 object Schedule {
-  def apply(system: ActorSystem, entityName: String, bucketLength: FiniteDuration): Schedule =
-    new ShardedSchedule(system, entityName, bucketLength)
+  def apply(system: ActorSystem, entityName: String, bucketLength: FiniteDuration, tickInterval: FiniteDuration): Schedule =
+    new ShardedSchedule(system, entityName, bucketLength, tickInterval)
 }
 
-class ShardedSchedule(system: ActorSystem, entityName: String, bucketLength: FiniteDuration) extends Schedule {
+class ShardedSchedule(system: ActorSystem, entityName: String, bucketLength: FiniteDuration, tickInterval: FiniteDuration) extends Schedule {
   val scheduleRegion = ClusterSharding(system).start(
     typeName = entityName,
-    entityProps = ScheduleActorSupervisor.props(entityName),
+    entityProps = ScheduleActorSupervisor.props(entityName, tickInterval),
     settings = ClusterShardingSettings(system).withRememberEntities(true),
     extractEntityId = ScheduleActorSupervisor.extractEntityId(bucketLength),
     extractShardId = ScheduleActorSupervisor.extractShardId(10, bucketLength)
