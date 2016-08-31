@@ -35,7 +35,7 @@ lazy val core = project
                 .settings(moduleName := "aecor-core")
                 .settings(aecorSettings)
                 .settings(coreSettings)
-                .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test")
+                .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion % "test")
 
 lazy val api = project.dependsOn(core)
                .settings(moduleName := "aecor-api")
@@ -52,7 +52,7 @@ lazy val bench = project.dependsOn(core, example)
                  .settings(aecorSettings)
                  .enablePlugins(JmhPlugin)
 
-lazy val tests = project.dependsOn(core, example)
+lazy val tests = project.dependsOn(core, example, schedule)
                  .settings(moduleName := "aecor-tests")
                  .settings(aecorSettings)
                  .settings(testingSettings)
@@ -74,9 +74,10 @@ val akkaPersistenceCassandra = "0.17"
 val catsVersion = "0.7.0"
 val akkaHttpJson = "1.9.0"
 
-lazy val scalacheckVersion = "1.13.2"
-lazy val scalatestVersion = "3.0.0"
-val shapelessVersion = "2.3.2"
+lazy val scalaCheckVersion = "1.13.2"
+lazy val scalaTestVersion = "3.0.0"
+lazy val scalaCheckShapelessVersion = "1.1.1"
+lazy val shapelessVersion = "2.3.2"
 
 def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
 
@@ -126,9 +127,12 @@ lazy val circeSettings = Seq(
 )
 
 lazy val testingSettings = Seq(
-  libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion,
-  libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
-  libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
+  libraryDependencies ++= Seq(
+    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test
+    ,"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+    ,"com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
+    ,"com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+  )
 )
 
 

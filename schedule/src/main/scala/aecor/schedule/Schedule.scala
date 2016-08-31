@@ -12,7 +12,7 @@ import akka.util.Timeout
 import scala.concurrent.Future
 import scala.concurrent.duration._
 trait Schedule {
-  def addScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime): Future[Done]
+  def addScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime): Future[Done]
 }
 
 object Schedule {
@@ -31,6 +31,6 @@ class ShardedSchedule(system: ActorSystem, entityName: String, bucketLength: Fin
 
   implicit val askTimeout: Timeout = Timeout(30.seconds)
 
-  override def addScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime): Future[Done] =
-    (scheduleRegion ? AddScheduleEntry(scheduleName, entryId, correlationId, payload, dueDate)).mapTo[Done]
+  override def addScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime): Future[Done] =
+    (scheduleRegion ? AddScheduleEntry(scheduleName, entryId, correlationId, dueDate)).mapTo[Done]
 }

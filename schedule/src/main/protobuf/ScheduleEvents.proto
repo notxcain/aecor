@@ -5,13 +5,11 @@ message ScheduleEntryAdded {
   required string scheduleName = 1;
   required string entryId = 2;
   required string correlationId = 3;
-  optional bytes payload = 4;
-  required int64 dueToInEpochSeconds = 5;
+  required int64 dueToInEpochMillisUTC = 4;
 }
 
 message ScheduleEntryFired {
   required string scheduleName = 1;
   required string entryId = 2;
   required string correlationId = 3;
-  optional bytes payload = 4;
 }
