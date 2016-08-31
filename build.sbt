@@ -28,7 +28,7 @@ lazy val aecorSettings = buildSettings ++ commonSettings
 lazy val aecor = project.in(file("."))
                  .settings(moduleName := "aecor")
                  .settings(aecorSettings)
-                 .aggregate(core, api, circe, example, tests, bench)
+                 .aggregate(core, api, circe, example, schedule, tests, bench)
                  .dependsOn(core, api, circe, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
 lazy val core = project
