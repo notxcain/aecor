@@ -8,7 +8,7 @@ import aecor.core.process.ProcessSyntax._
 import aecor.example.domain.Account.{AuthorizeTransaction, VoidTransaction}
 import aecor.example.domain.AuthorizationProcess.{State, _}
 import aecor.example.domain.CardAuthorization.{AcceptCardAuthorization, AlreadyAccepted, AlreadyDeclined, CardAuthorizationCreated, DeclineCardAuthorization, DoesNotExists}
-import cats.std.future._
+import cats.instances.future._
 import scala.concurrent.{ExecutionContext, Future}
 
 class AuthorizationProcess(accounts: AggregateRegionRef[Account.Command], cardAuthorizations: AggregateRegionRef[CardAuthorization.Command])(implicit ec: ExecutionContext) {

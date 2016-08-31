@@ -1,4 +1,4 @@
-package aecor.core.schedule
+package aecor.schedule
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -7,6 +7,7 @@ import java.time.{LocalDateTime, ZoneId}
 import aecor.core.actor._
 import aecor.core.message.Correlation.CorrelationId
 import aecor.core.message.ExtractShardId
+import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import akka.actor.{Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId, Passivate}
 import akka.stream.scaladsl.{Keep, Sink, Source}
@@ -78,29 +79,23 @@ sealed trait ScheduleEvent {
   def scheduleName: String
 }
 
-case class ScheduleCreated(scheduleName: String) extends ScheduleEvent
+object ScheduleEvent {
+  case class ScheduleEntryAdded(scheduleName: String, entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime) extends ScheduleEvent
 
-case class ScheduleEntryAdded(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime) extends ScheduleEvent
-
-case class ScheduleEntryFired(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload) extends ScheduleEvent
+  case class ScheduleEntryFired(scheduleName: String, entryId: String, correlationId: CorrelationId) extends ScheduleEvent
+}
 
 sealed trait ScheduleCommand[_]
 
-case class AddScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime) extends ScheduleCommand[Done]
+case class AddScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime) extends ScheduleCommand[Done]
 
 private[schedule] case class FireDueEntries(scheduleName: String, now: LocalDateTime) extends ScheduleCommand[Done] with NotInfluenceReceiveTimeout
 
-case class Payload(value: Option[Array[Byte]]) extends AnyVal
+private[aecor] case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
 
-object Payload {
-  def empty: Payload = Payload(None)
-}
-
-private[aecor] case class ScheduleEntry(id: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime)
-
-private[aecor] case class ScheduleState(entries: List[ScheduleEntry], initialized: Boolean) {
-  def addEntry(entryId: String, correlationId: CorrelationId, payload: Payload, dueDate: LocalDateTime): ScheduleState =
-    copy(entries = ScheduleEntry(entryId, correlationId, payload, dueDate) :: entries)
+private[aecor] case class ScheduleState(entries: List[ScheduleEntry]) {
+  def addEntry(entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime): ScheduleState =
+    copy(entries = ScheduleEntry(entryId, correlationId, dueDate) :: entries)
 
   def removeEntry(entryId: String): ScheduleState =
     copy(entries = entries.filterNot(_.id == entryId))
@@ -108,13 +103,9 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], initialize
   def findEntriesDueTo(date: LocalDateTime): List[ScheduleEntry] =
     entries.filter(_.dueDate.isBefore(date))
 
-  def initialize: ScheduleState = copy(initialized = true)
-
   def applyEvent(event: ScheduleEvent): ScheduleState = event match {
-    case ScheduleCreated(scheduleName) =>
-      initialize
-    case ScheduleEntryAdded(scheduleName, entryId, correlationId, payload, dueDate) =>
-      addEntry(entryId, correlationId, payload, dueDate)
+    case ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate) =>
+      addEntry(entryId, correlationId, dueDate)
     case e: ScheduleEntryFired =>
       removeEntry(e.entryId)
   }
@@ -125,21 +116,18 @@ private[aecor] object ScheduleState {
     override def applyEvent(a: ScheduleState, e: ScheduleEvent): ScheduleState =
       a.applyEvent(e)
     override def init: ScheduleState =
-      ScheduleState(List.empty, initialized = false)
+      ScheduleState(List.empty)
   }
 }
 
 class ScheduleBehavior {
   final def handleCommand[R](state: ScheduleState, command: ScheduleCommand[R]): (R, Vector[ScheduleEvent]) = command match {
-    case AddScheduleEntry(scheduleName, entryId, correlationId, payload, dueDate) =>
-      if (state.initialized) {
-        Done -> Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, payload, dueDate))
-      } else {
-        Done -> Vector(ScheduleCreated(scheduleName), ScheduleEntryAdded(scheduleName, entryId, correlationId, payload, dueDate))
-      }
+    case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
+      Done -> Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate))
+
     case FireDueEntries(scheduleName, now) =>
       Done -> state.findEntriesDueTo(now).take(100)
-      .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId, entry.payload))
+      .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId))
       .toVector
   }
 }

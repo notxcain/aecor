@@ -3,7 +3,7 @@ package aecor.example
 import aecor.api.Router.ops._
 import aecor.core.aggregate._
 import aecor.core.process.{HandleEvent, ProcessSharding}
-import aecor.core.schedule._
+import aecor.schedule._
 import aecor.core.serialization.CirceSupport._
 import aecor.core.serialization.kafka.EventEnvelopeSerializer
 import aecor.core.streaming._

@@ -5,6 +5,8 @@ lazy val buildSettings = Seq(
   scalaVersion := "2.11.8"
 )
 
+scalaOrganization := "org.typelevel"
+
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
@@ -15,7 +17,6 @@ lazy val commonSettings = Seq(
     "com.github.mpilquist" %% "simulacrum" % "0.7.0",
     "org.typelevel" %% "machinist" % "0.4.1",
     compilerPlugin("org.spire-math" %% "kind-projector" % "0.6.3"),
-    compilerPlugin("com.milessabin" % "si2712fix-plugin" % "1.1.0" cross CrossVersion.full),
     compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
   ),
   parallelExecution in Test := false,
@@ -34,19 +35,24 @@ lazy val core = project
                 .settings(moduleName := "aecor-core")
                 .settings(aecorSettings)
                 .settings(coreSettings)
-                .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion % "test")
+                .settings(libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion % "test")
 
 lazy val api = project.dependsOn(core)
                .settings(moduleName := "aecor-api")
                .settings(aecorSettings)
                .settings(apiSettings)
 
+lazy val schedule = project.dependsOn(core)
+                    .settings(moduleName := "aecor-schedule")
+                    .settings(aecorSettings)
+                    .settings(scheduleSettings)
+
 lazy val bench = project.dependsOn(core, example)
                  .settings(moduleName := "aecor-bench")
                  .settings(aecorSettings)
                  .enablePlugins(JmhPlugin)
 
-lazy val tests = project.dependsOn(core, example)
+lazy val tests = project.dependsOn(core, example, schedule)
                  .settings(moduleName := "aecor-tests")
                  .settings(aecorSettings)
                  .settings(testingSettings)
@@ -56,20 +62,22 @@ lazy val circe = project.dependsOn(core)
                  .settings(aecorSettings)
                  .settings(circeSettings)
 
-lazy val example = project.dependsOn(core, api, circe)
+lazy val example = project.dependsOn(core, api, circe, schedule)
                    .settings(moduleName := "aecor-example")
                    .settings(aecorSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.0-M2"
+val circeVersion = "0.5.0-M3"
 val akkaVersion = "2.4.9"
 val reactiveKafka = "0.11-RC1"
 val akkaPersistenceCassandra = "0.17"
-val catsVersion = "0.6.0"
-val akkaHttpJson = "1.8.0"
+val catsVersion = "0.7.0"
+val akkaHttpJson = "1.9.0"
 
-lazy val scalacheckVersion = "1.13.0"
-val shapelessVersion = "2.3.1"
+lazy val scalaCheckVersion = "1.13.2"
+lazy val scalaTestVersion = "3.0.0"
+lazy val scalaCheckShapelessVersion = "1.1.1"
+lazy val shapelessVersion = "2.3.2"
 
 def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
 
@@ -91,21 +99,16 @@ lazy val coreSettings = Seq(
   ),
 
   libraryDependencies += "org.typelevel" %% "cats" % catsVersion
-) ++
-  PB.protobufSettings ++
-  Seq(
-    version in PB.protobufConfig := "2.6.1",
-    javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
-    scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
-    PB.flatPackage in PB.protobufConfig := true,
-    PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v261" +: args.toArray))
-  )
+) ++ commonProtobufSettings
+
 
 lazy val apiSettings = Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion
   )
 )
+
+lazy val scheduleSettings = commonProtobufSettings
 
 lazy val exampleSettings = Seq(
   libraryDependencies ++= Seq(
@@ -124,10 +127,24 @@ lazy val circeSettings = Seq(
 )
 
 lazy val testingSettings = Seq(
-  libraryDependencies += "org.scalacheck" %% "scalacheck" % scalacheckVersion,
-  libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.0-RC1" % Test,
-  libraryDependencies += "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
+  libraryDependencies ++= Seq(
+    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test
+    ,"org.scalatest" %% "scalatest" % scalaTestVersion % Test
+    ,"com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
+    ,"com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+  )
 )
+
+
+lazy val commonProtobufSettings =
+  PB.protobufSettings ++
+    Seq(
+      version in PB.protobufConfig := "2.6.1",
+      javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+      scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+      PB.flatPackage in PB.protobufConfig := true,
+      PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v261" +: args.toArray))
+    )
 
 lazy val commonScalacOptions = Seq(
   "-deprecation",

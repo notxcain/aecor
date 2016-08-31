@@ -1,4 +1,4 @@
-package aecor.core.schedule
+package aecor.schedule
 
 import aecor.core.streaming.{CassandraReadJournalExtension, CommittableJournalEntry}
 import akka.NotUsed
