@@ -67,7 +67,7 @@ lazy val example = project.dependsOn(core, api, circe, schedule)
                    .settings(aecorSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.0-M3"
+val circeVersion = "0.5.0"
 val akkaVersion = "2.4.9"
 val reactiveKafka = "0.11-RC1"
 val akkaPersistenceCassandra = "0.17"
