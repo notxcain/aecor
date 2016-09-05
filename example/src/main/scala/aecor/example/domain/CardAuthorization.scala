@@ -1,6 +1,7 @@
 package aecor.example.domain
 import java.util.UUID
 
+import aecor.core.aggregate.AggregateBehavior.AggregateResponse
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation

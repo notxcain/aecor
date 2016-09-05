@@ -1,5 +1,6 @@
 package aecor.example.domain
 
+import aecor.core.aggregate.AggregateBehavior.AggregateResponse
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
@@ -8,6 +9,7 @@ import aecor.example.domain.Account.{AccountCredited, AccountOpened, AuthorizeTr
 import io.circe.{Decoder, Encoder}
 import aecor.util.function._
 import io.circe.generic.auto._
+
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
 

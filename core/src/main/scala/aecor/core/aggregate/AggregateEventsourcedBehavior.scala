@@ -3,8 +3,8 @@ package aecor.core.aggregate
 import java.time.Instant
 
 import aecor.core.actor.{EventsourcedBehavior, EventsourcedState}
-import aecor.core.aggregate.AggregateResponse.{Accepted, Rejected}
 import aecor.util._
+import akka.Done
 import cats.data.Xor
 
 import scala.collection.immutable.Seq
@@ -27,23 +27,6 @@ object AggregateEvent {
     }
 }
 
-sealed trait AggregateResponse[+Rejection] {
-  def toXor: Xor[Rejection, Unit] = this match {
-    case Accepted => Xor.right(())
-    case Rejected(rejection) => Xor.left(rejection)
-  }
-}
-
-object AggregateResponse {
-  def accepted[R]: AggregateResponse[R] = Accepted
-
-  def rejected[R](rejection: R): AggregateResponse[R] = Rejected(rejection)
-
-  case object Accepted extends AggregateResponse[Nothing]
-
-  case class Rejected[+Rejection](rejection: Rejection) extends AggregateResponse[Rejection]
-}
-
 trait AggregateBehavior[A] {
   type Command[_]
   type State
@@ -57,12 +40,14 @@ trait AggregateBehavior[A] {
 }
 
 object AggregateBehavior {
-  type AggregateDecision[Rejection, Event] = (AggregateResponse[Rejection], Seq[Event])
+  type AggregateResponse[+Rejection] = Xor[Rejection, Done]
+
+  type AggregateDecision[+Rejection, +Event] = (AggregateResponse[Rejection], Seq[Event])
 
   object syntax {
-    def accept[R, E](events: E*): AggregateDecision[R, E] = AggregateResponse.accepted -> events.toVector
+    def accept[R, E](events: E*): AggregateDecision[R, E] = Xor.right(Done) -> events.toVector
 
-    def reject[R, E](rejection: R): AggregateDecision[R, E] = AggregateResponse.rejected(rejection) -> Vector.empty
+    def reject[R, E](rejection: R): AggregateDecision[R, E] = Xor.left(rejection) -> Vector.empty
 
     implicit class AnyOps[A](a: A) {
       def withEvents[E](events: E*): (A, Seq[E]) = (a, Seq(events: _*))

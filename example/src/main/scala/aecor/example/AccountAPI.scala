@@ -20,14 +20,14 @@ class AccountAPI(account: AggregateRegionRef[Account.Command]) {
     case DTO.OpenAccount(accountId) =>
       account
       .ask(Account.OpenAccount(AccountId(accountId)))
-      .map(_.toXor.map(_ => Done).leftMap(_.toString))
+      .map(_.leftMap(_.toString))
   }
 
   def creditAccount(dto: DTO.CreditAccount)(implicit ec: ExecutionContext): Future[String Xor Done] = dto match {
     case DTO.CreditAccount(accountId, transactionId, amount) =>
       account
       .ask(Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
-      .map(_.toXor.map(_ => Done).leftMap(_.toString))
+      .map(_.leftMap(_.toString))
   }
 }
 

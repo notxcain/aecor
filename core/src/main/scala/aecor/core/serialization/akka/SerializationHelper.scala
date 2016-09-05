@@ -1,14 +1,14 @@
 package aecor.core.serialization.akka
 
+import aecor.core.serialization.protobuf.SerializedObject
 import akka.persistence.PersistentRepr
 import akka.serialization.{Serialization, SerializerWithStringManifest}
+import com.google.protobuf.ByteString
 
 import scala.util.Try
 
-case class SerializedRepr(serializerId: Int, manifest: String, bytes: Array[Byte])
-
 class SerializationHelper(serialization: Serialization) {
-  def serialize(a: AnyRef): SerializedRepr = {
+  def serialize(a: AnyRef): SerializedObject = {
     val serializer = serialization.findSerializerFor(a)
     val serManifest = serializer match {
       case ser2: SerializerWithStringManifest ⇒
@@ -17,10 +17,10 @@ class SerializationHelper(serialization: Serialization) {
         if (serializer.includeManifest) a.getClass.getName
         else PersistentRepr.Undefined
     }
-    SerializedRepr(serializer.identifier, serManifest, serializer.toBinary(a))
+    SerializedObject(serializer.identifier, serManifest, ByteString.copyFrom(serializer.toBinary(a)))
   }
-  def deserialize(repr: SerializedRepr): Try[AnyRef] = {
-    serialization.deserialize(repr.bytes, repr.serializerId, repr.manifest)
+  def deserialize(repr: SerializedObject): Try[AnyRef] = {
+    serialization.deserialize(repr.payload.toByteArray, repr.serializerId, repr.manifest)
   }
 }
 

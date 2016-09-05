@@ -1,7 +1,7 @@
 package aecor.example
 
 import aecor.api.Router
-import aecor.core.aggregate.{AggregateRegionRef,AggregateResponse}
+import aecor.core.aggregate.AggregateRegionRef
 import aecor.example.AuthorizePaymentAPI._
 import aecor.example.domain.CardAuthorization.{CardAuthorizationAccepted, CardAuthorizationDeclined, CreateCardAuthorization}
 import aecor.example.domain._
@@ -37,8 +37,8 @@ class AuthorizePaymentAPI(authorization: AggregateRegionRef[CardAuthorization.Co
         authorization
         .ask(command)
         .flatMap {
-          case AggregateResponse.Rejected(rejection) => Future.successful(Xor.left(rejection))
-          case AggregateResponse.Accepted => observer.result.map(Xor.right)
+          case Xor.Left(rejection) => Future.successful(Xor.left(rejection))
+          case _ => observer.result.map(Xor.right)
         }.map { x =>
           log.debug("Command [{}] processed with result [{}] in [{}]", command, x, (System.nanoTime() - start) / 1000000)
           x
