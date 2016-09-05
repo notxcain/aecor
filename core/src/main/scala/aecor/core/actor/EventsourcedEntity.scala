@@ -24,11 +24,6 @@ trait EventsourcedBehavior[A] {
   def handleCommand[Response](a: A)(state: State, command: Command[Response]): Future[EventsourcedBehavior.Result[Response, Event]]
 }
 
-trait EventsourcedState[State, Event] {
-  def init: State
-  def applyEvent(state: State, event: Event): State
-}
-
 object EventsourcedBehavior {
   type Aux[A, Command0[_], State0, Event0] = EventsourcedBehavior[A] {
     type Command[X] = Command0[X]
@@ -37,6 +32,11 @@ object EventsourcedBehavior {
   }
 
   type Result[Response, Event] = (Response, Seq[Event])
+}
+
+trait EventsourcedState[State, Event] {
+  def init: State
+  def applyEvent(state: State, event: Event): State
 }
 
 sealed trait SnapshotPolicy {
@@ -145,14 +145,12 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
   override def receiveCommand: Receive = receivePassivationMessages.orElse(receiveCommandMessage)
 
-  def receiveCommandMessage: Receive = {
+  private def receiveCommandMessage: Receive = {
     case command if CommandClass.runtimeClass.isAssignableFrom(command.getClass) =>
       handleCommand(command.asInstanceOf[Command[Any]])
-    case other =>
-      log.warning("[{}] Unknown message [{}]", persistenceId, other)
   }
 
-  def handleCommand(command: Command[Any]) = {
+  private def handleCommand(command: Command[Any]) = {
     log.debug("[{}] Received command [{}]", persistenceId, command)
     Behavior.handleCommand(behavior)(state, command).map(HandleResult).pipeTo(self)(sender)
     context.become {
@@ -168,10 +166,9 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
       case _ =>
         stash()
     }
-
   }
 
-  def runResult(result: EventsourcedBehavior.Result[Any, Event]): Unit = {
+  private def runResult(result: EventsourcedBehavior.Result[Any, Event]): Unit = {
     val (response, events) = result
     log.debug("[{}] Command handler result [{}]", persistenceId, result)
     val envelopes = events.map(Tagged(_, tags))
@@ -189,32 +186,33 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
     }
   }
 
-  def applyEvent(event: Event): Unit = {
+
+  private def applyEvent(event: Event): Unit = {
     state = State.applyEvent(state, event)
     log.debug("[{}] New state [{}]", persistenceId, state)
     eventCount += 1
   }
 
-  protected def shouldPassivate: Boolean = true
-
-  private def setIdleTimeout(): Unit = {
-    log.debug("Setting idle timeout to [{}]", idleTimeout)
-    context.setReceiveTimeout(idleTimeout)
-  }
-
   private def receivePassivationMessages: Receive = {
-    case ReceiveTimeout ⇒
+    case ReceiveTimeout =>
       if (shouldPassivate) {
         passivate()
       } else {
         setIdleTimeout()
       }
-    case EventsourcedEntity.Stop ⇒
+    case EventsourcedEntity.Stop =>
       context.stop(self)
   }
 
+  protected def shouldPassivate: Boolean = true
+
   private def passivate(): Unit = {
-    log.debug("Passivating...")
+    log.debug("[{}] Passivating...", persistenceId)
     context.parent ! ShardRegion.Passivate(EventsourcedEntity.Stop)
+  }
+
+  private def setIdleTimeout(): Unit = {
+    log.debug("[{}], Setting idle timeout to [{}]", persistenceId, idleTimeout)
+    context.setReceiveTimeout(idleTimeout)
   }
 }

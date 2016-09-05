@@ -15,8 +15,6 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.kafka.ProducerSettings
-import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.PersistenceQuery
 import akka.stream.ActorMaterializer
 import org.apache.kafka.common.serialization.StringSerializer
 
@@ -35,9 +33,7 @@ class AppActor extends Actor with ActorLogging {
 
   val config = system.settings.config
 
-  val cassandraReadJournal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
-  val extendedCassandraReadJournal = new CassandraReadJournalExtension(system, cassandraReadJournal)
-  val journal = AggregateJournal(system, cassandraReadJournal)
+  val journal = AggregateJournal(system)
 
   val kafkaAddress = "localhost"
 
@@ -52,9 +48,7 @@ class AppActor extends Actor with ActorLogging {
 
   val scheduleEntityName = "Schedule3"
 
-
   val schedule: Schedule = Schedule(system, scheduleEntityName, 1.day, 10.seconds)
-  val scheduleJournal: ScheduleJournal = ScheduleJournal(system, cassandraReadJournal)
 
   journal.committableEventSourceFor[Account](consumerId = "kafka_replicator").to(Kafka.eventSink(producerSettings, "Account")).run()
   journal.committableEventSourceFor[CardAuthorization](consumerId = "kafka_replicator").to(Kafka.eventSink(producerSettings, "CardAuthorization")).run()

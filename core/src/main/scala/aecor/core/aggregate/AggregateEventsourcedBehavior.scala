@@ -3,7 +3,9 @@ package aecor.core.aggregate
 import java.time.Instant
 
 import aecor.core.actor.{EventsourcedBehavior, EventsourcedState}
+import aecor.core.aggregate.AggregateResponse.{Accepted, Rejected}
 import aecor.util._
+import cats.data.Xor
 
 import scala.collection.immutable.Seq
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,7 +27,12 @@ object AggregateEvent {
     }
 }
 
-sealed trait AggregateResponse[+Rejection]
+sealed trait AggregateResponse[+Rejection] {
+  def toXor: Xor[Rejection, Unit] = this match {
+    case Accepted => Xor.right(())
+    case Rejected(rejection) => Xor.left(rejection)
+  }
+}
 
 object AggregateResponse {
   def accepted[R]: AggregateResponse[R] = Accepted
@@ -35,7 +42,6 @@ object AggregateResponse {
   case object Accepted extends AggregateResponse[Nothing]
 
   case class Rejected[+Rejection](rejection: Rejection) extends AggregateResponse[Rejection]
-
 }
 
 trait AggregateBehavior[A] {

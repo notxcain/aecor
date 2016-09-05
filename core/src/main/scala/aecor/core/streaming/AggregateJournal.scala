@@ -3,10 +3,8 @@ package aecor.core.streaming
 import aecor.core.aggregate._
 import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.stream.scaladsl.Source
 
-import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
 trait AggregateJournal {
@@ -22,6 +20,6 @@ trait AggregateJournal {
 }
 
 object AggregateJournal {
-  def apply(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal)(implicit ec: ExecutionContext): AggregateJournal =
-    new CassandraAggregateJournal(actorSystem, cassandraReadJournal)
+  def apply(actorSystem: ActorSystem): AggregateJournal =
+    new CassandraAggregateJournal(actorSystem)
 }

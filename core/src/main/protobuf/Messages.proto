@@ -22,3 +22,13 @@ message Rejection {
   required bytes payload = 4;
 }
 
+message SerializedObject {
+  required uint32 serializerId = 1;
+  required string manifest = 2;
+  required bytes payload = 3;
+}
+
+message ProcessStateChanged {
+  required string causedBy = 1;
+  required SerializedObject state = 2;
+}

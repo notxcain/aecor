@@ -37,8 +37,11 @@ object ProcessState {
 }
 
 sealed trait ProcessCommand[+E, R]
+
 case class HandleEvent[+Event](id: EventId, event: Event) extends ProcessCommand[Event, EventHandled]
+
 case class EventHandled(causedBy: EventId)
+
 case class ProcessStateChanged[A](state: A, causedBy: EventId)
 
 object ProcessEventsourcedBehavior {

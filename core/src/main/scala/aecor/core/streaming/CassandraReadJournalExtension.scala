@@ -26,9 +26,11 @@ final case class CommittableUUIDOffsetImpl(override val offset: UUID)(committer:
 
 case class CommittableJournalEntry[+A](committableOffset: CommittableUUIDOffset, persistenceId: String, sequenceNr: Long, value: A)
 
-class CassandraReadJournalExtension(actorSystem: ActorSystem, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext) {
+class CassandraReadJournalExtension(actorSystem: ActorSystem, readJournal: CassandraReadJournal) {
 
   def underlying: CassandraReadJournal = readJournal
+
+  implicit val ec: ExecutionContext = actorSystem.dispatcher
 
   val config = actorSystem.settings.config
 
@@ -67,5 +69,6 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem, readJournal: Cassa
 }
 
 object CassandraReadJournalExtension {
-  def apply(actorSystem: ActorSystem, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext): CassandraReadJournalExtension = new CassandraReadJournalExtension(actorSystem, readJournal)
+  def apply(actorSystem: ActorSystem, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext): CassandraReadJournalExtension =
+    new CassandraReadJournalExtension(actorSystem, readJournal)
 }

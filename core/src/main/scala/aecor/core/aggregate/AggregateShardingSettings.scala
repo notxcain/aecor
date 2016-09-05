@@ -2,17 +2,18 @@ package aecor.core.aggregate
 
 import aecor.core.actor.SnapshotPolicy
 import aecor.util.ConfigHelpers._
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
 
 import scala.concurrent.duration._
 
 class AggregateShardingSettings(config: Config) {
+
   val numberOfShards: Int = config.getInt("number-of-shards")
-  val askTimeout: FiniteDuration = config.getMillisDuration("ask-timeout")
   val defaultIdleTimeout: FiniteDuration = config.getMillisDuration("default-idle-timeout")
 
-  def idleTimeout(entityName: String): FiniteDuration = {
-    val key = s"idle-timeout.$entityName"
+  def idleTimeout(name: String): FiniteDuration = {
+    val key = s"idle-timeout.$name"
     if (config.hasPath(key)) config.getMillisDuration(key) else defaultIdleTimeout
   }
 
@@ -28,4 +29,11 @@ class AggregateShardingSettings(config: Config) {
       case "off" ⇒ SnapshotPolicy.Never
       case _     ⇒ SnapshotPolicy.After(config.getInt(path))
     }
+
+  val askTimeout: FiniteDuration = config.getMillisDuration("ask-timeout")
+}
+
+object AggregateShardingSettings {
+  def fromSystem(system: ActorSystem): AggregateShardingSettings =
+    new AggregateShardingSettings(system.settings.config.getConfig("aecor.aggregate"))
 }

@@ -1,7 +1,7 @@
 package aecor.example
 
 import aecor.api.Router
-import aecor.core.aggregate.{AggregateRegionRef, AggregateResponse}
+import aecor.core.aggregate.{AggregateRegionRef}
 import aecor.example.domain.{Account, AccountId, Amount, TransactionId}
 import akka.Done
 import akka.http.scaladsl.model.StatusCodes
@@ -20,24 +20,14 @@ class AccountAPI(account: AggregateRegionRef[Account.Command]) {
     case DTO.OpenAccount(accountId) =>
       account
       .ask(Account.OpenAccount(AccountId(accountId)))
-      .flatMap {
-        case AggregateResponse.Accepted =>
-          Future.successful(Xor.Right(Done: Done))
-        case AggregateResponse.Rejected(rejection) =>
-          Future.successful(Xor.Left(rejection.toString))
-      }
+      .map(_.toXor.map(_ => Done).leftMap(_.toString))
   }
 
   def creditAccount(dto: DTO.CreditAccount)(implicit ec: ExecutionContext): Future[String Xor Done] = dto match {
     case DTO.CreditAccount(accountId, transactionId, amount) =>
       account
       .ask(Account.CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount)))
-      .flatMap {
-        case AggregateResponse.Accepted =>
-          Future.successful(Xor.Right(Done: Done))
-        case AggregateResponse.Rejected(rejection) =>
-          Future.successful(Xor.Left(rejection.toString))
-      }
+      .map(_.toXor.map(_ => Done).leftMap(_.toString))
   }
 }
 

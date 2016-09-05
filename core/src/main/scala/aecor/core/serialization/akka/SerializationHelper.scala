@@ -3,6 +3,8 @@ package aecor.core.serialization.akka
 import akka.persistence.PersistentRepr
 import akka.serialization.{Serialization, SerializerWithStringManifest}
 
+import scala.util.Try
+
 case class SerializedRepr(serializerId: Int, manifest: String, bytes: Array[Byte])
 
 class SerializationHelper(serialization: Serialization) {
@@ -16,6 +18,9 @@ class SerializationHelper(serialization: Serialization) {
         else PersistentRepr.Undefined
     }
     SerializedRepr(serializer.identifier, serManifest, serializer.toBinary(a))
+  }
+  def deserialize(repr: SerializedRepr): Try[AnyRef] = {
+    serialization.deserialize(repr.bytes, repr.serializerId, repr.manifest)
   }
 }
 

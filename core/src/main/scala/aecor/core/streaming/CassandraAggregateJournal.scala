@@ -4,14 +4,15 @@ import aecor.core.aggregate.{AggregateEvent, AggregateName, EventContract}
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
+import akka.persistence.query.PersistenceQuery
 import akka.stream.scaladsl.Source
 
-import scala.concurrent.ExecutionContext
 import scala.reflect.ClassTag
 
-class CassandraAggregateJournal(actorSystem: ActorSystem, cassandraReadJournal: CassandraReadJournal)(implicit ec: ExecutionContext) extends AggregateJournal {
+class CassandraAggregateJournal(system: ActorSystem) extends AggregateJournal {
 
-  val extendedCassandraReadJournal = new CassandraReadJournalExtension(actorSystem, cassandraReadJournal)
+  val cassandraReadJournal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+  val extendedCassandraReadJournal = new CassandraReadJournalExtension(system, cassandraReadJournal)
 
   def committableEventSourceFor[A] = new MkCommittableEventSource[A] {
     override def apply[E](consumerId: String)

@@ -3,16 +3,21 @@ package aecor.schedule
 import java.time.LocalDateTime
 
 import aecor.core.message.Correlation._
-import akka.Done
+import aecor.core.streaming.{CassandraReadJournalExtension, CommittableJournalEntry}
+import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 import akka.pattern.ask
+import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
+import akka.persistence.query.PersistenceQuery
+import akka.stream.scaladsl.Source
 import akka.util.Timeout
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 trait Schedule {
   def addScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime): Future[Done]
+  def committableScheduleEvents(scheduleName: String, consumerId: String): Source[CommittableJournalEntry[ScheduleEvent], NotUsed]
 }
 
 object Schedule {
@@ -31,6 +36,16 @@ class ShardedSchedule(system: ActorSystem, entityName: String, bucketLength: Fin
 
   implicit val askTimeout: Timeout = Timeout(30.seconds)
 
+  val cassandraReadJournal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+  val extendedCassandraReadJournal = new CassandraReadJournalExtension(system, cassandraReadJournal)
+
   override def addScheduleEntry(scheduleName: String, entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime): Future[Done] =
     (scheduleRegion ? AddScheduleEntry(scheduleName, entryId, correlationId, dueDate)).mapTo[Done]
+
+  override def committableScheduleEvents(scheduleName: String, consumerId: String): Source[CommittableJournalEntry[ScheduleEvent], NotUsed] =
+    extendedCassandraReadJournal.committableEventsByTag(entityName, scheduleName + consumerId).collect {
+      case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, e: ScheduleEvent)
+        if e.scheduleName == scheduleName =>
+        m.asInstanceOf[CommittableJournalEntry[ScheduleEvent]]
+    }
 }
