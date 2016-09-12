@@ -25,8 +25,6 @@ final case class CommittableUUIDOffsetImpl(override val offset: UUID)(committer:
   override def commitJavadsl(): CompletionStage[Done] = commitScaladsl().toJava
 }
 
-case class JournalEntry[+A](persistenceId: String, sequenceNr: Long, event: A)
-
 
 trait OffsetStore {
   def getOffset(tag: String, consumerId: String): Future[Option[UUID]]
@@ -50,7 +48,7 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem, offsetStore: Offse
     }.flatMapConcat { case (initialOffset, committer) =>
       readJournal.eventsByTag(tag, initialOffset)
       .map { case UUIDEventEnvelope(offset, persistenceId, sequenceNr, event) =>
-        CommittableUUIDOffsetImpl(offset)(committer) -> JournalEntry(persistenceId, sequenceNr, event)
+        CommittableJournalEntry(CommittableUUIDOffsetImpl(offset)(committer), persistenceId, sequenceNr, event)
       }
     }
   }

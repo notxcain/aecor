@@ -74,7 +74,7 @@ class AppActor extends Actor with ActorLogging {
 
     val source =
       journal.committableEventSourceFor[CardAuthorization](consumerId = "CardAuthorizationProcess").collect {
-        case (offset, JournalEntry(persistenceId, sequenceNr, AggregateEvent(id, event: CardAuthorizationCreated, ts))) =>
+        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: CardAuthorizationCreated, ts)) =>
           ProcessSharding.Message(HandleEvent(id, event), offset)
       }
 
@@ -90,7 +90,7 @@ class AppActor extends Actor with ActorLogging {
   cardAuthorizationProcess.run()
 
   val cardAuthorizationEventStream =
-    new DefaultEventStream(system, journal.committableEventSourceFor[CardAuthorization]("CardAuthorization-API").map(_._2.event.event))
+    new DefaultEventStream(system, journal.committableEventSourceFor[CardAuthorization]("CardAuthorization-API").map(_.value.event))
 
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion, cardAuthorizationEventStream, Logging(system, classOf[AuthorizePaymentAPI]))
