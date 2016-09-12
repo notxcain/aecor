@@ -68,11 +68,11 @@ lazy val example = project.dependsOn(core, api, circe, schedule)
                    .settings(exampleSettings)
 
 val circeVersion = "0.5.0"
-val akkaVersion = "2.4.9"
-val reactiveKafka = "0.11-RC2"
+val akkaVersion = "2.4.10"
+val reactiveKafka = "0.11"
 val akkaPersistenceCassandra = "0.17"
-val catsVersion = "0.7.0"
-val akkaHttpJson = "1.9.0"
+val catsVersion = "0.7.2"
+val akkaHttpJson = "1.10.0"
 
 lazy val scalaCheckVersion = "1.13.2"
 lazy val scalaTestVersion = "3.0.0"
