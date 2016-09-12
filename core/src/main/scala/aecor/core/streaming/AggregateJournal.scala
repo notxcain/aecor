@@ -20,6 +20,6 @@ trait AggregateJournal {
 }
 
 object AggregateJournal {
-  def apply(actorSystem: ActorSystem): AggregateJournal =
-    new CassandraAggregateJournal(actorSystem)
+  def apply(actorSystem: ActorSystem, offsetStore: OffsetStore): AggregateJournal =
+    new CassandraAggregateJournal(actorSystem, offsetStore)
 }

@@ -1,7 +1,6 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.core.aggregate.AggregateBehavior.AggregateResponse
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
@@ -10,6 +9,8 @@ import cats.free.Free
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 import aecor.util.function._
+import akka.Done
+import cats.data.Xor
 
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
@@ -28,13 +29,16 @@ object CardAuthorization {
     def cardAuthorizationId: CardAuthorizationId
     def lift: DSL[Response] = Free.liftF(this)
   }
+
+  type CommandResult[+Rejection] = Xor[Rejection, Done]
+
   object Command {
-    def createCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId): DSL[AggregateResponse[CreateCardAuthorizationRejection]] =
+    def createCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId): DSL[CommandResult[CreateCardAuthorizationRejection]] =
       CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId).lift
   }
-  case class CreateCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId) extends Command[AggregateResponse[CreateCardAuthorizationRejection]]
-  case class DeclineCardAuthorization(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) extends Command[AggregateResponse[DeclineCardAuthorizationRejection]]
-  case class AcceptCardAuthorization(cardAuthorizationId: CardAuthorizationId) extends Command[AggregateResponse[AcceptCardAuthorizationRejection]]
+  case class CreateCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId) extends Command[CommandResult[CreateCardAuthorizationRejection]]
+  case class DeclineCardAuthorization(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) extends Command[CommandResult[DeclineCardAuthorizationRejection]]
+  case class AcceptCardAuthorization(cardAuthorizationId: CardAuthorizationId) extends Command[CommandResult[AcceptCardAuthorizationRejection]]
 
 
   sealed trait Event {

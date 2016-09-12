@@ -1,15 +1,17 @@
 package aecor.example.domain
 
-import aecor.core.aggregate.AggregateBehavior.AggregateResponse
+import java.time.Clock
+
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import aecor.example.domain.Account.State.{Initial, Open}
 import aecor.example.domain.Account.{AccountCredited, AccountOpened, AuthorizeTransaction, CaptureTransaction, CreditAccount, Event, OpenAccount, State, TransactionAuthorized, TransactionCaptured, TransactionVoided, VoidTransaction}
-import io.circe.{Decoder, Encoder}
 import aecor.util.function._
+import akka.Done
+import cats.data.Xor
+import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
-
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
 
@@ -26,15 +28,17 @@ object Account {
     def accountId: AccountId
   }
 
-  case class OpenAccount(accountId: AccountId) extends Command[AggregateResponse[Rejection]]
+  type CommandResult[+R] = Xor[R, Done]
 
-  case class AuthorizeTransaction(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command[AggregateResponse[AuthorizeTransactionRejection]]
+  case class OpenAccount(accountId: AccountId) extends Command[CommandResult[Rejection]]
 
-  case class VoidTransaction(accountId: AccountId, transactionId: TransactionId) extends Command[AggregateResponse[Rejection]]
+  case class AuthorizeTransaction(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command[CommandResult[AuthorizeTransactionRejection]]
 
-  case class CaptureTransaction(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command[AggregateResponse[Rejection]]
+  case class VoidTransaction(accountId: AccountId, transactionId: TransactionId) extends Command[CommandResult[Rejection]]
 
-  case class CreditAccount(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command[AggregateResponse[Rejection]]
+  case class CaptureTransaction(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command[CommandResult[Rejection]]
+
+  case class CreditAccount(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Command[CommandResult[Rejection]]
 
   sealed trait Rejection
 
@@ -105,13 +109,13 @@ object Account {
     override def init: State = Initial
   }
 
-  def apply(): Account = new Account()
+  def apply(): Account = new Account(Clock.systemDefaultZone())
 
 }
 
 import aecor.example.domain.Account._
 
-class Account {
+class Account(val clock: Clock) {
   def handleCommand[R](command: Command[R], state: State): Future[(R, Seq[Event])] = Future.successful {
     handle(command, state) {
       case OpenAccount(accountId) => {

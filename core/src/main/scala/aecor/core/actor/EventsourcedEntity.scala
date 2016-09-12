@@ -173,9 +173,8 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
     log.debug("[{}] Command handler result [{}]", persistenceId, result)
     val envelopes = events.map(Tagged(_, tags))
     var shouldSaveSnapshot = false
-    persistAll(envelopes) {
-      case Tagged(e: Event, _) =>
-        applyEvent(e)
+    persistAll(envelopes) { x =>
+        applyEvent(x.payload.asInstanceOf[Event])
         if (snapshotPolicy.shouldSnapshotAtEventCount(eventCount))
           shouldSaveSnapshot = true
     }
@@ -212,7 +211,7 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
   }
 
   private def setIdleTimeout(): Unit = {
-    log.debug("[{}], Setting idle timeout to [{}]", persistenceId, idleTimeout)
+    log.debug("[{}] Setting idle timeout to [{}]", persistenceId, idleTimeout)
     context.setReceiveTimeout(idleTimeout)
   }
 }

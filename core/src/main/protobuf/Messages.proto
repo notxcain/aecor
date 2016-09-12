@@ -16,12 +16,6 @@ message AggregateEvent {
   required string causedBy = 6;
 }
 
-message Rejection {
-  required uint32 serializerId = 2;
-  required string manifest = 3;
-  required bytes payload = 4;
-}
-
 message SerializedObject {
   required uint32 serializerId = 1;
   required string manifest = 2;

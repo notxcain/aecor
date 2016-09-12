@@ -40,14 +40,10 @@ trait AggregateBehavior[A] {
 }
 
 object AggregateBehavior {
-  type AggregateResponse[+Rejection] = Xor[Rejection, Done]
-
-  type AggregateDecision[+Rejection, +Event] = (AggregateResponse[Rejection], Seq[Event])
-
   object syntax {
-    def accept[R, E](events: E*): AggregateDecision[R, E] = Xor.right(Done) -> events.toVector
+    def accept[R, E](events: E*): (Xor[R, Done], Seq[E]) = (Xor.right(Done), events.toVector)
 
-    def reject[R, E](rejection: R): AggregateDecision[R, E] = Xor.left(rejection) -> Vector.empty
+    def reject[R, E](rejection: R): (Xor[R, Done], Seq[E]) = (Xor.left(rejection), Seq.empty)
 
     implicit class AnyOps[A](a: A) {
       def withEvents[E](events: E*): (A, Seq[E]) = (a, Seq(events: _*))

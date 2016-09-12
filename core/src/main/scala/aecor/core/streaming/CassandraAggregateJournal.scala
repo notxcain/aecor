@@ -9,10 +9,10 @@ import akka.stream.scaladsl.Source
 
 import scala.reflect.ClassTag
 
-class CassandraAggregateJournal(system: ActorSystem) extends AggregateJournal {
+class CassandraAggregateJournal(system: ActorSystem, offsetStore: OffsetStore) extends AggregateJournal {
 
   val cassandraReadJournal = PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
-  val extendedCassandraReadJournal = new CassandraReadJournalExtension(system, cassandraReadJournal)
+  val extendedCassandraReadJournal = new CassandraReadJournalExtension(system, offsetStore, cassandraReadJournal)
 
   def committableEventSourceFor[A] = new MkCommittableEventSource[A] {
     override def apply[E](consumerId: String)
@@ -21,7 +21,7 @@ class CassandraAggregateJournal(system: ActorSystem) extends AggregateJournal {
         E: ClassTag[E]
       ): Source[CommittableJournalEntry[AggregateEvent[E]], NotUsed] =
       extendedCassandraReadJournal.committableEventsByTag(name.value, consumerId).collect {
-        case m@CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: E, timestamp)) =>
+        case m@(offset, JournalEntry(persistenceId, sequenceNr, AggregateEvent(id, event: E, timestamp))) =>
           m.asInstanceOf[CommittableJournalEntry[AggregateEvent[E]]]
       }
   }
