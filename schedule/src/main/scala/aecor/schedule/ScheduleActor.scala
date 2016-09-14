@@ -93,9 +93,9 @@ private[schedule] case class FireDueEntries(scheduleName: String, now: LocalDate
 
 private[aecor] case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
 
-private[aecor] case class ScheduleState(entries: List[ScheduleEntry]) {
+private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[String]) {
   def addEntry(entryId: String, correlationId: CorrelationId, dueDate: LocalDateTime): ScheduleState =
-    copy(entries = ScheduleEntry(entryId, correlationId, dueDate) :: entries)
+    copy(entries = ScheduleEntry(entryId, correlationId, dueDate) :: entries, ids = ids + entryId)
 
   def removeEntry(entryId: String): ScheduleState =
     copy(entries = entries.filterNot(_.id == entryId))
@@ -116,14 +116,19 @@ private[aecor] object ScheduleState {
     override def applyEvent(a: ScheduleState, e: ScheduleEvent): ScheduleState =
       a.applyEvent(e)
     override def init: ScheduleState =
-      ScheduleState(List.empty)
+      ScheduleState(List.empty, Set.empty)
   }
 }
 
 class ScheduleBehavior {
   final def handleCommand[R](state: ScheduleState, command: ScheduleCommand[R]): (R, Vector[ScheduleEvent]) = command match {
     case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
-      Done -> Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate))
+      if (state.ids.contains(entryId)) {
+        Done -> Vector.empty
+      } else {
+        Done -> Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate))
+      }
+
 
     case FireDueEntries(scheduleName, now) =>
       Done -> state.findEntriesDueTo(now).take(100)
