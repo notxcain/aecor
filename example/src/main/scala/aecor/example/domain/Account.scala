@@ -13,7 +13,6 @@ import cats.data.Xor
 import io.circe.{Decoder, Encoder}
 import io.circe.generic.auto._
 import scala.collection.immutable.Seq
-import scala.concurrent.Future
 
 case class AccountId(value: String) extends AnyVal
 
@@ -100,7 +99,7 @@ object Account {
     override type Event = Account.Event
     override type State = Account.State
 
-    override def handleCommand[Response](a: Account)(state: State, command: Command[Response]): Future[(Response, Seq[Event])] =
+    override def handleCommand[Response](a: Account)(state: State, command: Command[Response]): (Response, Seq[Event]) =
       a.handleCommand(command, state)
 
     override def applyEvent(state: State, event: Event): State =
@@ -116,7 +115,7 @@ object Account {
 import aecor.example.domain.Account._
 
 class Account(val clock: Clock) {
-  def handleCommand[R](command: Command[R], state: State): Future[(R, Seq[Event])] = Future.successful {
+  def handleCommand[R](command: Command[R], state: State): (R, Seq[Event]) =
     handle(command, state) {
       case OpenAccount(accountId) => {
         case Initial =>
@@ -160,5 +159,4 @@ class Account(val clock: Clock) {
           accept(AccountCredited(state.id, transactionId, amount))
       }
     }
-  }
 }

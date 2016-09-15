@@ -32,7 +32,7 @@ trait AggregateBehavior[A] {
   type State
   type Event
 
-  def handleCommand[Response](a: A)(state: State, command: Command[Response]): Future[(Response, Seq[Event])]
+  def handleCommand[Response](a: A)(state: State, command: Command[Response]): (Response, Seq[Event])
 
   def init: State
 
@@ -69,10 +69,10 @@ object AggregateEventsourcedBehavior {
       override type State = AState
       override type Event = AggregateEvent[AEvent]
 
-      override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): Future[(R, Seq[Event])] =
-        A.handleCommand(a.aggregate)(state, command).map {
-          case (x, events) => x -> events.map(event => AggregateEvent(generate[EventId], event, Instant.now()))
-        }
+      override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): Future[(R, Seq[Event])] = {
+        val (response, events) = A.handleCommand(a.aggregate)(state, command)
+        Future.successful(response -> events.map(event => AggregateEvent(generate[EventId], event, Instant.now())))
+      }
     }
 
 }

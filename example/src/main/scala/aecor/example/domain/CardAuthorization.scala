@@ -13,7 +13,6 @@ import akka.Done
 import cats.data.Xor
 
 import scala.collection.immutable.Seq
-import scala.concurrent.Future
 
 case class TransactionId(value: String) extends AnyVal
 object CardAuthorization {
@@ -121,7 +120,7 @@ case class TerminalId(value: Long) extends AnyVal
 import aecor.example.domain.CardAuthorization._
 
 class CardAuthorization {
-  def handleCommand[Response](state: State, command: Command[Response]): Future[(Response, Seq[Event])] = Future.successful {
+  def handleCommand[Response](state: State, command: Command[Response]): (Response, Seq[Event]) =
     handle(state, command) {
       case Initial => {
         case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
@@ -150,5 +149,4 @@ class CardAuthorization {
         case e: CreateCardAuthorization => reject(AlreadyExists)
       }
     }
-  }
 }
