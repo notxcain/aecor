@@ -2,16 +2,20 @@ package aecor.core.aggregate
 
 import aecor.core.actor.{EventsourcedEntity, Identity}
 import aecor.core.message.Correlation
-import akka.actor.ActorSystem
+import akka.actor.{ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
 import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
 
 import scala.reflect.ClassTag
 
-object AggregateSharding {
-  def apply(system: ActorSystem): AggregateSharding = new AggregateSharding(system)
+object AggregateSharding extends ExtensionId[AggregateSharding] with ExtensionIdProvider {
+  override def get(system: ActorSystem): AggregateSharding = super.get(system)
+  override def lookup = AggregateSharding
+  override def createExtension(system: ExtendedActorSystem): AggregateSharding  =
+    new AggregateSharding(system)
 }
 
-class AggregateSharding(system: ActorSystem) {
+class AggregateSharding(system: ExtendedActorSystem) extends Extension {
+
   def start[Aggregate, Command[_], State, Event]
   (aggregate: Aggregate)
   (implicit
