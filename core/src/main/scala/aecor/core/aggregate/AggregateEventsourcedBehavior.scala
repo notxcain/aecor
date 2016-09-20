@@ -7,10 +7,6 @@ import cats.data.Xor
 import scala.collection.immutable.Seq
 import scala.concurrent.ExecutionContext
 
-case class CommandId(value: String) extends AnyVal
-
-case class EventId(value: String) extends AnyVal
-
 trait AggregateBehavior[A] {
   type Command[_]
   type State
