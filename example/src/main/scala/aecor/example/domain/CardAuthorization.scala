@@ -6,8 +6,6 @@ import aecor.core.aggregate._
 import aecor.core.message.Correlation
 import aecor.example.domain.CardAuthorization.{Event, State}
 import cats.free.Free
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.auto._
 import aecor.util.function._
 import akka.Done
 import cats.data.Xor
@@ -46,9 +44,6 @@ object CardAuthorization {
   case class CardAuthorizationCreated(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId, transactionId: TransactionId) extends Event
   case class CardAuthorizationDeclined(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) extends Event
   case class CardAuthorizationAccepted(cardAuthorizationId: CardAuthorizationId) extends Event
-
-  implicit val encoder: Encoder[Event] = shapeless.cachedImplicit
-  implicit val decoder: Decoder[Event] = shapeless.cachedImplicit
 
   sealed trait CreateCardAuthorizationRejection
   sealed trait DeclineCardAuthorizationRejection

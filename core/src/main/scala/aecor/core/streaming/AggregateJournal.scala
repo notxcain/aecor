@@ -5,15 +5,12 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 
-import scala.reflect.ClassTag
-
 trait AggregateJournal {
   trait MkCommittableEventSource[A] {
     def apply[E](consumerId: String)
       (implicit name: AggregateName[A],
-        contract: EventContract.Aux[A, E],
-        E: ClassTag[E]
-      ): Source[CommittableJournalEntry[AggregateEvent[E]], NotUsed]
+        contract: EventContract.Aux[A, E]
+      ): Source[CommittableJournalEntry[E], NotUsed]
   }
 
   def committableEventSourceFor[A]: MkCommittableEventSource[A]

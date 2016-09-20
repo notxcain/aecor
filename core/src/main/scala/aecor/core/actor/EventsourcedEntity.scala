@@ -6,14 +6,12 @@ import java.time.{Duration, Instant}
 
 import aecor.core.message._
 import akka.NotUsed
-import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash, Status}
+import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash}
 import akka.cluster.sharding.ShardRegion
-import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 
 import scala.collection.immutable.Seq
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
 
@@ -21,7 +19,9 @@ trait EventsourcedBehavior[A] {
   type Command[_]
   type State
   type Event
-  def handleCommand[Response](a: A)(state: State, command: Command[Response]): Future[EventsourcedBehavior.Result[Response, Event]]
+  def handleCommand[Response](a: A)(state: State, command: Command[Response]): EventsourcedBehavior.Result[Response, Event]
+  def init(a: A): State
+  def applyEvent(a: A)(state: State, event: Event): State
 }
 
 object EventsourcedBehavior {
@@ -34,10 +34,6 @@ object EventsourcedBehavior {
   type Result[Response, Event] = (Response, Seq[Event])
 }
 
-trait EventsourcedState[State, Event] {
-  def init: State
-  def applyEvent(state: State, event: Event): State
-}
 
 sealed trait SnapshotPolicy {
   def shouldSnapshotAtEventCount(eventCount: Long): Boolean
@@ -69,7 +65,7 @@ object Identity {
 object EventsourcedEntity {
   def props[Behavior, Command[_], State, Event]
   (behavior: Behavior, entityName: String, identity: Identity, snapshotPolicy: SnapshotPolicy, idleTimeout: FiniteDuration)
-  (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event], projection: EventsourcedState[State, Event], Command: ClassTag[Command[_]], Event: ClassTag[Event], State: ClassTag[State]) =
+  (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event], Command: ClassTag[Command[_]], Event: ClassTag[Event], State: ClassTag[State]) =
     Props(new EventsourcedEntity[Behavior, Command, State, Event](entityName, behavior, identity, snapshotPolicy, idleTimeout))
 
   def extractEntityId[A: ClassTag](correlation: A => String): ShardRegion.ExtractEntityId = {
@@ -102,7 +98,6 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
  idleTimeout: FiniteDuration
 )(implicit
   Behavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event],
-  State: EventsourcedState[State, Event],
   CommandClass: ClassTag[Command[_]],
   EventClass: ClassTag[Event],
   StateClass: ClassTag[State]
@@ -110,14 +105,10 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
           with Stash
           with ActorLogging {
 
-  import context.dispatcher
-
   final private val entityId: String = identity match {
     case Identity.Provided(value) => value
     case Identity.FromPathName => URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   }
-
-  private case class HandleResult(result: EventsourcedBehavior.Result[Any, Event])
 
   final override val persistenceId: String = s"$entityName-$entityId"
 
@@ -127,7 +118,7 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = State.init
+  protected var state: State = Behavior.init(behavior)
 
   private var eventCount = 0L
 
@@ -152,20 +143,8 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
   private def handleCommand(command: Command[Any]) = {
     log.debug("[{}] Received command [{}]", persistenceId, command)
-    Behavior.handleCommand(behavior)(state, command).map(HandleResult).pipeTo(self)(sender)
-    context.become {
-      case HandleResult(result) =>
-        runResult(result)
-        unstashAll()
-        context.become(receiveCommand)
-      case failure @ Status.Failure(e) =>
-        log.error(e, "[{}] Deferred result failed", persistenceId)
-        sender() ! failure
-        unstashAll()
-        context.become(receiveCommand)
-      case _ =>
-        stash()
-    }
+    val result = Behavior.handleCommand(behavior)(state, command)
+    runResult(result)
   }
 
   private def runResult(result: EventsourcedBehavior.Result[Any, Event]): Unit = {
@@ -187,7 +166,7 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
 
   private def applyEvent(event: Event): Unit = {
-    state = State.applyEvent(state, event)
+    state = Behavior.applyEvent(behavior)(state, event)
     log.debug("[{}] New state [{}]", persistenceId, state)
     eventCount += 1
   }

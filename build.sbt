@@ -28,8 +28,8 @@ lazy val aecorSettings = buildSettings ++ commonSettings
 lazy val aecor = project.in(file("."))
                  .settings(moduleName := "aecor")
                  .settings(aecorSettings)
-                 .aggregate(core, api, circe, example, schedule, tests, bench)
-                 .dependsOn(core, api, circe, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
+                 .aggregate(core, api, example, schedule, tests, bench)
+                 .dependsOn(core, api, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
 lazy val core = project
                 .settings(moduleName := "aecor-core")
@@ -57,17 +57,12 @@ lazy val tests = project.dependsOn(core, example, schedule)
                  .settings(aecorSettings)
                  .settings(testingSettings)
 
-lazy val circe = project.dependsOn(core)
-                 .settings(moduleName := "aecor-circe")
-                 .settings(aecorSettings)
-                 .settings(circeSettings)
-
-lazy val example = project.dependsOn(core, api, circe, schedule)
+lazy val example = project.dependsOn(core, api, schedule)
                    .settings(moduleName := "aecor-example")
                    .settings(aecorSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.0"
+val circeVersion = "0.5.2"
 val akkaVersion = "2.4.10"
 val reactiveKafka = "0.11"
 val akkaPersistenceCassandra = "0.17"
@@ -115,10 +110,7 @@ lazy val exampleSettings = Seq(
     "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1",
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
     "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
-  )
-)
-
-lazy val circeSettings = Seq(
+  ),
   libraryDependencies ++= dependency("io.circe")(
     "circe-core",
     "circe-generic",

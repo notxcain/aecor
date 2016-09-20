@@ -15,7 +15,6 @@ import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.{Done, NotUsed}
 
 import scala.collection.immutable.Seq
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object ScheduleActorSupervisor {
@@ -111,15 +110,6 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[S
   }
 }
 
-private[aecor] object ScheduleState {
-  implicit def state = new EventsourcedState[ScheduleState, ScheduleEvent] {
-    override def applyEvent(a: ScheduleState, e: ScheduleEvent): ScheduleState =
-      a.applyEvent(e)
-    override def init: ScheduleState =
-      ScheduleState(List.empty, Set.empty)
-  }
-}
-
 class ScheduleBehavior {
   final def handleCommand[R](state: ScheduleState, command: ScheduleCommand[R]): (R, Vector[ScheduleEvent]) = command match {
     case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
@@ -143,8 +133,14 @@ object ScheduleBehavior {
     override type State = ScheduleState
     override type Event = ScheduleEvent
 
-    override def handleCommand[R](a: ScheduleBehavior)(state: ScheduleState, command: ScheduleCommand[R]): Future[(R, Seq[ScheduleEvent])] =
-      Future.successful(a.handleCommand(state, command))
+    override def handleCommand[R](a: ScheduleBehavior)(state: ScheduleState, command: ScheduleCommand[R]): (R, Seq[ScheduleEvent]) =
+      a.handleCommand(state, command)
+
+    override def init(a: ScheduleBehavior): ScheduleState =
+      ScheduleState(List.empty, Set.empty)
+
+    override def applyEvent(a: ScheduleBehavior)(state: ScheduleState, event: ScheduleEvent): ScheduleState =
+      state.applyEvent(event)
   }
 }
 

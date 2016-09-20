@@ -1,28 +1,9 @@
 package aecor.core.serialization.protobuf;
 option optimize_for = SPEED;
 
-message EventEnvelope {
-  required string id = 1;
-  required bytes event = 2;
-  required uint64 timestamp = 3; //UTC millis
-}
-
-message AggregateEvent {
-  required string id = 1;
-  required uint32 serializerId = 2;
-  required string manifest = 3;
-  required bytes payload = 4;
-  required uint64 timestamp = 5; //UTC millis
-  required string causedBy = 6;
-}
 
 message SerializedObject {
   required uint32 serializerId = 1;
   required string manifest = 2;
   required bytes payload = 3;
-}
-
-message ProcessStateChanged {
-  required string causedBy = 1;
-  required SerializedObject state = 2;
 }

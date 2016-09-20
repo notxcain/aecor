@@ -10,8 +10,6 @@ import aecor.example.domain.Account.{AccountCredited, AccountOpened, AuthorizeTr
 import aecor.util.function._
 import akka.Done
 import cats.data.Xor
-import io.circe.{Decoder, Encoder}
-import io.circe.generic.auto._
 import scala.collection.immutable.Seq
 
 case class AccountId(value: String) extends AnyVal
@@ -66,9 +64,6 @@ object Account {
   case class TransactionCaptured(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
 
   case class AccountCredited(accountId: AccountId, transactionId: TransactionId, amount: Amount) extends Event
-
-  implicit val eventEncoder: Encoder[Event] = shapeless.cachedImplicit
-  implicit val eventDecoder: Decoder[Event] = shapeless.cachedImplicit
 
   sealed trait State {
     def applyEvent(event: Event): State =

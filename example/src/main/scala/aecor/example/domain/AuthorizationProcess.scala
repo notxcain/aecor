@@ -2,12 +2,12 @@ package aecor.example.domain
 
 import aecor.core.aggregate.AggregateRegionRef
 import aecor.core.message.Correlation
-import aecor.core.process.ProcessBehavior
 import aecor.example.domain.Account.{AuthorizeTransaction, VoidTransaction}
 import aecor.example.domain.AuthorizationProcess.{State, _}
 import aecor.example.domain.CardAuthorization.{AcceptCardAuthorization, AlreadyAccepted, AlreadyDeclined, CardAuthorizationCreated, DeclineCardAuthorization, DoesNotExists}
 import aecor.util.function._
 import cats.data.Xor
+
 import scala.concurrent.{ExecutionContext, Future}
 
 class AuthorizationProcess(accounts: AggregateRegionRef[Account.Command], cardAuthorizations: AggregateRegionRef[CardAuthorization.Command])(implicit ec: ExecutionContext) {
@@ -64,14 +64,4 @@ object AuthorizationProcess {
 
   val correlation: Correlation[Input] = Correlation.instance(_.transactionId.value)
 
-
-  implicit def behavior = new ProcessBehavior[AuthorizationProcess] {
-    override type Event = AuthorizationProcess.Input
-    override type State = AuthorizationProcess.State
-
-    override def init: State = Initial
-
-    override def handleEvent(a: AuthorizationProcess)(state: State, event: Input): Future[Option[State]] =
-      a.handleEvent(state, event)
-  }
 }

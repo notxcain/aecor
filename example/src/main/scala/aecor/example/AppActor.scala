@@ -2,23 +2,16 @@ package aecor.example
 
 import aecor.api.Router.ops._
 import aecor.core.aggregate._
-import aecor.core.process.{HandleEvent, ProcessSharding}
-import aecor.schedule._
-import aecor.core.serialization.CirceSupport._
-import aecor.core.serialization.kafka.EventEnvelopeSerializer
 import aecor.core.streaming._
-import aecor.example.domain.CardAuthorization.CardAuthorizationCreated
 import aecor.example.domain._
+import aecor.schedule._
 import akka.actor.{Actor, ActorLogging, Props}
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
-import akka.kafka.ProducerSettings
 import akka.persistence.cassandra.CassandraSessionWrapper
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
-import org.apache.kafka.common.serialization.StringSerializer
 
 import scala.concurrent.duration._
 
@@ -43,10 +36,6 @@ class AppActor extends Actor with ActorLogging {
 
   val journal = AggregateJournal(system, offsetStore)
 
-  val kafkaAddress = "localhost"
-
-  val producerSettings = ProducerSettings(system, new StringSerializer, new EventEnvelopeSerializer).withBootstrapServers(s"$kafkaAddress:9092")
-
   val authorizationRegion: AggregateRegionRef[CardAuthorization.Command] =
     AggregateSharding(system).start(CardAuthorization())
 
@@ -58,39 +47,10 @@ class AppActor extends Actor with ActorLogging {
 
   val schedule: Schedule = Schedule(system, scheduleEntityName, 1.day, 10.seconds, offsetStore)
 
-  journal.committableEventSourceFor[Account](consumerId = "kafka_replicator")
-  .via(Kafka.flow(producerSettings, "Account"))
-  .mapAsync(1)(_.commitScaladsl())
-  .runWith(Sink.ignore)
 
-  journal.committableEventSourceFor[CardAuthorization](consumerId = "kafka_replicator")
-  .via(Kafka.flow(producerSettings, "CardAuthorization"))
-  .mapAsync(1)(_.commitScaladsl())
-  .runWith(Sink.ignore)
-
-
-  val cardAuthorizationProcess = {
-    val process = ProcessSharding(system)
-
-    val source =
-      journal.committableEventSourceFor[CardAuthorization](consumerId = "CardAuthorizationProcess").collect {
-        case CommittableJournalEntry(offset, persistenceId, sequenceNr, AggregateEvent(id, event: CardAuthorizationCreated, ts)) =>
-          ProcessSharding.Message(HandleEvent(id, event), offset)
-      }
-
-
-    val sink = process.committableSink(
-                             name = AuthorizationProcess.name,
-                             behavior = new AuthorizationProcess(accountRegion, authorizationRegion),
-                             correlation = AuthorizationProcess.correlation
-                           )
-    source.to(sink)
-  }
-
-  cardAuthorizationProcess.run()
 
   val cardAuthorizationEventStream =
-    new DefaultEventStream(system, journal.committableEventSourceFor[CardAuthorization]("CardAuthorization-API").map(_.value.event))
+    new DefaultEventStream(system, journal.committableEventSourceFor[CardAuthorization]("CardAuthorization-API").map(_.value))
 
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(authorizationRegion, cardAuthorizationEventStream, Logging(system, classOf[AuthorizePaymentAPI]))

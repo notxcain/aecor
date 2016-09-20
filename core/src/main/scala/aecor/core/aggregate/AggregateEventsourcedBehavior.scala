@@ -1,31 +1,15 @@
 package aecor.core.aggregate
 
-import java.time.Instant
-
-import aecor.core.actor.{EventsourcedBehavior, EventsourcedState}
-import aecor.util._
+import aecor.core.actor.EventsourcedBehavior
 import akka.Done
 import cats.data.Xor
 
 import scala.collection.immutable.Seq
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 case class CommandId(value: String) extends AnyVal
 
 case class EventId(value: String) extends AnyVal
-
-case class AggregateEvent[+Event](id: EventId, event: Event, timestamp: Instant)
-
-object AggregateEvent {
-  implicit def projection[A, ACommand[_], AState, AEvent](implicit A: AggregateBehavior.Aux[A, ACommand, AState, AEvent]): EventsourcedState[AState, AggregateEvent[AEvent]] =
-    new EventsourcedState[AState, AggregateEvent[AEvent]] {
-
-      override def applyEvent(a: AState, e: AggregateEvent[AEvent]): AState =
-        A.applyEvent(a, e.event)
-
-      override def init: AState = A.init
-    }
-}
 
 trait AggregateBehavior[A] {
   type Command[_]
@@ -63,16 +47,21 @@ case class AggregateEventsourcedBehavior[Aggregate](aggregate: Aggregate)
 object AggregateEventsourcedBehavior {
 
   implicit def instance[A, ACommand[_], AState, AEvent]
-  (implicit A: AggregateBehavior.Aux[A, ACommand, AState, AEvent], ec: ExecutionContext): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], ACommand, AState, AggregateEvent[AEvent]] =
+  (implicit A: AggregateBehavior.Aux[A, ACommand, AState, AEvent], ec: ExecutionContext): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], ACommand, AState, AEvent] =
     new EventsourcedBehavior[AggregateEventsourcedBehavior[A]] {
       override type Command[X] = ACommand[X]
       override type State = AState
-      override type Event = AggregateEvent[AEvent]
+      override type Event = AEvent
 
-      override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): Future[(R, Seq[Event])] = {
-        val (response, events) = A.handleCommand(a.aggregate)(state, command)
-        Future.successful(response -> events.map(event => AggregateEvent(generate[EventId], event, Instant.now())))
+      override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): (R, Seq[Event]) = {
+        A.handleCommand(a.aggregate)(state, command)
       }
+
+      override def init(a: AggregateEventsourcedBehavior[A]): AState =
+        A.init
+
+      override def applyEvent(a: AggregateEventsourcedBehavior[A])(state: AState, event: AEvent): AState =
+        A.applyEvent(state, event)
     }
 
 }
