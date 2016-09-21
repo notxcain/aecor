@@ -1,9 +1,0 @@
-package aecor.core.serialization.protobuf;
-option optimize_for = SPEED;
-
-
-message SerializedObject {
-  required uint32 serializerId = 1;
-  required string manifest = 2;
-  required bytes payload = 3;
-}

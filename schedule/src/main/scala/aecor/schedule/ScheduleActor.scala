@@ -4,7 +4,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{LocalDateTime, ZoneId}
 
-import aecor.core.actor._
+import aecor.core.aggregate._
 import aecor.core.message.Correlation.CorrelationId
 import aecor.core.message.ExtractShardId
 import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
@@ -66,9 +66,9 @@ class ScheduleActorSupervisor(entityName: String, tickInterval: FiniteDuration) 
   def passivating: Receive = {
     case c: AddScheduleEntry =>
       context.parent ! c
-    case EventsourcedEntity.Stop =>
+    case AggregateActor.Stop =>
       context.watch(worker)
-      worker ! EventsourcedEntity.Stop
+      worker ! AggregateActor.Stop
     case Terminated(`worker`) =>
       context.stop(self)
   }
@@ -128,7 +128,7 @@ class ScheduleBehavior {
 }
 
 object ScheduleBehavior {
-  implicit val behavior = new EventsourcedBehavior[ScheduleBehavior] {
+  implicit val behavior = new AggregateBehavior[ScheduleBehavior] {
     override type Command[X] = ScheduleCommand[X]
     override type State = ScheduleState
     override type Event = ScheduleEvent
@@ -136,10 +136,10 @@ object ScheduleBehavior {
     override def handleCommand[R](a: ScheduleBehavior)(state: ScheduleState, command: ScheduleCommand[R]): (R, Seq[ScheduleEvent]) =
       a.handleCommand(state, command)
 
-    override def init(a: ScheduleBehavior): ScheduleState =
+    override def init: ScheduleState =
       ScheduleState(List.empty, Set.empty)
 
-    override def applyEvent(a: ScheduleBehavior)(state: ScheduleState, event: ScheduleEvent): ScheduleState =
+    override def applyEvent(state: ScheduleState, event: ScheduleEvent): ScheduleState =
       state.applyEvent(event)
   }
 }
@@ -150,6 +150,6 @@ object ScheduleActor {
   }
 }
 
-class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String) extends EventsourcedEntity[ScheduleBehavior, ScheduleCommand, ScheduleState, ScheduleEvent](entityName, new ScheduleBehavior(), Identity.Provided(scheduleName + "-" + timeBucket), SnapshotPolicy.Never, 10.seconds) {
+class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String) extends AggregateActor[ScheduleBehavior, ScheduleCommand, ScheduleState, ScheduleEvent](entityName, new ScheduleBehavior(), Identity.Provided(scheduleName + "-" + timeBucket), SnapshotPolicy.Never, 10.seconds) {
   override def shouldPassivate: Boolean = state.entries.isEmpty
 }

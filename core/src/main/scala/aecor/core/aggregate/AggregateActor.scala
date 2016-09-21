@@ -1,38 +1,17 @@
-package aecor.core.actor
+package aecor.core.aggregate
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant}
 
-import aecor.core.message._
 import akka.NotUsed
 import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash}
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 
-import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
 import scala.reflect.ClassTag
-
-trait EventsourcedBehavior[A] {
-  type Command[_]
-  type State
-  type Event
-  def handleCommand[Response](a: A)(state: State, command: Command[Response]): EventsourcedBehavior.Result[Response, Event]
-  def init(a: A): State
-  def applyEvent(a: A)(state: State, event: Event): State
-}
-
-object EventsourcedBehavior {
-  type Aux[A, Command0[_], State0, Event0] = EventsourcedBehavior[A] {
-    type Command[X] = Command0[X]
-    type State = State0
-    type Event = Event0
-  }
-
-  type Result[Response, Event] = (Response, Seq[Event])
-}
 
 
 sealed trait SnapshotPolicy {
@@ -62,19 +41,11 @@ object Identity {
 
 }
 
-object EventsourcedEntity {
+object AggregateActor {
   def props[Behavior, Command[_], State, Event]
   (behavior: Behavior, entityName: String, identity: Identity, snapshotPolicy: SnapshotPolicy, idleTimeout: FiniteDuration)
-  (implicit actorBehavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event], Command: ClassTag[Command[_]], Event: ClassTag[Event], State: ClassTag[State]) =
-    Props(new EventsourcedEntity[Behavior, Command, State, Event](entityName, behavior, identity, snapshotPolicy, idleTimeout))
-
-  def extractEntityId[A: ClassTag](correlation: A => String): ShardRegion.ExtractEntityId = {
-    case a: A ⇒ (correlation(a), a)
-  }
-
-  def extractShardId[A: ClassTag](numberOfShards: Int)(correlation: A => String): ShardRegion.ExtractShardId = {
-    case a: A => ExtractShardId(correlation(a), numberOfShards)
-  }
+  (implicit actorBehavior: AggregateBehavior.Aux[Behavior, Command, State, Event], Command: ClassTag[Command[_]], Event: ClassTag[Event], State: ClassTag[State]) =
+    Props(new AggregateActor[Behavior, Command, State, Event](entityName, behavior, identity, snapshotPolicy, idleTimeout))
 
   case object Stop
 }
@@ -90,14 +61,14 @@ object EventsourcedEntity {
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
 
-class EventsourcedEntity[Behavior, Command[_], State, Event]
+class AggregateActor[Behavior, Command[_], State, Event]
 (entityName: String,
  behavior: Behavior,
  identity: Identity,
  snapshotPolicy: SnapshotPolicy,
  idleTimeout: FiniteDuration
 )(implicit
-  Behavior: EventsourcedBehavior.Aux[Behavior, Command, State, Event],
+  Behavior: AggregateBehavior.Aux[Behavior, Command, State, Event],
   CommandClass: ClassTag[Command[_]],
   EventClass: ClassTag[Event],
   StateClass: ClassTag[State]
@@ -118,11 +89,11 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = Behavior.init(behavior)
+  protected var state: State = Behavior.init
 
   private var eventCount = 0L
 
-  override def receiveRecover: Receive = {
+  final override def receiveRecover: Receive = {
     case e: Event =>
       applyEvent(e)
 
@@ -134,7 +105,7 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
       setIdleTimeout()
   }
 
-  override def receiveCommand: Receive = receivePassivationMessages.orElse(receiveCommandMessage)
+  final override def receiveCommand: Receive = receivePassivationMessages.orElse(receiveCommandMessage)
 
   private def receiveCommandMessage: Receive = {
     case command if CommandClass.runtimeClass.isAssignableFrom(command.getClass) =>
@@ -142,20 +113,14 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
   }
 
   private def handleCommand(command: Command[Any]) = {
-    log.debug("[{}] Received command [{}]", persistenceId, command)
-    val result = Behavior.handleCommand(behavior)(state, command)
-    runResult(result)
-  }
-
-  private def runResult(result: EventsourcedBehavior.Result[Any, Event]): Unit = {
-    val (response, events) = result
-    log.debug("[{}] Command handler result [{}]", persistenceId, result)
+    val (response, events) = Behavior.handleCommand(behavior)(state, command)
+    log.debug("[{}] Command [{}] produced response [{}] and events [{}]", persistenceId, command, response, events)
     val envelopes = events.map(Tagged(_, tags))
     var shouldSaveSnapshot = false
     persistAll(envelopes) { x =>
-        applyEvent(x.payload.asInstanceOf[Event])
-        if (snapshotPolicy.shouldSnapshotAtEventCount(eventCount))
-          shouldSaveSnapshot = true
+      applyEvent(x.payload.asInstanceOf[Event])
+      if (snapshotPolicy.shouldSnapshotAtEventCount(eventCount))
+        shouldSaveSnapshot = true
     }
     deferAsync(NotUsed) { _ =>
       if (shouldSaveSnapshot)
@@ -166,8 +131,10 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
 
   private def applyEvent(event: Event): Unit = {
-    state = Behavior.applyEvent(behavior)(state, event)
-    log.debug("[{}] New state [{}]", persistenceId, state)
+    state = Behavior.applyEvent(state, event)
+    if (recoveryFinished) {
+      log.debug("[{}] New state [{}]", persistenceId, state)
+    }
     eventCount += 1
   }
 
@@ -178,7 +145,7 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
       } else {
         setIdleTimeout()
       }
-    case EventsourcedEntity.Stop =>
+    case AggregateActor.Stop =>
       context.stop(self)
   }
 
@@ -186,7 +153,7 @@ class EventsourcedEntity[Behavior, Command[_], State, Event]
 
   private def passivate(): Unit = {
     log.debug("[{}] Passivating...", persistenceId)
-    context.parent ! ShardRegion.Passivate(EventsourcedEntity.Stop)
+    context.parent ! ShardRegion.Passivate(AggregateActor.Stop)
   }
 
   private def setIdleTimeout(): Unit = {

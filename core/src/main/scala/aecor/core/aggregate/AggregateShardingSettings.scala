@@ -1,13 +1,13 @@
 package aecor.core.aggregate
 
-import aecor.core.actor.SnapshotPolicy
 import aecor.util.ConfigHelpers._
 import akka.actor.ActorSystem
+import akka.cluster.sharding.ClusterShardingSettings
 import com.typesafe.config.Config
 
 import scala.concurrent.duration._
 
-class AggregateShardingSettings(config: Config) {
+class AggregateShardingSettings(config: Config, val clusterShardingSettings: ClusterShardingSettings) {
 
   val numberOfShards: Int = config.getInt("number-of-shards")
   val defaultIdleTimeout: FiniteDuration = config.getMillisDuration("default-idle-timeout")
@@ -35,5 +35,5 @@ class AggregateShardingSettings(config: Config) {
 
 object AggregateShardingSettings {
   def apply(system: ActorSystem): AggregateShardingSettings =
-    new AggregateShardingSettings(system.settings.config.getConfig("aecor.aggregate"))
+    new AggregateShardingSettings(system.settings.config.getConfig("aecor.aggregate"), ClusterShardingSettings(system))
 }

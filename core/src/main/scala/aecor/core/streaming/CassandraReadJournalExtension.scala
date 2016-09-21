@@ -15,12 +15,15 @@ import scala.compat.java8.FutureConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 trait CommittableUUIDOffset extends Committable {
-  def offset: UUID
+  @deprecated("Use value instead", "0.11.0")
+  def offset: UUID = value
+  def value: UUID
 }
 
-final case class CommittableUUIDOffsetImpl(override val offset: UUID)(committer: UUID => Future[Done])
+final case class CommittableUUIDOffsetImpl(override val value: UUID)(committer: UUID => Future[Done])
   extends CommittableUUIDOffset {
-  override def commitScaladsl(): Future[Done] = committer(offset)
+
+  override def commitScaladsl(): Future[Done] = committer(value)
 
   override def commitJavadsl(): CompletionStage[Done] = commitScaladsl().toJava
 }
@@ -37,15 +40,12 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem, offsetStore: Offse
 
   val config = actorSystem.settings.config
 
-  val keyspace = config.getString("cassandra-journal.keyspace")
-
   def committableEventsByTag(tag: String, consumerId: String): Source[CommittableJournalEntry[Any], NotUsed] = {
     Source.single(NotUsed).mapAsync(1) { _ =>
       offsetStore.getOffset(tag, consumerId)
-      .map { initialOffset =>
-        (initialOffset.getOrElse(readJournal.firstOffset), { offset: UUID => offsetStore.setOffset(tag, consumerId, offset).map(_ => Done) })
-      }
-    }.flatMapConcat { case (initialOffset, committer) =>
+    }.flatMapConcat { storedOffset =>
+      val initialOffset = storedOffset.getOrElse(readJournal.firstOffset)
+      val committer = { offset: UUID => offsetStore.setOffset(tag, consumerId, offset).map(_ => Done) }
       readJournal.eventsByTag(tag, initialOffset)
       .map { case UUIDEventEnvelope(offset, persistenceId, sequenceNr, event) =>
         CommittableJournalEntry(CommittableUUIDOffsetImpl(offset)(committer), persistenceId, sequenceNr, event)

@@ -1,11 +1,11 @@
 package aecor.core.aggregate
 
-import aecor.core.actor.{EventsourcedEntity, Identity}
 import aecor.core.message.Correlation
 import akka.actor.{ActorSystem, ExtendedActorSystem, Extension, ExtensionId, ExtensionIdProvider}
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
+import akka.cluster.sharding.{ClusterSharding, ShardRegion}
 
 import scala.reflect.ClassTag
+import scala.util.hashing.MurmurHash3
 
 object AggregateSharding extends ExtensionId[AggregateSharding] with ExtensionIdProvider {
   override def get(system: ActorSystem): AggregateSharding = super.get(system)
@@ -27,7 +27,7 @@ class AggregateSharding(system: ExtendedActorSystem) extends Extension {
    aggregateName: AggregateName[Aggregate]
   ): AggregateRegionRef[Command] = {
 
-    val props = EventsourcedEntity.props(
+    val props = AggregateActor.props(
       aggregate,
       aggregateName.value,
       Identity.FromPathName,
@@ -35,12 +35,22 @@ class AggregateSharding(system: ExtendedActorSystem) extends Extension {
       settings.idleTimeout(aggregateName.value)
     )
 
+    def extractEntityId: ShardRegion.ExtractEntityId = {
+      case a => (correlation(a.asInstanceOf[Command[_]]), a)
+    }
+
+    val numberOfShards = settings.numberOfShards
+    def extractShardId: ShardRegion.ExtractShardId = {
+      a =>
+        (scala.math.abs(MurmurHash3.stringHash(correlation(a.asInstanceOf[Command[_]]))) % numberOfShards).toString
+    }
+
     val shardRegionRef = ClusterSharding(system).start(
       typeName = aggregateName.value,
       entityProps = props,
-      settings = ClusterShardingSettings(system).withRememberEntities(false),
-      extractEntityId = EventsourcedEntity.extractEntityId[Command[_]](a => correlation(a)),
-      extractShardId = EventsourcedEntity.extractShardId[Command[_]](settings.numberOfShards)(a => correlation(a))
+      settings = settings.clusterShardingSettings,
+      extractEntityId = extractEntityId,
+      extractShardId = extractShardId
     )
 
     new AggregateRegionRef[Command](system, shardRegionRef, settings.askTimeout)
