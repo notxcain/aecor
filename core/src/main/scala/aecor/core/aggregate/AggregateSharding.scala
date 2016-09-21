@@ -17,7 +17,7 @@ object AggregateSharding extends ExtensionId[AggregateSharding] with ExtensionId
 class AggregateSharding(system: ExtendedActorSystem) extends Extension {
 
   def start[Aggregate, Command[_], State, Event]
-  (aggregate: Aggregate)
+  (aggregate: Aggregate, settings: AggregateShardingSettings = AggregateShardingSettings(system))
   (implicit
    aab: AggregateBehavior.Aux[Aggregate, Command, State, Event],
    Command: ClassTag[Command[_]],
@@ -27,12 +27,8 @@ class AggregateSharding(system: ExtendedActorSystem) extends Extension {
    aggregateName: AggregateName[Aggregate]
   ): AggregateRegionRef[Command] = {
 
-    import system.dispatcher
-
-    val settings = new AggregateShardingSettings(system.settings.config.getConfig("aecor.aggregate"))
-
     val props = EventsourcedEntity.props(
-      AggregateEventsourcedBehavior(aggregate),
+      aggregate,
       aggregateName.value,
       Identity.FromPathName,
       settings.snapshotPolicy(aggregateName.value),

@@ -1,7 +1,6 @@
 package aecor.core.message
 
 import aecor.core.message.Correlation.CorrelationId
-import aecor.util.Partitioner
 
 object Correlation {
   type CorrelationId = String
@@ -14,7 +13,3 @@ trait Correlation[A] extends (A => CorrelationId) {
   def apply(a: A): CorrelationId
 }
 
-object ExtractShardId {
-  private val partitioner = Partitioner.murmur3
-  def apply(id: String, numberOfShards: Int): String = partitioner.partitionForString(id, numberOfShards).toString
-}

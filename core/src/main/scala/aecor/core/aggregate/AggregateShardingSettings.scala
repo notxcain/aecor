@@ -34,6 +34,6 @@ class AggregateShardingSettings(config: Config) {
 }
 
 object AggregateShardingSettings {
-  def fromSystem(system: ActorSystem): AggregateShardingSettings =
+  def apply(system: ActorSystem): AggregateShardingSettings =
     new AggregateShardingSettings(system.settings.config.getConfig("aecor.aggregate"))
 }

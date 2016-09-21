@@ -38,25 +38,23 @@ object AggregateBehavior {
   }
 }
 
-case class AggregateEventsourcedBehavior[Aggregate](aggregate: Aggregate)
-
 object AggregateEventsourcedBehavior {
 
   implicit def instance[A, ACommand[_], AState, AEvent]
-  (implicit A: AggregateBehavior.Aux[A, ACommand, AState, AEvent], ec: ExecutionContext): EventsourcedBehavior.Aux[AggregateEventsourcedBehavior[A], ACommand, AState, AEvent] =
-    new EventsourcedBehavior[AggregateEventsourcedBehavior[A]] {
+  (implicit A: AggregateBehavior.Aux[A, ACommand, AState, AEvent], ec: ExecutionContext): EventsourcedBehavior.Aux[A, ACommand, AState, AEvent] =
+    new EventsourcedBehavior[A] {
       override type Command[X] = ACommand[X]
       override type State = AState
       override type Event = AEvent
 
-      override def handleCommand[R](a: AggregateEventsourcedBehavior[A])(state: State, command: Command[R]): (R, Seq[Event]) = {
-        A.handleCommand(a.aggregate)(state, command)
+      override def handleCommand[R](a: A)(state: State, command: Command[R]): (R, Seq[Event]) = {
+        A.handleCommand(a)(state, command)
       }
 
-      override def init(a: AggregateEventsourcedBehavior[A]): AState =
+      override def init(a: A): AState =
         A.init
 
-      override def applyEvent(a: AggregateEventsourcedBehavior[A])(state: AState, event: AEvent): AState =
+      override def applyEvent(a: A)(state: AState, event: AEvent): AState =
         A.applyEvent(state, event)
     }
 
