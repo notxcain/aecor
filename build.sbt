@@ -2,21 +2,21 @@ import com.trueaccord.scalapb.{ScalaPbPlugin => PB}
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
-  scalaVersion := "2.11.8"
+  scalaVersion := "2.11.8",
+  scalaOrganization := "org.typelevel"
 )
 
-scalaOrganization := "org.typelevel"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
     "Websudos releases" at "https://dl.bintray.com/websudos/oss-releases/",
-    Resolver.bintrayRepo("hseeberger", "maven")
+    Resolver.bintrayRepo("hseeberger", "maven"),
+    Resolver.bintrayRepo("projectseptemberinc", "maven")
   ),
   libraryDependencies ++= Seq(
-    "com.github.mpilquist" %% "simulacrum" % "0.7.0",
-    "org.typelevel" %% "machinist" % "0.4.1",
-    compilerPlugin("org.spire-math" %% "kind-projector" % "0.6.3"),
+    "com.github.mpilquist" %% "simulacrum" % "0.9.0",
+    compilerPlugin("org.spire-math" %% "kind-projector" % "0.9.0"),
     compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
   ),
   parallelExecution in Test := false,
@@ -63,11 +63,12 @@ lazy val example = project.dependsOn(core, api, schedule)
                    .settings(exampleSettings)
 
 val circeVersion = "0.5.2"
-val akkaVersion = "2.4.10"
-val reactiveKafka = "0.11"
-val akkaPersistenceCassandra = "0.17"
+val akkaVersion = "2.4.11"
+val reactiveKafka = "0.12"
+val akkaPersistenceCassandra = "0.18"
 val catsVersion = "0.7.2"
-val akkaHttpJson = "1.10.0"
+val akkaHttpJsonVersion = "1.10.1"
+val kryoSerializationVersion = "0.4.1"
 
 lazy val scalaCheckVersion = "1.13.2"
 lazy val scalaTestVersion = "3.0.0"
@@ -109,7 +110,7 @@ lazy val exampleSettings = Seq(
   libraryDependencies ++= Seq(
     "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1",
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
-    "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJson
+    "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
   ),
   libraryDependencies ++= dependency("io.circe")(
     "circe-core",
