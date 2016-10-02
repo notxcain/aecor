@@ -43,12 +43,11 @@ class AppActor extends Actor with ActorLogging {
 
   val journal = AggregateJournal(system, offsetStore)
 
-  val authorizationRegion: AggregateRegionRef[CardAuthorization.Command] =
-    AggregateSharding(system).start(CardAuthorization())
+  val authorizationRegion =
+    AggregateSharding(system).start[CardAuthorization.Command](CardAuthorization())
 
-  val accountRegion: AggregateRegionRef[Account.Command] =
-    AggregateSharding(system).start(Account())
-
+  val accountRegion =
+    AggregateSharding(system).start[AccountAggregateOp](AccountAggregate(Clock.systemUTC()))
 
   val scheduleEntityName = "Schedule3"
 
