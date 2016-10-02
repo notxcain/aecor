@@ -68,6 +68,7 @@ val reactiveKafka = "0.12"
 val akkaPersistenceCassandra = "0.18"
 val catsVersion = "0.7.2"
 val akkaHttpJsonVersion = "1.10.1"
+val freekVersion = "0.6.0"
 val kryoSerializationVersion = "0.4.1"
 
 lazy val scalaCheckVersion = "1.13.2"
@@ -111,6 +112,7 @@ lazy val exampleSettings = Seq(
     "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1",
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
     "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
+    "com.projectseptember" %% "freek" % freekVersion
   ),
   libraryDependencies ++= dependency("io.circe")(
     "circe-core",
@@ -156,7 +158,8 @@ lazy val commonScalacOptions = Seq(
   "-Ywarn-numeric-widen",
   "-Ywarn-value-discard",
   "-Ywarn-unused-import",
-  "-Xfuture"
+  "-Xfuture",
+  "-Ypartial-unification"
 )
 
 lazy val warnUnusedImport = Seq(

@@ -1,67 +1,62 @@
 package aecor.example.domain
 
-import aecor.core.aggregate.AggregateRegionRef
-import aecor.core.message.Correlation
-import aecor.example.domain.Account.{AuthorizeTransaction, VoidTransaction}
-import aecor.example.domain.AuthorizationProcess.{State, _}
+import aecor.example.domain.AccountAggregateOp._
 import aecor.example.domain.CardAuthorization.{AcceptCardAuthorization, AlreadyAccepted, AlreadyDeclined, CardAuthorizationCreated, DeclineCardAuthorization, DoesNotExists}
-import aecor.util.function._
+import akka.stream.scaladsl.Flow
+import akka.{Done, NotUsed}
 import cats.data.Xor
+import cats.free.Free
+import freek._
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class AuthorizationProcess(accounts: AggregateRegionRef[Account.Command], cardAuthorizations: AggregateRegionRef[CardAuthorization.Command])(implicit ec: ExecutionContext) {
-  def handleEvent(state: State, input: Input): Future[Option[State]] =
-    handle(state, input) {
-      case Initial => {
-        case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, _, _, transactionId) =>
-          accounts.ask(AuthorizeTransaction(accountId, transactionId, amount)).flatMap {
-            case Xor.Right(_) =>
-              cardAuthorizations.ask(AcceptCardAuthorization(cardAuthorizationId))
+object AuthorizationProcess {
+  type PRG = AccountAggregateOp :|: CardAuthorization.Command :|: NilDSL
+
+  val PRG = DSL.Make[PRG]
+
+  def pure[A](a: A): Free[PRG.Cop, A] = Free.pure(a)
+
+  def handleEvent: CardAuthorizationCreated => Free[PRG.Cop, Done] = {
+    case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, _, _, transactionId) =>
+      AuthorizeTransaction(accountId, transactionId, amount).freek[PRG].flatMap {
+        case Xor.Right(_) =>
+          AcceptCardAuthorization(cardAuthorizationId)
+          .freek[PRG]
+          .flatMap {
+            case Xor.Left(rejection) => rejection match {
+              case AlreadyDeclined => VoidTransaction(accountId, transactionId).freek[PRG].map(_ => Done)
+              case DoesNotExists => VoidTransaction(accountId, transactionId).freek[PRG].map(_ => Done)
+              case AlreadyAccepted => pure(Done)
+            }
+            case _ =>
+              pure(Done)
+          }
+        case Xor.Left(rejection) =>
+          rejection match {
+            case AccountAggregateOp.AccountDoesNotExist =>
+              DeclineCardAuthorization(cardAuthorizationId, CardAuthorization.AccountDoesNotExist).freek[PRG].map(_ => Done)
+            case AccountAggregateOp.InsufficientFunds =>
+              DeclineCardAuthorization(cardAuthorizationId, CardAuthorization.InsufficientFunds).freek[PRG].map(_ => Done)
+            case AccountAggregateOp.DuplicateTransaction =>
+              AcceptCardAuthorization(cardAuthorizationId)
+              .freek[PRG]
               .flatMap {
-                case Xor.Left(rejection) => rejection match {
-                  case AlreadyDeclined => accounts.ask(VoidTransaction(accountId, transactionId)).map(_ => Some(Finished))
-                  case DoesNotExists => accounts.ask(VoidTransaction(accountId, transactionId)).map(_ => Some(Finished))
-                  case AlreadyAccepted => Future.successful(Some(Finished))
+                case Xor.Left(r) => r match {
+                  case AlreadyDeclined => VoidTransaction(accountId, transactionId).freek[PRG].map(_ => Done)
+                  case DoesNotExists => VoidTransaction(accountId, transactionId).freek[PRG].map(_ => Done)
+                  case AlreadyAccepted => pure(Done)
                 }
-                case _ =>
-                  Future.successful(Some(Finished))
-              }
-            case Xor.Left(rejection) =>
-              rejection match {
-                case Account.AccountDoesNotExist =>
-                  cardAuthorizations.ask(DeclineCardAuthorization(cardAuthorizationId, CardAuthorization.AccountDoesNotExist)).map(_ => Some(state))
-                case Account.InsufficientFunds =>
-                  cardAuthorizations.ask(DeclineCardAuthorization(cardAuthorizationId, CardAuthorization.InsufficientFunds)).map(_ => Some(state))
-                case Account.DuplicateTransaction =>
-                  cardAuthorizations.ask(AcceptCardAuthorization(cardAuthorizationId))
-                  .flatMap {
-                    case Xor.Left(rejection) => rejection match {
-                      case AlreadyDeclined => accounts.ask(VoidTransaction(accountId, transactionId)).map(_ => Some(Finished))
-                      case DoesNotExists => accounts.ask(VoidTransaction(accountId, transactionId)).map(_ => Some(Finished))
-                      case AlreadyAccepted => Future.successful(Some(Finished))
-                    }
-                    case _ => Future.successful(Some(Finished))
-                  }
+                case _ => pure(Done)
               }
           }
       }
-      case Finished => _ =>
-        Future.successful(None)
+  }
+
+  def flow[PassThrough, F2[_] <: CopK[_]](parallelism: Int, interpreter: Interpreter[F2, Future])(implicit sub: SubCop[PRG.Cop, F2], ec: ExecutionContext): Flow[(CardAuthorizationCreated, PassThrough), PassThrough, NotUsed] =
+    Flow[(CardAuthorizationCreated, PassThrough)].mapAsync(parallelism) {
+      case (e, ps) =>
+        import cats.instances.future._
+        handleEvent(e).interpret(interpreter).map(_ => ps)
     }
-}
-
-object AuthorizationProcess {
-  val name: String = "CardAuthorizationProcess"
-
-  type Input = CardAuthorizationCreated
-
-  sealed trait State
-
-  case object Initial extends State
-
-  case object Finished extends State
-
-  val correlation: Correlation[Input] = Correlation.instance(_.transactionId.value)
-
 }
