@@ -3,7 +3,7 @@ package akka.persistence.cassandra
 import akka.Done
 import akka.actor.ActorSystem
 import akka.event.Logging
-import com.datastax.driver.core.Session
+import com.datastax.driver.core.{PreparedStatement, ResultSet, Session, Statement}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -12,6 +12,7 @@ class CassandraSessionWrapper(system: ActorSystem, init: Session => Future[_])(i
   val log = Logging(system, classOf[CassandraSessionWrapper])
   val metricsCategory = "CassandraSessionWrapper"
   val settings = new CassandraPluginConfig(system, system.settings.config.getConfig("cassandra-journal"))
+  val session = new CassandraSession(system, settings, executionContext, log, metricsCategory, executeCreate)
 
   def executeCreate(session: Session): Future[Done] = {
     def create(): Future[Done] = init(session).map(_ => Done)
@@ -21,7 +22,14 @@ class CassandraSessionWrapper(system: ActorSystem, init: Session => Future[_])(i
     )
   }
 
-  val session = new CassandraSession(system, settings, executionContext, log, metricsCategory, executeCreate)
+  def select(stmt: Statement): Future[ResultSet] =
+    session.select(stmt)
+
+  def prepare(stmt: String): Future[PreparedStatement] =
+    session.prepare(stmt)
+
+  def executeWrite(stmt: Statement): Future[Unit] =
+    session.executeWrite(stmt)
 }
 
 
