@@ -24,18 +24,18 @@ object CassandraOffsetStore {
 
 class CassandraOffsetStore(sessionWrapper: CassandraSessionWrapper, queries: CassandraOffsetStore.Queries)(implicit executionContext: ExecutionContext) extends OffsetStore {
 
-  private val selectOffsetStatement = sessionWrapper.session.prepare(queries.selectOffsetQuery)
-  private val updateOffsetStatement = sessionWrapper.session.prepare(queries.updateOffsetQuery)
+  private val selectOffsetStatement = sessionWrapper.prepare(queries.selectOffsetQuery)
+  private val updateOffsetStatement = sessionWrapper.prepare(queries.updateOffsetQuery)
   override def getOffset(tag: String, consumerId: String): Future[Option[UUID]] =
     selectOffsetStatement
     .map(_.bind(consumerId, tag))
-    .flatMap(sessionWrapper.session.select)
+    .flatMap(sessionWrapper.select)
     .map { rs =>
       Option(rs.one())
       .map(_.getUUID("offset"))
     }
 
   override def setOffset(tag: String, consumerId: String, offset: UUID): Future[Unit] =
-    updateOffsetStatement.flatMap(stmt => sessionWrapper.session.executeWrite(stmt.bind(offset, consumerId, tag)))
+    updateOffsetStatement.flatMap(stmt => sessionWrapper.executeWrite(stmt.bind(offset, consumerId, tag)))
 
 }
