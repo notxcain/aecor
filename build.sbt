@@ -1,4 +1,5 @@
 import com.trueaccord.scalapb.{ScalaPbPlugin => PB}
+import ReleaseTransformations._
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
@@ -10,8 +11,6 @@ lazy val buildSettings = Seq(
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
-    "Websudos releases" at "https://dl.bintray.com/websudos/oss-releases/",
-    Resolver.bintrayRepo("hseeberger", "maven"),
     Resolver.bintrayRepo("projectseptemberinc", "maven")
   ),
   libraryDependencies ++= Seq(
@@ -23,7 +22,7 @@ lazy val commonSettings = Seq(
   scalacOptions in(Compile, doc) := (scalacOptions in(Compile, doc)).value.filter(_ != "-Xfatal-warnings")
 ) ++ warnUnusedImport
 
-lazy val aecorSettings = buildSettings ++ commonSettings
+lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
 lazy val aecor = project.in(file("."))
                  .settings(moduleName := "aecor")
@@ -125,9 +124,9 @@ lazy val exampleSettings = Seq(
 lazy val testingSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test
-    ,"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-    ,"com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
-    ,"com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+    , "org.scalatest" %% "scalatest" % scalaTestVersion % Test
+    , "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
+    , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
   )
 )
 
@@ -169,3 +168,54 @@ lazy val warnUnusedImport = Seq(
   },
   scalacOptions in(Test, console) := (scalacOptions in(Compile, console)).value
 )
+
+lazy val publishSettings = Seq(
+  releaseIgnoreUntrackedFiles := true,
+  releasePublishArtifactsAction := PgpKeys.publishSigned.value,
+  homepage := Some(url("https://github.com/notxcain/aecor")),
+  licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT")),
+  publishMavenStyle := true,
+  publishArtifact in Test := false,
+  pomIncludeRepository := { _ => false },
+  publishTo := {
+    val nexus = "https://oss.sonatype.org/"
+    if (isSnapshot.value)
+      Some("snapshots" at nexus + "content/repositories/snapshots")
+    else
+      Some("releases" at nexus + "service/local/staging/deploy/maven2")
+  },
+  autoAPIMappings := true,
+  scmInfo := Some(
+    ScmInfo(
+      url("https://github.com/notxcain/aecor"),
+      "scm:git:git@github.com:notxcain/aecor.git"
+    )
+  ),
+  pomExtra :=
+    <developers>
+      <developer>
+        <id>notxcain</id>
+        <name>Denis Mikhaylov</name>
+        <url>https://github.com/notxcain</url>
+      </developer>
+    </developers>
+)
+
+
+lazy val sharedReleaseProcess = Seq(
+  releaseProcess := Seq[ReleaseStep](
+    checkSnapshotDependencies,
+    inquireVersions,
+    runClean,
+    runTest,
+    setReleaseVersion,
+    commitReleaseVersion,
+    tagRelease,
+    publishArtifacts,
+    setNextVersion,
+    commitNextVersion,
+    ReleaseStep(action = Command.process("sonatypeReleaseAll", _)),
+    pushChanges
+  )
+)
+
