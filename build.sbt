@@ -7,7 +7,6 @@ lazy val buildSettings = Seq(
   scalaOrganization := "org.typelevel"
 )
 
-
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
@@ -20,6 +19,7 @@ lazy val commonSettings = Seq(
   ),
   parallelExecution in Test := false,
   scalacOptions in(Compile, doc) := (scalacOptions in(Compile, doc)).value.filter(_ != "-Xfatal-warnings")
+
 ) ++ warnUnusedImport
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
@@ -49,54 +49,49 @@ lazy val schedule = project.dependsOn(core)
 lazy val bench = project.dependsOn(core, example)
                  .settings(moduleName := "aecor-bench")
                  .settings(aecorSettings)
+                 .settings(noPublishSettings)
                  .enablePlugins(JmhPlugin)
 
 lazy val tests = project.dependsOn(core, example, schedule)
                  .settings(moduleName := "aecor-tests")
                  .settings(aecorSettings)
+                 .settings(noPublishSettings)
                  .settings(testingSettings)
 
 lazy val example = project.dependsOn(core, api, schedule)
                    .settings(moduleName := "aecor-example")
                    .settings(aecorSettings)
+                   .settings(noPublishSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.4"
-val akkaVersion = "2.4.11"
-val reactiveKafka = "0.13"
-val akkaPersistenceCassandra = "0.19"
-val catsVersion = "0.7.2"
-val akkaHttpJsonVersion = "1.10.1"
-val freekVersion = "0.6.0"
-val kryoSerializationVersion = "0.4.1"
-val logbackVersion = "1.1.7"
+lazy val circeVersion = "0.5.4"
+lazy val akkaVersion = "2.4.11"
+lazy val reactiveKafkaVersion = "0.13"
+lazy val akkaPersistenceCassandra = "0.19"
+lazy val catsVersion = "0.7.2"
+lazy val akkaHttpJsonVersion = "1.10.1"
+lazy val freekVersion = "0.6.0"
+lazy val kryoSerializationVersion = "0.4.1"
+lazy val logbackVersion = "1.1.7"
 
 lazy val scalaCheckVersion = "1.13.2"
 lazy val scalaTestVersion = "3.0.0"
 lazy val scalaCheckShapelessVersion = "1.1.1"
 lazy val shapelessVersion = "2.3.2"
 
-def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
-
 lazy val coreSettings = Seq(
-  libraryDependencies ++= dependency("com.typesafe.akka")(
-    "akka-cluster-sharding",
-    "akka-persistence",
-    "akka-persistence-query-experimental",
-    "akka-slf4j"
-  )(akkaVersion),
   libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
-    "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafka,
-    "ch.qos.logback" % "logback-classic" % logbackVersion
-  ),
-
-  libraryDependencies ++= Seq(
-    "com.chuusai" %% "shapeless" % shapelessVersion
-  ),
-
-  libraryDependencies += "org.typelevel" %% "cats" % catsVersion
-) ++ commonProtobufSettings
+    "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafkaVersion,
+    "ch.qos.logback" % "logback-classic" % logbackVersion,
+    "com.chuusai" %% "shapeless" % shapelessVersion,
+    "org.typelevel" %% "cats" % catsVersion
+  )
+)
 
 
 lazy val apiSettings = Seq(
@@ -112,13 +107,11 @@ lazy val exampleSettings = Seq(
     "com.github.romix.akka" %% "akka-kryo-serialization" % kryoSerializationVersion,
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
     "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
-    "com.projectseptember" %% "freek" % freekVersion
-  ),
-  libraryDependencies ++= dependency("io.circe")(
-    "circe-core",
-    "circe-generic",
-    "circe-parser"
-  )(circeVersion)
+    "com.projectseptember" %% "freek" % freekVersion,
+    "io.circe" %% "circe-core" % circeVersion,
+    "io.circe" %% "circe-generic" % circeVersion,
+    "io.circe" %% "circe-parser" % circeVersion
+  )
 )
 
 lazy val testingSettings = Seq(
@@ -167,6 +160,12 @@ lazy val warnUnusedImport = Seq(
     _.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))
   },
   scalacOptions in(Test, console) := (scalacOptions in(Compile, console)).value
+)
+
+lazy val noPublishSettings = Seq(
+  publish := (),
+  publishLocal := (),
+  publishArtifact := false
 )
 
 lazy val publishSettings = Seq(
@@ -219,3 +218,4 @@ lazy val sharedReleaseProcess = Seq(
   )
 )
 
+addCommandAlias("validate", ";compile;test")
