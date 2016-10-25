@@ -62,14 +62,15 @@ lazy val example = project.dependsOn(core, api, schedule)
                    .settings(aecorSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.2"
+val circeVersion = "0.5.4"
 val akkaVersion = "2.4.11"
-val reactiveKafka = "0.12"
-val akkaPersistenceCassandra = "0.18"
+val reactiveKafka = "0.13"
+val akkaPersistenceCassandra = "0.19"
 val catsVersion = "0.7.2"
 val akkaHttpJsonVersion = "1.10.1"
 val freekVersion = "0.6.0"
 val kryoSerializationVersion = "0.4.1"
+val logbackVersion = "1.1.7"
 
 lazy val scalaCheckVersion = "1.13.2"
 lazy val scalaTestVersion = "3.0.0"
@@ -88,7 +89,7 @@ lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafka,
-    "ch.qos.logback" % "logback-classic" % "1.1.7"
+    "ch.qos.logback" % "logback-classic" % logbackVersion
   ),
 
   libraryDependencies ++= Seq(
@@ -109,7 +110,7 @@ lazy val scheduleSettings = commonProtobufSettings
 
 lazy val exampleSettings = Seq(
   libraryDependencies ++= Seq(
-    "com.github.romix.akka" %% "akka-kryo-serialization" % "0.4.1",
+    "com.github.romix.akka" %% "akka-kryo-serialization" % kryoSerializationVersion,
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
     "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
     "com.projectseptember" %% "freek" % freekVersion
@@ -135,8 +136,8 @@ lazy val commonProtobufSettings =
   PB.protobufSettings ++
     Seq(
       version in PB.protobufConfig := "2.6.1",
-      javaSource in PB.protobufConfig <<= (sourceManaged in Compile),
-      scalaSource in PB.protobufConfig <<= (sourceManaged in Compile),
+      javaSource in PB.protobufConfig := (sourceManaged in Compile).value,
+      scalaSource in PB.protobufConfig := (sourceManaged in Compile).value,
       PB.flatPackage in PB.protobufConfig := true,
       PB.runProtoc in PB.protobufConfig := (args => com.github.os72.protocjar.Protoc.runProtoc("-v261" +: args.toArray))
     )
@@ -166,5 +167,5 @@ lazy val warnUnusedImport = Seq(
   scalacOptions in(Compile, console) ~= {
     _.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))
   },
-  scalacOptions in(Test, console) <<= (scalacOptions in(Compile, console))
+  scalacOptions in(Test, console) := (scalacOptions in(Compile, console)).value
 )
