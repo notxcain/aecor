@@ -6,7 +6,6 @@ import java.time.{LocalDateTime, ZoneId}
 
 import aecor.core.aggregate._
 import aecor.core.message.Correlation.CorrelationId
-import aecor.core.message.ExtractShardId
 import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import akka.actor.{Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId, Passivate}
@@ -16,6 +15,7 @@ import akka.{Done, NotUsed}
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
+import scala.util.hashing.MurmurHash3
 
 object ScheduleActorSupervisor {
   def calculateTimeBucket(date: LocalDateTime, bucketLength: FiniteDuration): Long = {
@@ -29,7 +29,9 @@ object ScheduleActorSupervisor {
 
   def extractShardId(numberOfShards: Int, bucketLength: FiniteDuration): ExtractShardId = {
     case c: AddScheduleEntry =>
-      ExtractShardId(c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), numberOfShards)
+      val id = s"${c.scheduleName}-${calculateTimeBucket(c.dueDate, bucketLength)}"
+      val shardNumber = scala.math.abs(MurmurHash3.stringHash(id)) % numberOfShards
+      shardNumber.toString
   }
 
   def props(entityName: String, tickInterval: FiniteDuration): Props = Props(new ScheduleActorSupervisor(entityName, tickInterval))

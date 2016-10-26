@@ -1,4 +1,5 @@
 import com.trueaccord.scalapb.{ScalaPbPlugin => PB}
+import ReleaseTransformations._
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
@@ -6,12 +7,9 @@ lazy val buildSettings = Seq(
   scalaOrganization := "org.typelevel"
 )
 
-
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   resolvers ++= Seq(
-    "Websudos releases" at "https://dl.bintray.com/websudos/oss-releases/",
-    Resolver.bintrayRepo("hseeberger", "maven"),
     Resolver.bintrayRepo("projectseptemberinc", "maven")
   ),
   libraryDependencies ++= Seq(
@@ -21,13 +19,15 @@ lazy val commonSettings = Seq(
   ),
   parallelExecution in Test := false,
   scalacOptions in(Compile, doc) := (scalacOptions in(Compile, doc)).value.filter(_ != "-Xfatal-warnings")
+
 ) ++ warnUnusedImport
 
-lazy val aecorSettings = buildSettings ++ commonSettings
+lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
 lazy val aecor = project.in(file("."))
                  .settings(moduleName := "aecor")
                  .settings(aecorSettings)
+                 .settings(noPublishSettings)
                  .aggregate(core, api, example, schedule, tests, bench)
                  .dependsOn(core, api, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
@@ -50,54 +50,49 @@ lazy val schedule = project.dependsOn(core)
 lazy val bench = project.dependsOn(core, example)
                  .settings(moduleName := "aecor-bench")
                  .settings(aecorSettings)
+                 .settings(noPublishSettings)
                  .enablePlugins(JmhPlugin)
 
 lazy val tests = project.dependsOn(core, example, schedule)
                  .settings(moduleName := "aecor-tests")
                  .settings(aecorSettings)
+                 .settings(noPublishSettings)
                  .settings(testingSettings)
 
 lazy val example = project.dependsOn(core, api, schedule)
                    .settings(moduleName := "aecor-example")
                    .settings(aecorSettings)
+                   .settings(noPublishSettings)
                    .settings(exampleSettings)
 
-val circeVersion = "0.5.4"
-val akkaVersion = "2.4.11"
-val reactiveKafka = "0.13"
-val akkaPersistenceCassandra = "0.19"
-val catsVersion = "0.7.2"
-val akkaHttpJsonVersion = "1.10.1"
-val freekVersion = "0.6.0"
-val kryoSerializationVersion = "0.4.1"
-val logbackVersion = "1.1.7"
+lazy val circeVersion = "0.5.4"
+lazy val akkaVersion = "2.4.11"
+lazy val reactiveKafkaVersion = "0.13"
+lazy val akkaPersistenceCassandra = "0.19"
+lazy val catsVersion = "0.7.2"
+lazy val akkaHttpJsonVersion = "1.10.1"
+lazy val freekVersion = "0.6.0"
+lazy val kryoSerializationVersion = "0.4.1"
+lazy val logbackVersion = "1.1.7"
 
 lazy val scalaCheckVersion = "1.13.2"
 lazy val scalaTestVersion = "3.0.0"
 lazy val scalaCheckShapelessVersion = "1.1.1"
 lazy val shapelessVersion = "2.3.2"
 
-def dependency(organization: String)(modules: String*)(version: String) = modules.map(module => organization %% module % version)
-
 lazy val coreSettings = Seq(
-  libraryDependencies ++= dependency("com.typesafe.akka")(
-    "akka-cluster-sharding",
-    "akka-persistence",
-    "akka-persistence-query-experimental",
-    "akka-slf4j"
-  )(akkaVersion),
   libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
-    "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafka,
-    "ch.qos.logback" % "logback-classic" % logbackVersion
-  ),
-
-  libraryDependencies ++= Seq(
-    "com.chuusai" %% "shapeless" % shapelessVersion
-  ),
-
-  libraryDependencies += "org.typelevel" %% "cats" % catsVersion
-) ++ commonProtobufSettings
+    "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafkaVersion,
+    "ch.qos.logback" % "logback-classic" % logbackVersion,
+    "com.chuusai" %% "shapeless" % shapelessVersion,
+    "org.typelevel" %% "cats" % catsVersion
+  )
+)
 
 
 lazy val apiSettings = Seq(
@@ -113,21 +108,19 @@ lazy val exampleSettings = Seq(
     "com.github.romix.akka" %% "akka-kryo-serialization" % kryoSerializationVersion,
     "com.typesafe.akka" %% "akka-http-experimental" % akkaVersion,
     "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
-    "com.projectseptember" %% "freek" % freekVersion
-  ),
-  libraryDependencies ++= dependency("io.circe")(
-    "circe-core",
-    "circe-generic",
-    "circe-parser"
-  )(circeVersion)
+    "com.projectseptember" %% "freek" % freekVersion,
+    "io.circe" %% "circe-core" % circeVersion,
+    "io.circe" %% "circe-generic" % circeVersion,
+    "io.circe" %% "circe-parser" % circeVersion
+  )
 )
 
 lazy val testingSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test
-    ,"org.scalatest" %% "scalatest" % scalaTestVersion % Test
-    ,"com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
-    ,"com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+    , "org.scalatest" %% "scalatest" % scalaTestVersion % Test
+    , "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test
+    , "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
   )
 )
 
@@ -169,3 +162,62 @@ lazy val warnUnusedImport = Seq(
   },
   scalacOptions in(Test, console) := (scalacOptions in(Compile, console)).value
 )
+
+lazy val noPublishSettings = Seq(
+  publish := (),
+  publishLocal := (),
+  publishArtifact := false
+)
+
+lazy val publishSettings = Seq(
+  releaseCommitMessage := s"Set version to ${if (releaseUseGlobalVersion.value) (version in ThisBuild).value else version.value}",
+  releaseIgnoreUntrackedFiles := true,
+  releasePublishArtifactsAction := PgpKeys.publishSigned.value,
+  homepage := Some(url("https://github.com/notxcain/aecor")),
+  licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT")),
+  publishMavenStyle := true,
+  publishArtifact in Test := false,
+  pomIncludeRepository := { _ => false },
+  publishTo := {
+    val nexus = "https://oss.sonatype.org/"
+    if (isSnapshot.value)
+      Some("snapshots" at nexus + "content/repositories/snapshots")
+    else
+      Some("releases" at nexus + "service/local/staging/deploy/maven2")
+  },
+  autoAPIMappings := true,
+  scmInfo := Some(
+    ScmInfo(
+      url("https://github.com/notxcain/aecor"),
+      "scm:git:git@github.com:notxcain/aecor.git"
+    )
+  ),
+  pomExtra :=
+    <developers>
+      <developer>
+        <id>notxcain</id>
+        <name>Denis Mikhaylov</name>
+        <url>https://github.com/notxcain</url>
+      </developer>
+    </developers>
+)
+
+
+lazy val sharedReleaseProcess = Seq(
+  releaseProcess := Seq[ReleaseStep](
+    checkSnapshotDependencies,
+    inquireVersions,
+    runClean,
+    runTest,
+    setReleaseVersion,
+    commitReleaseVersion,
+    tagRelease,
+    publishArtifacts,
+    setNextVersion,
+    commitNextVersion,
+    ReleaseStep(action = Command.process("sonatypeReleaseAll", _)),
+    pushChanges
+  )
+)
+
+addCommandAlias("validate", ";compile;test")

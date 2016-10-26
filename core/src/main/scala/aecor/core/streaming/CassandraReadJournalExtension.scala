@@ -9,14 +9,11 @@ import akka.persistence.cassandra.query.UUIDEventEnvelope
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
-import com.datastax.driver.core.Session
 
 import scala.compat.java8.FutureConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 trait CommittableUUIDOffset extends Committable {
-  @deprecated("Use value instead", "0.11.0")
-  def offset: UUID = value
   def value: UUID
 }
 
@@ -55,10 +52,6 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem, offsetStore: Offse
 }
 
 object CassandraReadJournalExtension {
-  import aecor.util.cassandra._
-  def init(keyspace: String)(implicit executionContext: ExecutionContext): Session => Future[_] = { session =>
-    session.executeAsync(s"create table if not exists $keyspace.consumer_offset (consumer_id text, tag text, offset uuid, PRIMARY KEY ((consumer_id, tag)))")
-  }
   def apply(actorSystem: ActorSystem, offsetStore: OffsetStore, readJournal: CassandraReadJournal)(implicit ec: ExecutionContext): CassandraReadJournalExtension =
     new CassandraReadJournalExtension(actorSystem, offsetStore, readJournal)
 }
