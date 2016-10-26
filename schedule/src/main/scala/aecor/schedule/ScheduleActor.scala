@@ -16,6 +16,7 @@ import akka.{Done, NotUsed}
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
+import scala.util.hashing.MurmurHash3
 
 object ScheduleActorSupervisor {
   def calculateTimeBucket(date: LocalDateTime, bucketLength: FiniteDuration): Long = {
@@ -29,7 +30,9 @@ object ScheduleActorSupervisor {
 
   def extractShardId(numberOfShards: Int, bucketLength: FiniteDuration): ExtractShardId = {
     case c: AddScheduleEntry =>
-      ExtractShardId(c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), numberOfShards)
+      val id = s"${c.scheduleName}-${calculateTimeBucket(c.dueDate, bucketLength)}"
+      val shardNumber = scala.math.abs(MurmurHash3.stringHash(id)) % numberOfShards
+      shardNumber.toString
   }
 
   def props(entityName: String, tickInterval: FiniteDuration): Props = Props(new ScheduleActorSupervisor(entityName, tickInterval))
