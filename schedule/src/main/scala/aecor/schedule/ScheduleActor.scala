@@ -6,7 +6,6 @@ import java.time.{LocalDateTime, ZoneId}
 
 import aecor.core.aggregate._
 import aecor.core.message.Correlation.CorrelationId
-import aecor.core.message.ExtractShardId
 import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import akka.actor.{Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated}
 import akka.cluster.sharding.ShardRegion.{ExtractEntityId, ExtractShardId, Passivate}
