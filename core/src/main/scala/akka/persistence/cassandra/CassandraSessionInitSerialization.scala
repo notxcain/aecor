@@ -19,19 +19,6 @@ import scala.concurrent.{ExecutionContext, Future}
 object CassandraSessionInitSerialization {
 
   /**
-   * Creates CassandraSession using settings of default cassandra journal.
-   * Inits are sequenced and are limited to one thread at a time to
-   * reduce the risk of (annoying) "Column family ID mismatch" exception
-   * during concurrent schema mutation by other sessions.
-   */
-  def createSession(system: ActorSystem, metricsCategory: String, inits: (Session => Future[Done])*)(implicit executionContext: ExecutionContext): CassandraSession = {
-    val log = Logging(system, classOf[CassandraSession])
-    val provider = SessionProvider(system.asInstanceOf[ExtendedActorSystem], system.settings.config.getConfig("cassandra-journal"))
-    val settings = CassandraSessionSettings(system.settings.config.getConfig("cassandra-journal"))
-    new CassandraSession(system, provider, settings, executionContext, log, metricsCategory, serialize(inits: _*))
-  }
-
-  /**
     * Exposes private CassandraSession#serializedExecution to run all schema mutation calls on single thread one by one
     * to avoid "Column family ID mismatch" exception in Cassandra.
     */
@@ -48,5 +35,18 @@ object CassandraSessionInitSerialization {
     }
     executeCreate
   }
+}
 
+
+object DefaultJournalCassandraSession {
+  /**
+    * Creates CassandraSession using settings of default cassandra journal.
+    *
+    */
+  def apply(system: ActorSystem, metricsCategory: String, init: Session => Future[Done])(implicit executionContext: ExecutionContext): CassandraSession = {
+    val log = Logging(system, classOf[CassandraSession])
+    val provider = SessionProvider(system.asInstanceOf[ExtendedActorSystem], system.settings.config.getConfig("cassandra-journal"))
+    val settings = CassandraSessionSettings(system.settings.config.getConfig("cassandra-journal"))
+    new CassandraSession(system, provider, settings, executionContext, log, metricsCategory, init)
+  }
 }

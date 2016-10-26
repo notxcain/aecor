@@ -13,7 +13,7 @@ import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
-import akka.persistence.cassandra.CassandraSessionInitSerialization
+import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import cats.~>
@@ -37,7 +37,7 @@ class AppActor extends Actor with ActorLogging {
 
   val queries = new CassandraOffsetStore.Queries(system)
 
-  val sessionWrapper = CassandraSessionInitSerialization.createSession(system, "app-session", queries.init)
+  val sessionWrapper = DefaultJournalCassandraSession(system, "app-session", queries.init)
 
   val offsetStore = new CassandraOffsetStore(sessionWrapper, queries)
 
