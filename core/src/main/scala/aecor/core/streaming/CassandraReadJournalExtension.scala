@@ -15,8 +15,6 @@ import scala.compat.java8.FutureConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 trait CommittableUUIDOffset extends Committable {
-  @deprecated("Use value instead", "0.11.0")
-  def offset: UUID = value
   def value: UUID
 }
 
