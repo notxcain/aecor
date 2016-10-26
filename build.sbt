@@ -170,6 +170,7 @@ lazy val noPublishSettings = Seq(
 )
 
 lazy val publishSettings = Seq(
+  releaseCommitMessage := s"Set version to ${if (releaseUseGlobalVersion.value) (version in ThisBuild).value else version.value}",
   releaseIgnoreUntrackedFiles := true,
   releasePublishArtifactsAction := PgpKeys.publishSigned.value,
   homepage := Some(url("https://github.com/notxcain/aecor")),
