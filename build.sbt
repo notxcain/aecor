@@ -27,6 +27,7 @@ lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 lazy val aecor = project.in(file("."))
                  .settings(moduleName := "aecor")
                  .settings(aecorSettings)
+                 .settings(noPublishSettings)
                  .aggregate(core, api, example, schedule, tests, bench)
                  .dependsOn(core, api, example % "compile-internal", tests % "test-internal -> test", bench % "compile-internal;test-internal -> test")
 
