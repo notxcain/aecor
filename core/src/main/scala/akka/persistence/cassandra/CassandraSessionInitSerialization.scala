@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * DISCLAIMER:
   *
-  * This object exposes private API from akka-persistence-casssandra.
+  * This object exposes private API from akka-persistence-cassandra.
   *
   * It could be broken at any next version.
   */
