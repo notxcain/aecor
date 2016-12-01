@@ -1,4 +1,6 @@
 package aecor.core.streaming
 
-
-case class CommittableJournalEntry[+A](committableOffset: CommittableUUIDOffset, persistenceId: String, sequenceNr: Long, value: A)
+case class CommittableJournalEntry[+A](committableOffset: CommittableOffset,
+                                       persistenceId: String,
+                                       sequenceNr: Long,
+                                       value: A)

@@ -2,14 +2,13 @@ package aecor.example.domain
 
 import java.time.Clock
 
-import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
-import aecor.example.domain.AccountAggregate.{Account, State}
+import aecor.example.domain.AccountAggregate.Account
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.util.function._
+import akka.Done
 
 import scala.collection.immutable.Seq
-
 
 case class AccountId(value: String) extends AnyVal
 
@@ -19,22 +18,40 @@ object AccountAggregate {
     def applyEvent(event: AccountAggregateEvent): State =
       handle(value, event) {
         case None => {
-          case AccountOpened(accountId) => State(Some(Account(accountId, Amount(0), Map.empty, Set.empty)))
-          case other => throw new IllegalArgumentException(s"Unexpected event $other")
+          case AccountOpened(accountId) =>
+            State(Some(Account(accountId, Amount(0), Map.empty, Set.empty)))
+          case other =>
+            throw new IllegalArgumentException(s"Unexpected event $other")
         }
         case Some(self @ Account(id, balance, holds, transactions)) => {
           case e: AccountOpened => this
-          case e: TransactionAuthorized => transform(_.copy(holds = holds + (e.transactionId -> e.amount), balance = balance - e.amount, transactions = transactions + e.transactionId))
-          case e: TransactionVoided => holds.get(e.transactionId).map(holdAmount => transform(_.copy(holds = holds - e.transactionId, balance = balance + holdAmount))).getOrElse(this)
-          case e: AccountCredited => transform(_.copy(balance = balance + e.amount))
-          case e: TransactionCaptured => transform(_.copy(holds = holds - e.transactionId))
+          case e: TransactionAuthorized =>
+            transform(
+              _.copy(holds = holds + (e.transactionId -> e.amount),
+                     balance = balance - e.amount,
+                     transactions = transactions + e.transactionId))
+          case e: TransactionVoided =>
+            holds
+              .get(e.transactionId)
+              .map(holdAmount =>
+                transform(_.copy(holds = holds - e.transactionId,
+                                 balance = balance + holdAmount)))
+              .getOrElse(this)
+          case e: AccountCredited =>
+            transform(_.copy(balance = balance + e.amount))
+          case e: TransactionCaptured =>
+            transform(_.copy(holds = holds - e.transactionId))
         }
       }
 
-    def transform(f: Account => Account): State = value.map(x => copy(value = Some(f(x)))).getOrElse(this)
+    def transform(f: Account => Account): State =
+      value.map(x => copy(value = Some(f(x)))).getOrElse(this)
   }
 
-  case class Account(id: AccountId, balance: Amount, holds: Map[TransactionId, Amount], transactions: Set[TransactionId])
+  case class Account(id: AccountId,
+                     balance: Amount,
+                     holds: Map[TransactionId, Amount],
+                     transactions: Set[TransactionId])
 
   implicit val entityName: AggregateName[AccountAggregate] =
     AggregateName.instance("Account")
@@ -44,8 +61,10 @@ object AccountAggregate {
     override type Event = AccountAggregateEvent
     override type State = AccountAggregate.State
 
-    override def handleCommand[Response](a: AccountAggregate)(state: State, command: Command[Response]): (Response, Seq[Event]) =
-      a.handleCommand(command, state)
+    override def handleCommand[Response](a: AccountAggregate)(
+        state: State,
+        command: Command[Response]): (Response, Seq[Event]) =
+      a.handleCommand(command)(state.value).swap
 
     override def applyEvent(state: State, event: Event): State =
       state.applyEvent(event)
@@ -57,14 +76,24 @@ object AccountAggregate {
 import aecor.example.domain.AccountAggregateOp._
 
 case class AccountAggregate(clock: Clock) {
-  def handleCommand[R](command: AccountAggregateOp[R], state: State): (R, Seq[AccountAggregateEvent]) =
-    handle(command, state.value) {
+
+  def accept[R](events: AccountAggregateEvent*)
+    : (Seq[AccountAggregateEvent], Either[R, Done]) =
+    (events.toVector, Right(Done))
+
+  def reject[R](rejection: R): (Seq[AccountAggregateEvent], Either[R, Done]) =
+    (Seq.empty, Left(rejection))
+
+  def handleCommand[R](command: AccountAggregateOp[R])
+    : Option[Account] => (Seq[AccountAggregateEvent], R) =
+    command match {
       case OpenAccount(accountId) => {
-        case None  =>
-          accept(AccountOpened(accountId))
+        case None =>
+          accept[Rejection](AccountOpened(accountId))
         case _ =>
-          reject(AccountExists)
+          reject[Rejection](AccountExists)
       }
+
       case AuthorizeTransaction(_, transactionId, amount) => {
         case None =>
           reject(AccountDoesNotExist)
