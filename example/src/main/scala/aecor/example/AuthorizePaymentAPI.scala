@@ -1,6 +1,5 @@
 package aecor.example
 
-import aecor.api.Router
 import aecor.core.aggregate.AggregateRegionRef
 import aecor.example.AuthorizePaymentAPI._
 import aecor.example.domain.CardAuthorization.{
@@ -12,7 +11,7 @@ import aecor.example.domain._
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
-
+import akka.http.scaladsl.server.Route
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
 
@@ -92,7 +91,7 @@ object AuthorizePaymentAPI {
 
   }
 
-  implicit val router: Router[AuthorizePaymentAPI] = Router.instance { api =>
+  val route: AuthorizePaymentAPI => Route = { api =>
     path("authorization") {
       extractExecutionContext { implicit ec =>
         post {

@@ -23,7 +23,6 @@ lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.2"
 lazy val kindProjectorVersion = "0.9.3"
-lazy val simulacrumVersion = "0.10.0"
 lazy val paradiseVersion = "2.1.0"
 
 lazy val commonSettings = Seq(
@@ -32,7 +31,6 @@ lazy val commonSettings = Seq(
       Resolver.bintrayRepo("projectseptemberinc", "maven")
     ),
     libraryDependencies ++= Seq(
-      "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
       compilerPlugin(
         "org.spire-math" %% "kind-projector" % kindProjectorVersion),
       compilerPlugin(
@@ -50,9 +48,8 @@ lazy val aecor = project
   .settings(moduleName := "aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
-  .aggregate(core, api, example, schedule, tests, bench)
+  .aggregate(core, example, schedule, tests, bench)
   .dependsOn(core,
-             api,
              example % "compile-internal",
              tests % "test-internal -> test",
              bench % "compile-internal;test-internal -> test")
@@ -61,14 +58,6 @@ lazy val core = project
   .settings(moduleName := "aecor-core")
   .settings(aecorSettings)
   .settings(coreSettings)
-  .settings(
-    libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion % "test")
-
-lazy val api = project
-  .dependsOn(core)
-  .settings(moduleName := "aecor-api")
-  .settings(aecorSettings)
-  .settings(apiSettings)
 
 lazy val schedule = project
   .dependsOn(core)
@@ -91,7 +80,7 @@ lazy val tests = project
   .settings(testingSettings)
 
 lazy val example = project
-  .dependsOn(core, api, schedule)
+  .dependsOn(core, schedule)
   .settings(moduleName := "aecor-example")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -108,12 +97,6 @@ lazy val coreSettings = Seq(
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion
-  )
-)
-
-lazy val apiSettings = Seq(
-  libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-http" % akkaHttpVersion
   )
 )
 

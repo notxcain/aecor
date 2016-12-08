@@ -1,14 +1,15 @@
 package aecor.example
 
-import aecor.api.Router
 import aecor.core.aggregate.AggregateRegionRef
 import aecor.example.domain._
 import akka.Done
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Route
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
 import cats.implicits._
+
 import scala.concurrent.{ExecutionContext, Future}
 
 class AccountAPI(account: AggregateRegionRef[AccountAggregateOp]) {
@@ -47,7 +48,7 @@ object AccountAPI {
     case class OpenAccount(accountId: String) extends DTO
   }
 
-  implicit val router: Router[AccountAPI] = Router.instance { api =>
+  val route: AccountAPI => Route = { api =>
     path("accounts") {
       extractExecutionContext { implicit ec =>
         post {
