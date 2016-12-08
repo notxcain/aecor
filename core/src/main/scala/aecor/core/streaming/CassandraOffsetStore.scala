@@ -13,11 +13,11 @@ object CassandraOffsetStore {
     val config = actorSystem.settings.config
     val keyspace = config.getString("cassandra-journal.keyspace")
     def createTableQuery =
-      s"CREATE TABLE IF NOT EXISTS $keyspace.consumer_offset (consumer_id text, tag text, offset uuid, sequence_offset long, PRIMARY KEY ((consumer_id, tag)))"
+      s"CREATE TABLE IF NOT EXISTS $keyspace.consumer_offset (consumer_id text, tag text, uuid_offset uuid, sequence_offset long, PRIMARY KEY ((consumer_id, tag)))"
     def updateOffsetQuery =
-      s"UPDATE $keyspace.consumer_offset SET offset = ?, sequence_offset = ? where consumer_id = ? AND tag = ?"
+      s"UPDATE $keyspace.consumer_offset SET uuid_offset = ?, sequence_offset = ? WHERE consumer_id = ? AND tag = ?"
     def selectOffsetQuery =
-      s"select offset, sequence_offset from $keyspace.consumer_offset where consumer_id = ? and tag = ?"
+      s"SELECT uuid_offset, sequence_offset FROM $keyspace.consumer_offset WHERE consumer_id = ? AND tag = ?"
     def init(implicit executionContext: ExecutionContext)
       : Session => Future[Done] = { session =>
       import aecor.util.cassandra._
@@ -41,7 +41,7 @@ class CassandraOffsetStore(sessionWrapper: CassandraSession,
       .flatMap(sessionWrapper.selectOne)
       .map {
         case Some(row) =>
-          val uuid = row.getUUID("offset")
+          val uuid = row.getUUID("uuid_offset")
           if (uuid != null) {
             TimeBasedUUID(uuid)
           } else {
@@ -68,7 +68,7 @@ class CassandraOffsetStore(sessionWrapper: CassandraSession,
           stmt.bind(null, null, consumerId, tag)
         case other =>
           throw new IllegalArgumentException(
-            s"Cassandra offset store does not support [$other]")
+            s"Cassandra offset store does not support [$other] offset")
       }
     }.flatMap(sessionWrapper.executeWrite)
 
