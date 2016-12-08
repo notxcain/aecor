@@ -1,7 +1,6 @@
 package aecor.core.aggregate
 
 import akka.Done
-import cats.data.Xor
 
 import scala.collection.immutable.Seq
 
@@ -10,7 +9,8 @@ trait AggregateBehavior[A] {
   type State
   type Event
 
-  def handleCommand[Response](a: A)(state: State, command: Command[Response]): AggregateBehavior.CommandHandlerResult[Response, Event]
+  def handleCommand[Response](a: A)(state: State, command: Command[Response])
+    : AggregateBehavior.CommandHandlerResult[Response, Event]
 
   def init: State
 
@@ -19,9 +19,11 @@ trait AggregateBehavior[A] {
 
 object AggregateBehavior {
   object syntax {
-    def accept[R, E](events: E*): (Xor[R, Done], Seq[E]) = (Xor.right(Done), events.toVector)
+    def accept[R, E](events: E*): (Either[R, Done], Seq[E]) =
+      (Right(Done), events.toVector)
 
-    def reject[R, E](rejection: R): (Xor[R, Done], Seq[E]) = (Xor.left(rejection), Seq.empty)
+    def reject[R, E](rejection: R): (Either[R, Done], Seq[E]) =
+      (Left(rejection), Seq.empty)
   }
 
   type Aux[A, Command0[_], State0, Event0] = AggregateBehavior[A] {
@@ -32,4 +34,3 @@ object AggregateBehavior {
 
   type CommandHandlerResult[Response, Event] = (Response, Seq[Event])
 }
-

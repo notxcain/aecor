@@ -8,7 +8,6 @@ import aecor.example.domain.CardAuthorization.{Event, State}
 import cats.free.Free
 import aecor.util.function._
 import akka.Done
-import cats.data.Xor
 
 import scala.collection.immutable.Seq
 
@@ -27,37 +26,75 @@ object CardAuthorization {
     def lift: DSL[Response] = Free.liftF(this)
   }
 
-  type CommandResult[+Rejection] = Xor[Rejection, Done]
+  type CommandResult[+Rejection] = Either[Rejection, Done]
 
   object Command {
-    def createCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId): DSL[CommandResult[CreateCardAuthorizationRejection]] =
-      CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId).lift
+    def createCardAuthorization(cardAuthorizationId: CardAuthorizationId,
+                                accountId: AccountId,
+                                amount: Amount,
+                                acquireId: AcquireId,
+                                terminalId: TerminalId)
+      : DSL[CommandResult[CreateCardAuthorizationRejection]] =
+      CreateCardAuthorization(cardAuthorizationId,
+                              accountId,
+                              amount,
+                              acquireId,
+                              terminalId).lift
   }
-  case class CreateCardAuthorization(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId) extends Command[CommandResult[CreateCardAuthorizationRejection]]
-  case class DeclineCardAuthorization(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) extends Command[CommandResult[DeclineCardAuthorizationRejection]]
-  case class AcceptCardAuthorization(cardAuthorizationId: CardAuthorizationId) extends Command[CommandResult[AcceptCardAuthorizationRejection]]
-
+  case class CreateCardAuthorization(cardAuthorizationId: CardAuthorizationId,
+                                     accountId: AccountId,
+                                     amount: Amount,
+                                     acquireId: AcquireId,
+                                     terminalId: TerminalId)
+      extends Command[CommandResult[CreateCardAuthorizationRejection]]
+  case class DeclineCardAuthorization(cardAuthorizationId: CardAuthorizationId,
+                                      reason: DeclineReason)
+      extends Command[CommandResult[DeclineCardAuthorizationRejection]]
+  case class AcceptCardAuthorization(cardAuthorizationId: CardAuthorizationId)
+      extends Command[CommandResult[AcceptCardAuthorizationRejection]]
 
   sealed trait Event {
     def cardAuthorizationId: CardAuthorizationId
   }
-  case class CardAuthorizationCreated(cardAuthorizationId: CardAuthorizationId, accountId: AccountId, amount: Amount, acquireId: AcquireId, terminalId: TerminalId, transactionId: TransactionId) extends Event
-  case class CardAuthorizationDeclined(cardAuthorizationId: CardAuthorizationId, reason: DeclineReason) extends Event
-  case class CardAuthorizationAccepted(cardAuthorizationId: CardAuthorizationId) extends Event
+  case class CardAuthorizationCreated(cardAuthorizationId: CardAuthorizationId,
+                                      accountId: AccountId,
+                                      amount: Amount,
+                                      acquireId: AcquireId,
+                                      terminalId: TerminalId,
+                                      transactionId: TransactionId)
+      extends Event
+  case class CardAuthorizationDeclined(
+      cardAuthorizationId: CardAuthorizationId,
+      reason: DeclineReason)
+      extends Event
+  case class CardAuthorizationAccepted(
+      cardAuthorizationId: CardAuthorizationId)
+      extends Event
 
   sealed trait CreateCardAuthorizationRejection
   sealed trait DeclineCardAuthorizationRejection
   sealed trait AcceptCardAuthorizationRejection
-  case object DoesNotExists extends DeclineCardAuthorizationRejection with AcceptCardAuthorizationRejection
+  case object DoesNotExists
+      extends DeclineCardAuthorizationRejection
+      with AcceptCardAuthorizationRejection
   case object AlreadyExists extends CreateCardAuthorizationRejection
-  case object AlreadyDeclined extends DeclineCardAuthorizationRejection with AcceptCardAuthorizationRejection
-  case object AlreadyAccepted extends DeclineCardAuthorizationRejection with AcceptCardAuthorizationRejection
+  case object AlreadyDeclined
+      extends DeclineCardAuthorizationRejection
+      with AcceptCardAuthorizationRejection
+  case object AlreadyAccepted
+      extends DeclineCardAuthorizationRejection
+      with AcceptCardAuthorizationRejection
 
   sealed trait State {
     def applyEvent(event: Event): State =
       handle(this, event) {
         case Initial => {
-          case CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, transactionId) =>
+          case CardAuthorizationCreated(cardAuthorizationId,
+                                        accountId,
+                                        amount,
+                                        acquireId,
+                                        terminalId,
+                                        transactionId) =>
             Created(cardAuthorizationId)
           case other =>
             throw new IllegalArgumentException(s"Unexpected event $other")
@@ -84,9 +121,11 @@ object CardAuthorization {
   case class Accepted(id: CardAuthorizationId) extends State
   case class Declined(id: CardAuthorizationId) extends State
 
-  implicit def correlation: Correlation[Command[_]] = Correlation.instance(_.cardAuthorizationId.value)
+  implicit def correlation: Correlation[Command[_]] =
+    Correlation.instance(_.cardAuthorizationId.value)
 
-  implicit val name: AggregateName[CardAuthorization] = AggregateName.instance("CardAuthorization")
+  implicit val name: AggregateName[CardAuthorization] =
+    AggregateName.instance("CardAuthorization")
 
   implicit object behavior extends AggregateBehavior[CardAuthorization] {
     type Command[X] = CardAuthorization.Command[X]
@@ -94,9 +133,9 @@ object CardAuthorization {
 
     override type State = CardAuthorization.State
 
-    override def handleCommand[Response](a: CardAuthorization)(state: State, command: Command[Response]) =
+    override def handleCommand[Response](
+        a: CardAuthorization)(state: State, command: Command[Response]) =
       a.handleCommand(state, command)
-
 
     override def init: State = Initial
 
@@ -111,15 +150,27 @@ case class CardNumber(value: String) extends AnyVal
 case class AcquireId(value: Long) extends AnyVal
 case class TerminalId(value: Long) extends AnyVal
 
-
 import aecor.example.domain.CardAuthorization._
 
 class CardAuthorization {
-  def handleCommand[Response](state: State, command: Command[Response]): (Response, Seq[Event]) =
+  def handleCommand[Response](
+      state: State,
+      command: Command[Response]): (Response, Seq[Event]) =
     handle(state, command) {
       case Initial => {
-        case CreateCardAuthorization(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
-          accept(CardAuthorizationCreated(cardAuthorizationId, accountId, amount, acquireId, terminalId, TransactionId(UUID.randomUUID().toString)))
+        case CreateCardAuthorization(cardAuthorizationId,
+                                     accountId,
+                                     amount,
+                                     acquireId,
+                                     terminalId) =>
+          accept(
+            CardAuthorizationCreated(
+              cardAuthorizationId,
+              accountId,
+              amount,
+              acquireId,
+              terminalId,
+              TransactionId(UUID.randomUUID().toString)))
         case c: AcceptCardAuthorization =>
           reject(DoesNotExists)
         case c: DeclineCardAuthorization =>
