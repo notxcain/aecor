@@ -6,7 +6,8 @@ import aecor.core.aggregate._
 import aecor.example.domain.AccountAggregate.Account
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.util.function._
-import akka.Done
+
+import aecor.core.aggregate.AggregateBehavior.syntax._
 
 import scala.collection.immutable.Seq
 
@@ -14,7 +15,7 @@ case class AccountId(value: String) extends AnyVal
 
 object AccountAggregate {
 
-  case class State(value: Option[Account]) {
+  case class State(value: Option[Account]) extends AnyVal {
     def applyEvent(event: AccountAggregateEvent): State =
       handle(value, event) {
         case None => {
@@ -23,7 +24,7 @@ object AccountAggregate {
           case other =>
             throw new IllegalArgumentException(s"Unexpected event $other")
         }
-        case Some(self @ Account(id, balance, holds, transactions)) => {
+        case Some(Account(id, balance, holds, transactions)) => {
           case e: AccountOpened => this
           case e: TransactionAuthorized =>
             transform(
@@ -64,7 +65,7 @@ object AccountAggregate {
     override def handleCommand[Response](a: AccountAggregate)(
         state: State,
         command: Command[Response]): (Response, Seq[Event]) =
-      a.handleCommand(command)(state.value).swap
+      a.handleCommand(command, state.value)
 
     override def applyEvent(state: State, event: Event): State =
       state.applyEvent(event)
@@ -77,57 +78,56 @@ import aecor.example.domain.AccountAggregateOp._
 
 case class AccountAggregate(clock: Clock) {
 
-  def accept[R](events: AccountAggregateEvent*)
-    : (Seq[AccountAggregateEvent], Either[R, Done]) =
-    (events.toVector, Right(Done))
-
-  def reject[R](rejection: R): (Seq[AccountAggregateEvent], Either[R, Done]) =
-    (Seq.empty, Left(rejection))
-
-  def handleCommand[R](command: AccountAggregateOp[R])
-    : Option[Account] => (Seq[AccountAggregateEvent], R) =
+  def handleCommand[R](
+      command: AccountAggregateOp[R],
+      state: Option[Account]): (R, Seq[AccountAggregateEvent]) =
     command match {
-      case OpenAccount(accountId) => {
-        case None =>
-          accept[Rejection](AccountOpened(accountId))
-        case _ =>
-          reject[Rejection](AccountExists)
-      }
+      case OpenAccount(accountId) =>
+        state match {
+          case None =>
+            accept(AccountOpened(accountId))
+          case _ =>
+            reject(AccountExists)
+        }
 
-      case AuthorizeTransaction(_, transactionId, amount) => {
-        case None =>
-          reject(AccountDoesNotExist)
-        case Some(Account(id, balance, holds, transactions)) =>
-          if (transactions.contains(transactionId)) {
-            reject(DuplicateTransaction)
-          } else if (balance > amount) {
-            accept(TransactionAuthorized(id, transactionId, amount))
-          } else {
-            reject(InsufficientFunds)
-          }
-      }
-      case VoidTransaction(_, transactionId) => {
-        case None =>
-          reject(AccountDoesNotExist)
-        case Some(Account(id, balance, holds, transactions)) =>
-          accept(TransactionVoided(id, transactionId))
-      }
-      case CaptureTransaction(_, transactionId, clearingAmount) => {
-        case None =>
-          reject(AccountDoesNotExist)
-        case Some(Account(id, balance, holds, transactions)) =>
-          holds.get(transactionId) match {
-            case Some(amount) =>
-              accept(TransactionCaptured(id, transactionId, clearingAmount))
-            case None =>
-              reject(HoldNotFound)
-          }
-      }
-      case CreditAccount(_, transactionId, amount) => {
-        case None =>
-          reject(AccountDoesNotExist)
-        case Some(Account(id, balance, holds, transactions)) =>
-          accept(AccountCredited(id, transactionId, amount))
-      }
+      case AuthorizeTransaction(_, transactionId, amount) =>
+        state match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            if (transactions.contains(transactionId)) {
+              reject(DuplicateTransaction)
+            } else if (balance > amount) {
+              accept(TransactionAuthorized(id, transactionId, amount))
+            } else {
+              reject(InsufficientFunds)
+            }
+        }
+      case VoidTransaction(_, transactionId) =>
+        state match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            accept(TransactionVoided(id, transactionId))
+        }
+      case CaptureTransaction(_, transactionId, clearingAmount) =>
+        state match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            holds.get(transactionId) match {
+              case Some(amount) =>
+                accept(TransactionCaptured(id, transactionId, clearingAmount))
+              case None =>
+                reject(HoldNotFound)
+            }
+        }
+      case CreditAccount(_, transactionId, amount) =>
+        state match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            accept(AccountCredited(id, transactionId, amount))
+        }
     }
 }

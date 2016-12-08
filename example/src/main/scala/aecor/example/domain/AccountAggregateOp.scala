@@ -77,6 +77,6 @@ object AccountAggregateOp {
   case object HoldNotFound extends Rejection
 }
 
-sealed trait AccountAggregateOp[+R] {
+sealed trait AccountAggregateOp[R] {
   def accountId: AccountId
 }
