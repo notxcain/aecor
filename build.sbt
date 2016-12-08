@@ -124,7 +124,7 @@ lazy val exampleSettings = Seq(
     "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
     "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
     ("com.projectseptember" %% "freek" % freekVersion)
-      .exclude("org.typlevel", "cats-free_2.12.0-RC2"),
+      .exclude("org.typelevel", "cats-free_2.12.0-RC2"),
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion
