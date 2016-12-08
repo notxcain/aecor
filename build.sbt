@@ -48,11 +48,10 @@ lazy val aecor = project
   .settings(moduleName := "aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
-  .aggregate(core, example, schedule, tests, bench)
+  .aggregate(core, example, schedule, tests)
   .dependsOn(core,
              example % "compile-internal",
-             tests % "test-internal -> test",
-             bench % "compile-internal;test-internal -> test")
+             tests % "test-internal -> test")
 
 lazy val core = project
   .settings(moduleName := "aecor-core")
@@ -64,13 +63,6 @@ lazy val schedule = project
   .settings(moduleName := "aecor-schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
-
-lazy val bench = project
-  .dependsOn(core, example)
-  .settings(moduleName := "aecor-bench")
-  .settings(aecorSettings)
-  .settings(noPublishSettings)
-  .enablePlugins(JmhPlugin)
 
 lazy val tests = project
   .dependsOn(core, example, schedule)
