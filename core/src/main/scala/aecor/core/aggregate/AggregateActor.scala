@@ -14,7 +14,6 @@ import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
-import scala.reflect.ClassTag
 
 sealed trait SnapshotPolicy {
   def shouldSnapshotAtEventCount(eventCount: Long): Boolean
@@ -51,9 +50,7 @@ object AggregateActor {
       identity: Identity,
       snapshotPolicy: SnapshotPolicy,
       tagger: Tagger[Event],
-      idleTimeout: FiniteDuration)(implicit Command: ClassTag[Command[_]],
-                                   Event: ClassTag[Event],
-                                   State: ClassTag[State]) =
+      idleTimeout: FiniteDuration) =
     Props(
       new AggregateActor(entityName,
                          behavior,
@@ -81,9 +78,7 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
     identity: Identity,
     snapshotPolicy: SnapshotPolicy,
     tagger: Tagger[Event],
-    idleTimeout: FiniteDuration)(implicit Command: ClassTag[Command[_]],
-                                 Event: ClassTag[Event],
-                                 State: ClassTag[State])
+    idleTimeout: FiniteDuration)
     extends PersistentActor
     with Stash
     with ActorLogging {
@@ -107,11 +102,8 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
   private var eventCount = 0L
 
   final override def receiveRecover: Receive = {
-    case e: Event =>
-      applyEvent(e)
-
-    case SnapshotOffer(_, snapshot: State) =>
-      state = snapshot
+    case SnapshotOffer(_, snapshot) =>
+      state = snapshot.asInstanceOf[State]
 
     case RecoveryCompleted =>
       log.info(
@@ -120,13 +112,16 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
         lastSequenceNr,
         Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
       setIdleTimeout()
+
+    case e =>
+      applyEvent(e.asInstanceOf[Event])
   }
 
   final override def receiveCommand: Receive =
     receivePassivationMessages.orElse(receiveCommandMessage)
 
   private def receiveCommandMessage: Receive = {
-    case command if Command.runtimeClass.isAssignableFrom(command.getClass) =>
+    case command =>
       handleCommand(command.asInstanceOf[Command[Any]])
   }
 

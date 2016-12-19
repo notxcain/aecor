@@ -7,7 +7,6 @@ import akka.cluster.sharding.{ClusterSharding, ShardRegion}
 import cats.~>
 
 import scala.concurrent.Future
-import scala.reflect.ClassTag
 
 object AggregateSharding {
   def apply(system: ActorSystem): AggregateSharding =
@@ -19,10 +18,8 @@ class AggregateSharding(system: ActorSystem) {
       behavior: Behavior[Command, State, Event],
       entityName: String,
       correlation: Correlation[Command],
-      settings: AggregateShardingSettings = AggregateShardingSettings(system))(
-      implicit Command: ClassTag[Command[_]],
-      Event: ClassTag[Event],
-      State: ClassTag[State]): Command ~> Future = {
+      settings: AggregateShardingSettings = AggregateShardingSettings(system))
+    : Command ~> Future = {
 
     val props = AggregateActor.props(
       behavior,
