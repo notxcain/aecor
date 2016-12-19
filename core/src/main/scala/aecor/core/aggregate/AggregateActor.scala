@@ -4,6 +4,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant}
 
+import aecor.core.aggregate.AggregateActor.Tagger
 import aecor.core.aggregate.behavior.Behavior
 import akka.NotUsed
 import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash}
@@ -39,20 +40,27 @@ object Identity {
 }
 
 object AggregateActor {
+  type Tagger[E] = E => String
+  object Tagger {
+    def const[E](value: String): Tagger[E] = _ => value
+  }
+
   def props[Command[_], State, Event](
       behavior: Behavior[Command, State, Event],
       entityName: String,
       identity: Identity,
       snapshotPolicy: SnapshotPolicy,
+      tagger: Tagger[Event],
       idleTimeout: FiniteDuration)(implicit Command: ClassTag[Command[_]],
                                    Event: ClassTag[Event],
                                    State: ClassTag[State]) =
     Props(
-      new AggregateActor[Command, State, Event](entityName,
-                                                behavior,
-                                                identity,
-                                                snapshotPolicy,
-                                                idleTimeout))
+      new AggregateActor(entityName,
+                         behavior,
+                         identity,
+                         snapshotPolicy,
+                         tagger,
+                         idleTimeout))
 
   case object Stop
 }
@@ -67,11 +75,12 @@ object AggregateActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-class AggregateActor[Command[_], State, Event](
+class AggregateActor[Command[_], State, Event] private[aecor] (
     entityName: String,
     behavior: Behavior[Command, State, Event],
     identity: Identity,
     snapshotPolicy: SnapshotPolicy,
+    tagger: Tagger[Event],
     idleTimeout: FiniteDuration)(implicit Command: ClassTag[Command[_]],
                                  Event: ClassTag[Event],
                                  State: ClassTag[State])
@@ -129,7 +138,7 @@ class AggregateActor[Command[_], State, Event](
               command,
               response,
               events)
-    val envelopes = events.map(Tagged(_, tags))
+    val envelopes = events.map(e => Tagged(e, Set(tagger(e))))
     var shouldSaveSnapshot = false
     persistAll(envelopes) { x =>
       applyEvent(x.payload.asInstanceOf[Event])

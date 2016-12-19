@@ -1,5 +1,6 @@
 package aecor.core.aggregate
 
+import aecor.core.aggregate.AggregateActor.Tagger
 import aecor.core.aggregate.AggregateBehavior.Aux
 import aecor.core.aggregate.behavior.{Behavior, Handler}
 import akka.actor.{
@@ -65,6 +66,7 @@ class AggregateSharding(system: ExtendedActorSystem) extends Extension {
         aggregateName.value,
         Identity.FromPathName,
         settings.snapshotPolicy(aggregateName.value),
+        Tagger.const(aggregateName.value),
         settings.idleTimeout(aggregateName.value)
       )
 
@@ -86,7 +88,7 @@ class AggregateSharding(system: ExtendedActorSystem) extends Extension {
         extractShardId = extractShardId
       )
 
-      new AggregateRegionRef[Command](shardRegionRef, settings.askTimeout)
+      new RegionRef[Command](shardRegionRef, settings.askTimeout)
     }
   }
 }

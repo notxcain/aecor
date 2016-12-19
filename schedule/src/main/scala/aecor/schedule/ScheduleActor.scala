@@ -4,6 +4,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{LocalDateTime, ZoneId}
 
+import aecor.core.aggregate.AggregateActor.Tagger
 import aecor.core.aggregate.Correlation.CorrelationId
 import aecor.core.aggregate._
 import aecor.core.aggregate.behavior.{Behavior, Handler}
@@ -214,6 +215,7 @@ class ScheduleActor(entityName: String,
       ScheduleBehavior(),
       Identity.Provided(scheduleName + "-" + timeBucket),
       SnapshotPolicy.Never,
+      Tagger.const(entityName),
       10.seconds) {
   override def shouldPassivate: Boolean = state.entries.isEmpty
 }

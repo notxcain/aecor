@@ -5,7 +5,9 @@ import scala.collection.immutable.Seq
 
 object behavior {
 
-  type Handler[State, Event, A] = (State => (Seq[Event], A))
+  type Handler[State, Event, A] = State => (Seq[Event], A)
+  def Handler[State, Event, A](
+      f: State => (Seq[Event], A)): Handler[State, Event, A] = f
 
   final case class Behavior[Command[_], State, Event](
       commandHandler: Command ~> Handler[State, Event, ?],

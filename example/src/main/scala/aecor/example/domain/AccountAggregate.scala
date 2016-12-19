@@ -2,11 +2,11 @@ package aecor.example.domain
 
 import java.time.Clock
 
+import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate._
+import aecor.core.aggregate.behavior.Handler
 import aecor.example.domain.AccountAggregate.{Account, State}
 import aecor.example.domain.AccountAggregateEvent._
-import aecor.util.function._
-import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.example.domain.AccountAggregateOp.{
   AccountDoesNotExist,
   AccountExists,
@@ -19,6 +19,8 @@ import aecor.example.domain.AccountAggregateOp.{
   OpenAccount,
   VoidTransaction
 }
+import aecor.util.function._
+import cats.~>
 
 import scala.collection.immutable.Seq
 
@@ -127,6 +129,66 @@ object AccountAggregate {
 
   implicit val entityName: AggregateName[AccountAggregate] =
     AggregateName.instance("Account")
+
+  def commandHandler(clock: Clock)
+    : AccountAggregateOp ~> Handler[Option[AccountAggregate.Account],
+                                    AccountAggregateEvent,
+                                    ?] =
+    new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account],
+                                       AccountAggregateEvent,
+                                       ?]) {
+      override def apply[A](fa: AccountAggregateOp[A]) =
+        fa match {
+          case OpenAccount(accountId) =>
+            Handler {
+              case None =>
+                accept(AccountOpened(accountId))
+              case _ =>
+                reject(AccountExists)
+            }
+
+          case AuthorizeTransaction(_, transactionId, amount) =>
+            Handler {
+              case None =>
+                reject(AccountDoesNotExist)
+              case Some(Account(id, balance, holds, transactions)) =>
+                if (transactions.contains(transactionId)) {
+                  reject(DuplicateTransaction)
+                } else if (balance > amount) {
+                  accept(TransactionAuthorized(id, transactionId, amount))
+                } else {
+                  reject(InsufficientFunds)
+                }
+            }
+          case VoidTransaction(_, transactionId) =>
+            Handler {
+              case None =>
+                reject(AccountDoesNotExist)
+              case Some(Account(id, balance, holds, transactions)) =>
+                accept(TransactionVoided(id, transactionId))
+            }
+          case CaptureTransaction(_, transactionId, clearingAmount) =>
+            Handler {
+              case None =>
+                reject(AccountDoesNotExist)
+              case Some(Account(id, balance, holds, transactions)) =>
+                holds.get(transactionId) match {
+                  case Some(amount) =>
+                    accept(
+                      TransactionCaptured(id, transactionId, clearingAmount))
+                  case None =>
+                    reject(HoldNotFound)
+                }
+            }
+          case CreditAccount(_, transactionId, amount) =>
+            Handler {
+              case None =>
+                reject(AccountDoesNotExist)
+              case Some(Account(id, balance, holds, transactions)) =>
+                accept(AccountCredited(id, transactionId, amount))
+            }
+        }
+    }
 
   implicit object behavior extends AggregateBehavior[AccountAggregate] {
     override type Command[X] = AccountAggregateOp[X]

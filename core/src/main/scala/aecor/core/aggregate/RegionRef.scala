@@ -8,17 +8,17 @@ import cats.~>
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-private final class AggregateRegionRef[Command[_]](shardRegion: ActorRef,
-                                                   askTimeout: FiniteDuration)
-    extends (Command ~> Future) {
+private final class RegionRef[C[_]](shardRegion: ActorRef,
+                                    askTimeout: FiniteDuration)
+    extends (C ~> Future) {
 
   implicit private val timeout = Timeout(askTimeout)
 
   @deprecated("0.13.0", "Use FunctionK#apply instead")
-  def ask[Response](command: Command[Response]): Future[Response] =
+  def ask[Response](command: C[Response]): Future[Response] =
     apply(command)
 
-  override def apply[A](fa: Command[A]): Future[A] = {
+  override def apply[A](fa: C[A]): Future[A] = {
     (shardRegion ? fa).asInstanceOf[Future[A]]
   }
 }

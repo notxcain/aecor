@@ -4,7 +4,6 @@ import java.util.UUID
 import aecor.core.aggregate.AggregateBehavior.syntax._
 import aecor.core.aggregate.{Correlation, _}
 import aecor.example.domain.CardAuthorization.{Event, State}
-import cats.free.Free
 import aecor.util.function._
 import akka.Done
 
@@ -18,28 +17,12 @@ object CardAuthorization {
   case object AccountDoesNotExist extends DeclineReason
   case object Unknown extends DeclineReason
 
-  type DSL[Response] = Free[Command, Response]
-
   sealed trait Command[Response] {
     def cardAuthorizationId: CardAuthorizationId
-    def lift: DSL[Response] = Free.liftF(this)
   }
 
   type CommandResult[+Rejection] = Either[Rejection, Done]
 
-  object Command {
-    def createCardAuthorization(cardAuthorizationId: CardAuthorizationId,
-                                accountId: AccountId,
-                                amount: Amount,
-                                acquireId: AcquireId,
-                                terminalId: TerminalId)
-      : DSL[CommandResult[CreateCardAuthorizationRejection]] =
-      CreateCardAuthorization(cardAuthorizationId,
-                              accountId,
-                              amount,
-                              acquireId,
-                              terminalId).lift
-  }
   case class CreateCardAuthorization(cardAuthorizationId: CardAuthorizationId,
                                      accountId: AccountId,
                                      amount: Amount,
