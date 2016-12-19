@@ -4,7 +4,7 @@ import java.time.Clock
 
 import aecor.core.aggregate._
 import aecor.core.streaming._
-import aecor.example.domain.CardAuthorization.CardAuthorizationCreated
+import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
 import aecor.schedule._
 import akka.actor.{Actor, ActorLogging, Props}
@@ -15,7 +15,9 @@ import akka.http.scaladsl.server.Directives._
 import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
+import cats.~>
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object AppActor {
@@ -41,13 +43,16 @@ class AppActor extends Actor with ActorLogging {
 
   val journal = AggregateJournal(system, offsetStore)
 
-  val authorizationRegion =
-    AggregateSharding(system)
-      .start[CardAuthorization.Command](CardAuthorization())
+  val authorizationRegion: CardAuthorizationAggregateOp ~> Future =
+    AggregateSharding(system).start(CardAuthorizationAggregate.behavior,
+                                    CardAuthorizationAggregate.entityName,
+                                    CardAuthorizationAggregate.correlation)
 
-  val accountRegion =
-    AggregateSharding(system)
-      .start[AccountAggregateOp](AccountAggregate(Clock.systemUTC()))
+  val accountRegion: AccountAggregateOp ~> Future =
+    AggregateSharding(system).start(
+      AccountAggregate.behavior(Clock.systemUTC()),
+      AccountAggregate.entityName,
+      AccountAggregate.correlation)
 
   val scheduleEntityName = "Schedule3"
 
@@ -55,12 +60,13 @@ class AppActor extends Actor with ActorLogging {
     Schedule(system, scheduleEntityName, 1.day, 10.seconds, offsetStore)
 
   val cardAuthorizationEventStream =
-    new DefaultEventStream(system,
-                           journal
-                             .committableEventSource[CardAuthorization.Event](
-                               CardAuthorization.name.value,
-                               "CardAuthorization-API")
-                             .map(_.value))
+    new DefaultEventStream(
+      system,
+      journal
+        .committableEventSource[CardAuthorizationAggregateEvent](
+          CardAuthorizationAggregate.entityName,
+          "CardAuthorization-API")
+        .map(_.value))
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(
     authorizationRegion,
@@ -73,8 +79,8 @@ class AppActor extends Actor with ActorLogging {
   val interpreter = accountRegion :&: authorizationRegion
 
   journal
-    .committableEventSource[CardAuthorization.Event](
-      CardAuthorization.name.value,
+    .committableEventSource[CardAuthorizationAggregateEvent](
+      CardAuthorizationAggregate.entityName,
       "processing")
     .collect {
       case CommittableJournalEntry(offset,

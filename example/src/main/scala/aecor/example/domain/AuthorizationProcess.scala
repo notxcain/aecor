@@ -1,14 +1,8 @@
 package aecor.example.domain
 
 import aecor.example.domain.AccountAggregateOp._
-import aecor.example.domain.CardAuthorization.{
-  AcceptCardAuthorization,
-  AlreadyAccepted,
-  AlreadyDeclined,
-  CardAuthorizationCreated,
-  DeclineCardAuthorization,
-  DoesNotExists
-}
+import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
+import aecor.example.domain.CardAuthorizationAggregateOp._
 import akka.stream.scaladsl.Flow
 import akka.{Done, NotUsed}
 import cats.free.Free
@@ -17,7 +11,8 @@ import freek._
 import scala.concurrent.{ExecutionContext, Future}
 
 object AuthorizationProcess {
-  type PRG = AccountAggregateOp :|: CardAuthorization.Command :|: NilDSL
+  type PRG =
+    AccountAggregateOp :|: CardAuthorizationAggregateOp :|: NilDSL
 
   val PRG = DSL.Make[PRG]
 
@@ -53,13 +48,15 @@ object AuthorizationProcess {
           case Left(rejection) =>
             rejection match {
               case AccountAggregateOp.AccountDoesNotExist =>
-                DeclineCardAuthorization(cardAuthorizationId,
-                                         CardAuthorization.AccountDoesNotExist)
+                DeclineCardAuthorization(
+                  cardAuthorizationId,
+                  CardAuthorizationAggregateOp.AccountDoesNotExist)
                   .freek[PRG]
                   .map(_ => Done)
               case AccountAggregateOp.InsufficientFunds =>
-                DeclineCardAuthorization(cardAuthorizationId,
-                                         CardAuthorization.InsufficientFunds)
+                DeclineCardAuthorization(
+                  cardAuthorizationId,
+                  CardAuthorizationAggregateOp.InsufficientFunds)
                   .freek[PRG]
                   .map(_ => Done)
               case AccountAggregateOp.DuplicateTransaction =>

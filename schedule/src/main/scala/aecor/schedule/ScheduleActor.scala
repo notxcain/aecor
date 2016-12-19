@@ -28,25 +28,26 @@ import cats.~>
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration._
-import scala.util.hashing.MurmurHash3
 
 object ScheduleActorSupervisor {
-  def calculateTimeBucket(date: LocalDateTime,
-                          bucketLength: FiniteDuration): Long = {
+  private def timeBucket(date: LocalDateTime, bucketLength: FiniteDuration) =
     date.atZone(ZoneId.systemDefault()).toEpochSecond / bucketLength.toSeconds
-  }
+
+  private def bucketId(scheduleName: String,
+                       dueDate: LocalDateTime,
+                       bucketLength: FiniteDuration) =
+    s"$scheduleName-${timeBucket(dueDate, bucketLength)}"
 
   def extractEntityId(bucketLength: FiniteDuration): ExtractEntityId = {
     case c: AddScheduleEntry =>
-      (c.scheduleName + "-" + calculateTimeBucket(c.dueDate, bucketLength), c)
+      (bucketId(c.scheduleName, c.dueDate, bucketLength), c)
   }
 
   def extractShardId(numberOfShards: Int,
                      bucketLength: FiniteDuration): ExtractShardId = {
     case c: AddScheduleEntry =>
-      val id =
-        s"${c.scheduleName}-${calculateTimeBucket(c.dueDate, bucketLength)}"
-      val shardNumber = scala.math.abs(MurmurHash3.stringHash(id)) % numberOfShards
+      val id = bucketId(c.scheduleName, c.dueDate, bucketLength)
+      val shardNumber = scala.math.abs(id.hashCode) % numberOfShards
       shardNumber.toString
   }
 
