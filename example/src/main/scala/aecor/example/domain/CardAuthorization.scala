@@ -2,8 +2,7 @@ package aecor.example.domain
 import java.util.UUID
 
 import aecor.core.aggregate.AggregateBehavior.syntax._
-import aecor.core.aggregate._
-import aecor.core.message.Correlation
+import aecor.core.aggregate.{Correlation, _}
 import aecor.example.domain.CardAuthorization.{Event, State}
 import cats.free.Free
 import aecor.util.function._
@@ -89,13 +88,8 @@ object CardAuthorization {
     def applyEvent(event: Event): State =
       handle(this, event) {
         case Initial => {
-          case CardAuthorizationCreated(cardAuthorizationId,
-                                        accountId,
-                                        amount,
-                                        acquireId,
-                                        terminalId,
-                                        transactionId) =>
-            Created(cardAuthorizationId)
+          case e: CardAuthorizationCreated =>
+            Created(e.cardAuthorizationId)
           case other =>
             throw new IllegalArgumentException(s"Unexpected event $other")
         }
@@ -121,8 +115,10 @@ object CardAuthorization {
   case class Accepted(id: CardAuthorizationId) extends State
   case class Declined(id: CardAuthorizationId) extends State
 
-  implicit def correlation: Correlation[Command[_]] =
-    Correlation.instance(_.cardAuthorizationId.value)
+  implicit def correlation: Correlation[Command] =
+    new Correlation[Command] {
+      def apply[A](fa: Command[A]) = fa.cardAuthorizationId.value
+    }
 
   implicit val name: AggregateName[CardAuthorization] =
     AggregateName.instance("CardAuthorization")
@@ -135,7 +131,7 @@ object CardAuthorization {
 
     override def handleCommand[Response](
         a: CardAuthorization)(state: State, command: Command[Response]) =
-      a.handleCommand(state, command)
+      a.handleCommand(state, command).swap
 
     override def init: State = Initial
 
@@ -155,7 +151,7 @@ import aecor.example.domain.CardAuthorization._
 class CardAuthorization {
   def handleCommand[Response](
       state: State,
-      command: Command[Response]): (Response, Seq[Event]) =
+      command: Command[Response]): (Seq[Event], Response) =
     handle(state, command) {
       case Initial => {
         case CreateCardAuthorization(cardAuthorizationId,

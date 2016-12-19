@@ -1,19 +1,24 @@
 package aecor.core.aggregate
 
-import akka.actor.{ActorRef, ActorSystem}
+import akka.actor.ActorRef
 import akka.pattern.{ask => askPattern}
 import akka.util.Timeout
+import cats.~>
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-final class AggregateRegionRef[Command[_]](system: ActorSystem, shardRegion: ActorRef, askTimeout: FiniteDuration) {
+private final class AggregateRegionRef[Command[_]](shardRegion: ActorRef,
+                                                   askTimeout: FiniteDuration)
+    extends (Command ~> Future) {
 
   implicit private val timeout = Timeout(askTimeout)
 
-  def ask[Response](command: Command[Response]): Future[Response] = {
-    import system.dispatcher
-    (shardRegion ? command).map(_.asInstanceOf[Response])
+  @deprecated("0.13.0", "Use FunctionK#apply instead")
+  def ask[Response](command: Command[Response]): Future[Response] =
+    apply(command)
+
+  override def apply[A](fa: Command[A]): Future[A] = {
+    (shardRegion ? fa).asInstanceOf[Future[A]]
   }
 }
-

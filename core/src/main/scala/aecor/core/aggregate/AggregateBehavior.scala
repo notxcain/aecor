@@ -19,11 +19,11 @@ trait AggregateBehavior[A] {
 
 object AggregateBehavior {
   object syntax {
-    def accept[R, E](events: E*): (Either[R, Done], Seq[E]) =
-      (Right(Done), events.toVector)
+    def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
+      (events.toVector, Right(Done))
 
-    def reject[R, E](rejection: R): (Either[R, Done], Seq[E]) =
-      (Left(rejection), Seq.empty)
+    def reject[R, E](rejection: R): (Seq[E], Either[R, Done]) =
+      (Seq.empty, Left(rejection))
   }
 
   type Aux[A, Command0[_], State0, Event0] = AggregateBehavior[A] {

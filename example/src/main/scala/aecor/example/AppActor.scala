@@ -15,9 +15,7 @@ import akka.http.scaladsl.server.Directives._
 import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
-import cats.~>
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object AppActor {
@@ -69,19 +67,9 @@ class AppActor extends Actor with ActorLogging {
     Logging(system, classOf[AuthorizePaymentAPI]))
   val accountApi = new AccountAPI(accountRegion)
 
-  val accountInterpreter = new (AccountAggregateOp ~> Future) {
-    override def apply[A](fa: AccountAggregateOp[A]): Future[A] =
-      accountRegion.ask(fa)
-  }
-  val cardAuthorizationInterpreter =
-    new (CardAuthorization.Command ~> Future) {
-      override def apply[A](fa: CardAuthorization.Command[A]): Future[A] =
-        authorizationRegion.ask(fa)
-    }
-
   import freek._
 
-  val interpreter = accountInterpreter :&: cardAuthorizationInterpreter
+  val interpreter = accountRegion :&: authorizationRegion
 
   journal
     .committableEventSourceFor[CardAuthorization]("processing")

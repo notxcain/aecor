@@ -2,7 +2,7 @@ package aecor.schedule
 
 import java.time.LocalDateTime
 
-import aecor.core.message.Correlation._
+import aecor.core.aggregate.Correlation._
 import aecor.core.streaming.{
   CassandraReadJournalExtension,
   CommittableJournalEntry,

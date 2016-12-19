@@ -1,37 +1,35 @@
 package aecor.example
 
-import aecor.core.aggregate.AggregateRegionRef
 import aecor.example.domain._
 import akka.Done
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import cats.implicits._
+import cats.~>
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
-import cats.implicits._
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class AccountAPI(account: AggregateRegionRef[AccountAggregateOp]) {
+class AccountAPI(account: AccountAggregateOp ~> Future) {
 
   import AccountAPI._
 
   def openAccount(dto: DTO.OpenAccount)(
       implicit ec: ExecutionContext): Future[String Either Done] = dto match {
     case DTO.OpenAccount(accountId) =>
-      account
-        .ask(AccountAggregateOp.OpenAccount(AccountId(accountId)))
+      account(AccountAggregateOp.OpenAccount(AccountId(accountId)))
         .map(_.leftMap(_.toString))
   }
 
   def creditAccount(dto: DTO.CreditAccount)(
       implicit ec: ExecutionContext): Future[String Either Done] = dto match {
     case DTO.CreditAccount(accountId, transactionId, amount) =>
-      account
-        .ask(
-          AccountAggregateOp.CreditAccount(AccountId(accountId),
-                                           TransactionId(transactionId),
-                                           Amount(amount)))
+      account(
+        AccountAggregateOp.CreditAccount(AccountId(accountId),
+                                         TransactionId(transactionId),
+                                         Amount(amount)))
         .map(_.leftMap(_.toString))
   }
 }

@@ -14,10 +14,13 @@ object CassandraOffsetStore {
     val keyspace = config.getString("cassandra-journal.keyspace")
     def createTableQuery =
       s"CREATE TABLE IF NOT EXISTS $keyspace.consumer_offset (consumer_id text, tag text, uuid_offset uuid, sequence_offset long, PRIMARY KEY ((consumer_id, tag)))"
+
     def updateOffsetQuery =
       s"UPDATE $keyspace.consumer_offset SET uuid_offset = ?, sequence_offset = ? WHERE consumer_id = ? AND tag = ?"
+
     def selectOffsetQuery =
       s"SELECT uuid_offset, sequence_offset FROM $keyspace.consumer_offset WHERE consumer_id = ? AND tag = ?"
+
     def init(implicit executionContext: ExecutionContext)
       : Session => Future[Done] = { session =>
       import aecor.util.cassandra._

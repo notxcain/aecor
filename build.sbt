@@ -17,6 +17,7 @@ lazy val akkaHttpJsonVersion = "1.11.0"
 lazy val freekVersion = "0.6.5"
 lazy val kryoSerializationVersion = "0.5.1"
 lazy val logbackVersion = "1.1.7"
+lazy val monixVersion = "2.1.1"
 
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
@@ -86,6 +87,7 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "com.typesafe.akka" %% "akka-stream-kafka" % reactiveKafkaVersion,
+    "io.monix" %% "monix-eval" % monixVersion,
     "ch.qos.logback" % "logback-classic" % logbackVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion

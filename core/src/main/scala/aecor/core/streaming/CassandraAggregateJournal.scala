@@ -1,6 +1,6 @@
 package aecor.core.streaming
 
-import aecor.core.aggregate.{AggregateName, EventContract}
+import aecor.core.aggregate.AggregateName
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal

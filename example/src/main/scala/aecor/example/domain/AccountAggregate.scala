@@ -3,15 +3,86 @@ package aecor.example.domain
 import java.time.Clock
 
 import aecor.core.aggregate._
-import aecor.example.domain.AccountAggregate.Account
+import aecor.example.domain.AccountAggregate.{Account, State}
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.util.function._
-
 import aecor.core.aggregate.AggregateBehavior.syntax._
+import aecor.example.domain.AccountAggregateOp.{
+  AccountDoesNotExist,
+  AccountExists,
+  AuthorizeTransaction,
+  CaptureTransaction,
+  CreditAccount,
+  DuplicateTransaction,
+  HoldNotFound,
+  InsufficientFunds,
+  OpenAccount,
+  VoidTransaction
+}
 
 import scala.collection.immutable.Seq
 
 case class AccountId(value: String) extends AnyVal
+
+case class AccountAggregateBehavior(state: State) {
+
+  def handleCommand[Response](
+      command: AccountAggregateOp[Response]
+  ): (Seq[AccountAggregateEvent], Response) =
+    command match {
+      case OpenAccount(accountId) =>
+        state.value match {
+          case None =>
+            accept(AccountOpened(accountId))
+          case _ =>
+            reject(AccountExists)
+        }
+
+      case AuthorizeTransaction(_, transactionId, amount) =>
+        state.value match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            if (transactions.contains(transactionId)) {
+              reject(DuplicateTransaction)
+            } else if (balance > amount) {
+              accept(TransactionAuthorized(id, transactionId, amount))
+            } else {
+              reject(InsufficientFunds)
+            }
+        }
+      case VoidTransaction(_, transactionId) =>
+        state.value match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            accept(TransactionVoided(id, transactionId))
+        }
+      case CaptureTransaction(_, transactionId, clearingAmount) =>
+        state.value match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            holds.get(transactionId) match {
+              case Some(amount) =>
+                accept(TransactionCaptured(id, transactionId, clearingAmount))
+              case None =>
+                reject(HoldNotFound)
+            }
+        }
+      case CreditAccount(_, transactionId, amount) =>
+        state.value match {
+          case None =>
+            reject(AccountDoesNotExist)
+          case Some(Account(id, balance, holds, transactions)) =>
+            accept(AccountCredited(id, transactionId, amount))
+        }
+    }
+
+  def update(event: AccountAggregateEvent): AccountAggregateBehavior = {
+    copy(state.applyEvent(event))
+  }
+}
 
 object AccountAggregate {
 
@@ -65,7 +136,7 @@ object AccountAggregate {
     override def handleCommand[Response](a: AccountAggregate)(
         state: State,
         command: Command[Response]): (Response, Seq[Event]) =
-      a.handleCommand(command, state.value)
+      a.handleCommand(command, state.value).swap
 
     override def applyEvent(state: State, event: Event): State =
       state.applyEvent(event)
@@ -74,13 +145,11 @@ object AccountAggregate {
   }
 }
 
-import aecor.example.domain.AccountAggregateOp._
-
 case class AccountAggregate(clock: Clock) {
 
   def handleCommand[R](
       command: AccountAggregateOp[R],
-      state: Option[Account]): (R, Seq[AccountAggregateEvent]) =
+      state: Option[Account]): (Seq[AccountAggregateEvent], R) =
     command match {
       case OpenAccount(accountId) =>
         state match {

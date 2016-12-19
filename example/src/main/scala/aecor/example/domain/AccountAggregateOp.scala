@@ -1,12 +1,14 @@
 package aecor.example.domain
 
-import aecor.core.message.Correlation
+import aecor.core.aggregate.Correlation
 import akka.Done
 import cats.free.Free
 
 object AccountAggregateOp {
-  implicit def correlation: Correlation[AccountAggregateOp[_]] =
-    Correlation.instance(_.accountId.value)
+  implicit def correlation: Correlation[AccountAggregateOp] =
+    new Correlation[AccountAggregateOp] {
+      override def apply[A](fa: AccountAggregateOp[A]) = (fa.accountId.value)
+    }
 
   type AccountAggregateOpF[A] = Free[AccountAggregateOp, A]
 
