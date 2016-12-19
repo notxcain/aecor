@@ -1,5 +1,7 @@
 package aecor.core.streaming
 
+import java.util.UUID
+
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
@@ -8,9 +10,10 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.ExecutionContext
 
-class CassandraAggregateJournal(system: ActorSystem, offsetStore: OffsetStore)(
+class CassandraAggregateJournal(system: ActorSystem,
+                                offsetStore: OffsetStore[UUID])(
     implicit executionContext: ExecutionContext)
-    extends AggregateJournal {
+    extends AggregateJournal[UUID] {
 
   val cassandraReadJournal: CassandraReadJournal = PersistenceQuery(system)
     .readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
@@ -21,7 +24,7 @@ class CassandraAggregateJournal(system: ActorSystem, offsetStore: OffsetStore)(
 
   override def committableEventSource[E](
       entityName: String,
-      consumerId: String): Source[CommittableJournalEntry[E], NotUsed] =
+      consumerId: String): Source[CommittableJournalEntry[UUID, E], NotUsed] =
     extendedCassandraReadJournal
       .committableEventsByTag[E](entityName, consumerId)
 

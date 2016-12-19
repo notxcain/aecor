@@ -7,15 +7,16 @@ import aecor.core.streaming._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
 import aecor.schedule._
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.ActorMaterializer
+import akka.stream.{ActorMaterializer, Materializer}
 import akka.stream.scaladsl.Sink
 import cats.~>
+import com.typesafe.config.Config
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -27,19 +28,23 @@ object AppActor {
 class AppActor extends Actor with ActorLogging {
   override def receive: Receive = Actor.emptyBehavior
 
-  implicit val system = context.system
-  implicit val materializer = ActorMaterializer()
+  implicit val system: ActorSystem = context.system
+  implicit val materializer: Materializer = ActorMaterializer()
 
   import materializer.executionContext
 
-  val config = system.settings.config
+  val config: Config = system.settings.config
 
-  val queries = new CassandraOffsetStore.Queries(system)
+  val offsetStoreConfig =
+    CassandraOffsetStore.Config(config.getString("cassandra-journal.keyspace"))
 
   val sessionWrapper =
-    DefaultJournalCassandraSession(system, "app-session", queries.init)
+    DefaultJournalCassandraSession(
+      system,
+      "app-session",
+      CassandraOffsetStore.initSchema(offsetStoreConfig))
 
-  val offsetStore = new CassandraOffsetStore(sessionWrapper, queries)
+  val offsetStore = new CassandraOffsetStore(sessionWrapper, offsetStoreConfig)
 
   val journal = AggregateJournal(system, offsetStore)
 

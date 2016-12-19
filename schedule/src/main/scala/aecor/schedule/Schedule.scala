@@ -1,6 +1,7 @@
 package aecor.schedule
 
 import java.time.LocalDateTime
+import java.util.UUID
 
 import aecor.core.aggregate.Correlation._
 import aecor.core.streaming.{
@@ -25,7 +26,7 @@ trait Schedule {
                        correlationId: CorrelationId,
                        dueDate: LocalDateTime): Future[Done]
   def committableScheduleEvents(scheduleName: String, consumerId: String)
-    : Source[CommittableJournalEntry[ScheduleEvent], NotUsed]
+    : Source[CommittableJournalEntry[UUID, ScheduleEvent], NotUsed]
 }
 
 object Schedule {
@@ -33,7 +34,7 @@ object Schedule {
             entityName: String,
             bucketLength: FiniteDuration,
             tickInterval: FiniteDuration,
-            offsetStore: OffsetStore)(
+            offsetStore: OffsetStore[UUID])(
       implicit executionContext: ExecutionContext): Schedule =
     new ShardedSchedule(system,
                         entityName,
@@ -42,12 +43,12 @@ object Schedule {
                         offsetStore)
 }
 
-class ShardedSchedule(
-    system: ActorSystem,
-    entityName: String,
-    bucketLength: FiniteDuration,
-    tickInterval: FiniteDuration,
-    offsetStore: OffsetStore)(implicit executionContext: ExecutionContext)
+class ShardedSchedule(system: ActorSystem,
+                      entityName: String,
+                      bucketLength: FiniteDuration,
+                      tickInterval: FiniteDuration,
+                      offsetStore: OffsetStore[UUID])(
+    implicit executionContext: ExecutionContext)
     extends Schedule {
   val scheduleRegion = ClusterSharding(system).start(
     typeName = entityName,
@@ -77,7 +78,7 @@ class ShardedSchedule(
 
   override def committableScheduleEvents(scheduleName: String,
                                          consumerId: String)
-    : Source[CommittableJournalEntry[ScheduleEvent], NotUsed] =
+    : Source[CommittableJournalEntry[UUID, ScheduleEvent], NotUsed] =
     extendedCassandraReadJournal
       .committableEventsByTag[ScheduleEvent](entityName,
                                              scheduleName + consumerId)
