@@ -3,9 +3,10 @@ package aecor.core.aggregate
 import aecor.core.aggregate.AggregateActor.Tagger
 import aecor.core.aggregate.behavior.Behavior
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ClusterSharding, ShardRegion}
+import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
+import akka.util.Timeout
 import cats.~>
-
+import akka.pattern.ask
 import scala.concurrent.Future
 
 object AggregateSharding {
@@ -14,12 +15,11 @@ object AggregateSharding {
 }
 
 class AggregateSharding(system: ActorSystem) {
-  def start[Command[_], State, Event](
-      behavior: Behavior[Command, State, Event],
-      entityName: String,
-      correlation: Correlation[Command],
-      settings: AggregateShardingSettings = AggregateShardingSettings(system))
-    : Command ~> Future = {
+  def start[Command[_], State, Event](behavior: Behavior[Command, State, Event],
+                                      entityName: String,
+                                      correlation: Correlation[Command],
+                                      settings: AggregateShardingSettings =
+                                        AggregateShardingSettings(system)): Command ~> Future = {
 
     val props = AggregateActor.props(
       behavior,
@@ -47,6 +47,10 @@ class AggregateSharding(system: ActorSystem) {
       extractShardId = extractShardId
     )
 
-    new RegionRef[Command](shardRegionRef, settings.askTimeout)
+    new (Command ~> Future) {
+      implicit private val timeout = Timeout(settings.askTimeout)
+      override def apply[A](fa: Command[A]): Future[A] =
+        (shardRegionRef ? fa).asInstanceOf[Future[A]]
+    }
   }
 }

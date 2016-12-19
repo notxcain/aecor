@@ -7,14 +7,15 @@ import aecor.core.streaming._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
 import aecor.schedule._
-import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
+import akka.NotUsed
+import akka.actor.{ Actor, ActorLogging, ActorSystem, Props }
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ActorMaterializer, Materializer}
-import akka.stream.scaladsl.Sink
+import akka.stream.{ ActorMaterializer, Materializer }
+import akka.stream.scaladsl.{ Flow, Sink }
 import cats.~>
 import com.typesafe.config.Config
 
@@ -38,26 +39,30 @@ class AppActor extends Actor with ActorLogging {
   val offsetStoreConfig =
     CassandraOffsetStore.Config(config.getString("cassandra-journal.keyspace"))
 
-  val sessionWrapper =
+  val cassandraSession =
     DefaultJournalCassandraSession(
       system,
       "app-session",
-      CassandraOffsetStore.initSchema(offsetStoreConfig))
+      CassandraOffsetStore.createTable(offsetStoreConfig)
+    )
 
-  val offsetStore = new CassandraOffsetStore(sessionWrapper, offsetStoreConfig)
+  val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
 
   val journal = AggregateJournal(system, offsetStore)
 
   val authorizationRegion: CardAuthorizationAggregateOp ~> Future =
-    AggregateSharding(system).start(CardAuthorizationAggregate.behavior,
-                                    CardAuthorizationAggregate.entityName,
-                                    CardAuthorizationAggregate.correlation)
+    AggregateSharding(system).start(
+      CardAuthorizationAggregate.behavior,
+      CardAuthorizationAggregate.entityName,
+      CardAuthorizationAggregate.correlation
+    )
 
   val accountRegion: AccountAggregateOp ~> Future =
     AggregateSharding(system).start(
       AccountAggregate.behavior(Clock.systemUTC()),
       AccountAggregate.entityName,
-      AccountAggregate.correlation)
+      AccountAggregate.correlation
+    )
 
   val scheduleEntityName = "Schedule3"
 
@@ -70,32 +75,35 @@ class AppActor extends Actor with ActorLogging {
       journal
         .committableEventSource[CardAuthorizationAggregateEvent](
           CardAuthorizationAggregate.entityName,
-          "CardAuthorization-API")
-        .map(_.value))
+          "CardAuthorization-API"
+        )
+        .map(_.value)
+    )
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(
     authorizationRegion,
     cardAuthorizationEventStream,
-    Logging(system, classOf[AuthorizePaymentAPI]))
+    Logging(system, classOf[AuthorizePaymentAPI])
+  )
   val accountApi = new AccountAPI(accountRegion)
 
   import freek._
 
-  val interpreter = accountRegion :&: authorizationRegion
+  def authorizationProcessFlow[PassThrough]
+    : Flow[(CardAuthorizationCreated, PassThrough), PassThrough, NotUsed] =
+    AuthorizationProcess.flow(8, accountRegion :&: authorizationRegion)
 
   journal
     .committableEventSource[CardAuthorizationAggregateEvent](
       CardAuthorizationAggregate.entityName,
-      "processing")
+      "processing"
+    )
     .collect {
-      case CommittableJournalEntry(offset,
-                                   _,
-                                   _,
-                                   e: CardAuthorizationCreated) =>
+      case CommittableJournalEntry(offset, _, _, e: CardAuthorizationCreated) =>
         (e, offset)
     }
-    .via(AuthorizationProcess.flow(8, interpreter))
-    .mapAsync(1)(_.commitScaladsl())
+    .via(authorizationProcessFlow)
+    .mapAsync(1)(_.commit())
     .runWith(Sink.ignore)
 
   val route = path("check") {
@@ -107,9 +115,7 @@ class AppActor extends Actor with ActorLogging {
       AccountAPI.route(accountApi)
 
   Http()
-    .bindAndHandle(route,
-                   config.getString("http.interface"),
-                   config.getInt("http.port"))
+    .bindAndHandle(route, config.getString("http.interface"), config.getInt("http.port"))
     .onComplete { result =>
       log.info("Bind result [{}]", result)
     }

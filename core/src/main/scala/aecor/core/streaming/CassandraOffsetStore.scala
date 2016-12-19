@@ -6,7 +6,7 @@ import akka.Done
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import com.datastax.driver.core.Session
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
 object CassandraOffsetStore {
   case class Config(keyspace: String, tableName: String = "consumer_offset") {
@@ -18,39 +18,40 @@ object CassandraOffsetStore {
       s"SELECT offset FROM $keyspace.$tableName WHERE consumer_id = ? AND tag = ?"
   }
 
-  def initSchema(config: Config)(
-      implicit executionContext: ExecutionContext): Session => Future[Done] = {
-    session =>
-      import aecor.util.cassandra._
-      session.executeAsync(config.createTableQuery).map(_ => Done)
+  def createTable(
+    config: Config
+  )(implicit executionContext: ExecutionContext): Session => Future[Done] = { session =>
+    import aecor.util.cassandra._
+    session.executeAsync(config.createTableQuery).map(_ => Done)
   }
+
+  def apply(session: CassandraSession, config: CassandraOffsetStore.Config)(
+    implicit executionContext: ExecutionContext
+  ): CassandraOffsetStore =
+    new CassandraOffsetStore(session, config)
 }
 
-class CassandraOffsetStore(sessionWrapper: CassandraSession,
-                           queries: CassandraOffsetStore.Config)(
-    implicit executionContext: ExecutionContext)
-    extends OffsetStore[UUID] {
-
+class CassandraOffsetStore(session: CassandraSession, config: CassandraOffsetStore.Config)(
+  implicit executionContext: ExecutionContext
+) extends OffsetStore[UUID] {
   private val selectOffsetStatement =
-    sessionWrapper.prepare(queries.selectOffsetQuery)
+    session.prepare(config.selectOffsetQuery)
   private val updateOffsetStatement =
-    sessionWrapper.prepare(queries.updateOffsetQuery)
-  override def getOffset(tag: String,
-                         consumerId: String): Future[Option[UUID]] =
+    session.prepare(config.updateOffsetQuery)
+
+  override def getOffset(tag: String, consumerId: String): Future[Option[UUID]] =
     selectOffsetStatement
       .map(_.bind(consumerId, tag))
-      .flatMap(sessionWrapper.selectOne)
+      .flatMap(session.selectOne)
       .map(_.map(_.getUUID("offset")))
 
-  override def setOffset(tag: String,
-                         consumerId: String,
-                         offset: UUID): Future[Done] =
+  override def setOffset(tag: String, consumerId: String, offset: UUID): Future[Unit] =
     updateOffsetStatement.map { stmt =>
       stmt
         .bind()
         .setUUID("offset", offset)
         .setString("tag", tag)
         .setString("consumer_id", consumerId)
-    }.flatMap(sessionWrapper.executeWrite)
+    }.flatMap(session.executeWrite).map(_ => ())
 
 }

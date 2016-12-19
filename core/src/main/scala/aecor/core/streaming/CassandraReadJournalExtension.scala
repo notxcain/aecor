@@ -1,46 +1,45 @@
 package aecor.core.streaming
 
 import java.util.UUID
-import java.util.concurrent.CompletionStage
 
+import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.kafka.ConsumerMessage.Committable
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.{EventEnvelope2, TimeBasedUUID}
+import akka.persistence.query.{ EventEnvelope2, TimeBasedUUID }
 import akka.stream.scaladsl.Source
-import akka.{Done, NotUsed}
 
-import scala.compat.java8.FutureConverters._
 import scala.concurrent.Future
+
+trait Committable {
+  def commit(): Future[Unit]
+}
 
 trait CommittableOffset[Offset] extends Committable {
   def value: Offset
-  final override def commitJavadsl(): CompletionStage[Done] =
-    commitScaladsl().toJava
   override def toString: String = s"CommittableOffset($value)"
 }
 
 object CommittableOffset {
-  def apply[Offset](
-      offset: Offset,
-      committer: Offset => Future[Done]): CommittableOffset[Offset] =
+  def apply[Offset](offset: Offset, committer: Offset => Future[Unit]): CommittableOffset[Offset] =
     new CommittableOffset[Offset] {
       override def value: Offset = offset
-      override def commitScaladsl(): Future[Done] = committer(value)
+      override def commit(): Future[Unit] = committer(value)
     }
 }
 
 trait OffsetStore[Offset] {
   def getOffset(tag: String, consumerId: String): Future[Option[Offset]]
-  def setOffset(tag: String, consumerId: String, offset: Offset): Future[Done]
+  def setOffset(tag: String, consumerId: String, offset: Offset): Future[Unit]
 }
 
 class CassandraReadJournalExtension(actorSystem: ActorSystem,
                                     offsetStore: OffsetStore[UUID],
                                     readJournal: CassandraReadJournal) {
 
-  def committableEventsByTag[E](tag: String, consumerId: String)
-    : Source[CommittableJournalEntry[UUID, E], NotUsed] = {
+  def committableEventsByTag[E](
+    tag: String,
+    consumerId: String
+  ): Source[CommittableJournalEntry[UUID, E], NotUsed] =
     Source
       .single(NotUsed)
       .mapAsync(1) { _ =>
@@ -48,20 +47,20 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem,
       }
       .flatMapConcat { storedOffset =>
         readJournal
-          .eventsByTag(
-            tag,
-            TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
+          .eventsByTag(tag, TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
           .map {
             case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
               CommittableJournalEntry(
-                CommittableOffset(offset.asInstanceOf[TimeBasedUUID].value,
-                                  offsetStore.setOffset(tag, consumerId, _)),
+                CommittableOffset(
+                  offset.asInstanceOf[TimeBasedUUID].value,
+                  offsetStore.setOffset(tag, consumerId, _)
+                ),
                 persistenceId,
                 sequenceNr,
-                event.asInstanceOf[E])
+                event.asInstanceOf[E]
+              )
           }
       }
-  }
 }
 
 object CassandraReadJournalExtension {
