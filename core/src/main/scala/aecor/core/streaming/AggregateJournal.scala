@@ -7,9 +7,8 @@ import akka.stream.scaladsl.Source
 import scala.concurrent.ExecutionContext
 
 trait AggregateJournal {
-
   def committableEventSource[E](
-      aggregateName: String,
+      entityName: String,
       consumerId: String): Source[CommittableJournalEntry[E], NotUsed]
 }
 

@@ -20,11 +20,9 @@ class CassandraAggregateJournal(system: ActorSystem, offsetStore: OffsetStore)(
                                       cassandraReadJournal)
 
   override def committableEventSource[E](
-      aggregateName: String,
+      entityName: String,
       consumerId: String): Source[CommittableJournalEntry[E], NotUsed] =
     extendedCassandraReadJournal
-      .committableEventsByTag(aggregateName, consumerId)
-      .map { x =>
-        x.asInstanceOf[CommittableJournalEntry[E]]
-      }
+      .committableEventsByTag[E](entityName, consumerId)
+
 }

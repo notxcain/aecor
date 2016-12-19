@@ -79,13 +79,9 @@ class ShardedSchedule(
                                          consumerId: String)
     : Source[CommittableJournalEntry[ScheduleEvent], NotUsed] =
     extendedCassandraReadJournal
-      .committableEventsByTag(entityName, scheduleName + consumerId)
+      .committableEventsByTag[ScheduleEvent](entityName,
+                                             scheduleName + consumerId)
       .collect {
-        case m @ CommittableJournalEntry(offset,
-                                         persistenceId,
-                                         sequenceNr,
-                                         e: ScheduleEvent)
-            if e.scheduleName == scheduleName =>
-          m.asInstanceOf[CommittableJournalEntry[ScheduleEvent]]
+        case m if m.value.scheduleName == scheduleName => m
       }
 }

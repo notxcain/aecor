@@ -10,19 +10,22 @@ import akka.stream.scaladsl.Source
 import akka.{Done, NotUsed}
 
 import scala.compat.java8.FutureConverters._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.Future
 
 trait CommittableOffset extends Committable {
   def value: Offset
+  final override def commitJavadsl(): CompletionStage[Done] =
+    commitScaladsl().toJava
+  override def toString: String = s"CommittableOffset($value)"
 }
 
-final case class CommittableOffsetImpl(override val value: Offset)(
-    committer: Offset => Future[Done])
-    extends CommittableOffset {
-
-  override def commitScaladsl(): Future[Done] = committer(value)
-
-  override def commitJavadsl(): CompletionStage[Done] = commitScaladsl().toJava
+object CommittableOffset {
+  def apply(offset: Offset,
+            committer: Offset => Future[Done]): CommittableOffset =
+    new CommittableOffset {
+      override def value: Offset = offset
+      override def commitScaladsl(): Future[Done] = committer(value)
+    }
 }
 
 trait OffsetStore {
@@ -32,14 +35,11 @@ trait OffsetStore {
 
 class CassandraReadJournalExtension(actorSystem: ActorSystem,
                                     offsetStore: OffsetStore,
-                                    readJournal: CassandraReadJournal)(
-    implicit executionContext: ExecutionContext) {
+                                    readJournal: CassandraReadJournal) {
 
-  private val config = actorSystem.settings.config
-
-  def committableEventsByTag(
+  def committableEventsByTag[E](
       tag: String,
-      consumerId: String): Source[CommittableJournalEntry[Any], NotUsed] = {
+      consumerId: String): Source[CommittableJournalEntry[E], NotUsed] = {
     Source
       .single(NotUsed)
       .mapAsync(1) { _ =>
@@ -49,11 +49,11 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem,
         readJournal.eventsByTag(tag, storedOffset).map {
           case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
             CommittableJournalEntry(
-              CommittableOffsetImpl(offset)(
-                offsetStore.setOffset(tag, consumerId, _)),
+              CommittableOffset(offset,
+                                offsetStore.setOffset(tag, consumerId, _)),
               persistenceId,
               sequenceNr,
-              event)
+              event.asInstanceOf[E])
         }
       }
   }
@@ -62,7 +62,6 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem,
 object CassandraReadJournalExtension {
   def apply(actorSystem: ActorSystem,
             offsetStore: OffsetStore,
-            readJournal: CassandraReadJournal)(
-      implicit ec: ExecutionContext): CassandraReadJournalExtension =
+            readJournal: CassandraReadJournal): CassandraReadJournalExtension =
     new CassandraReadJournalExtension(actorSystem, offsetStore, readJournal)
 }
