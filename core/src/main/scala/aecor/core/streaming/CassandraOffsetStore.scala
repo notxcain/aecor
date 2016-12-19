@@ -2,7 +2,6 @@ package aecor.core.streaming
 
 import java.util.UUID
 
-import akka.Done
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import com.datastax.driver.core.Session
 
@@ -20,9 +19,9 @@ object CassandraOffsetStore {
 
   def createTable(
     config: Config
-  )(implicit executionContext: ExecutionContext): Session => Future[Done] = { session =>
+  )(implicit executionContext: ExecutionContext): Session => Future[Unit] = { session =>
     import aecor.util.cassandra._
-    session.executeAsync(config.createTableQuery).map(_ => Done)
+    session.executeAsync(config.createTableQuery).map(_ => ())
   }
 
   def apply(session: CassandraSession, config: CassandraOffsetStore.Config)(
