@@ -1,6 +1,7 @@
 package aecor.aggregate
 
 import aecor.aggregate.AggregateActor.Tagger
+import aecor.aggregate.AggregateSharding.HandleCommand
 import aecor.behavior.Behavior
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
@@ -13,6 +14,8 @@ import scala.concurrent.Future
 object AggregateSharding {
   def apply(system: ActorSystem): AggregateSharding =
     new AggregateSharding(system)
+
+  private final case class HandleCommand[C[_], A](entityId: String, command: C[A])
 }
 
 class AggregateSharding(system: ActorSystem) {
@@ -32,12 +35,15 @@ class AggregateSharding(system: ActorSystem) {
     )
 
     def extractEntityId: ShardRegion.ExtractEntityId = {
-      case a => (correlation(a.asInstanceOf[Command[_]]), a)
+      case HandleCommand(entityId, c) =>
+        (entityId, c)
     }
 
     val numberOfShards = settings.numberOfShards
-    def extractShardId: ShardRegion.ExtractShardId = { a =>
-      (scala.math.abs(correlation(a.asInstanceOf[Command[_]]).hashCode) % numberOfShards).toString
+
+    def extractShardId: ShardRegion.ExtractShardId = {
+      case HandleCommand(entityId, _) =>
+        (scala.math.abs(entityId.hashCode) % numberOfShards).toString
     }
 
     val shardRegionRef = ClusterSharding(system).start(
@@ -51,7 +57,7 @@ class AggregateSharding(system: ActorSystem) {
     new (Command ~> Future) {
       implicit private val timeout = Timeout(settings.askTimeout)
       override def apply[A](fa: Command[A]): Future[A] =
-        (shardRegionRef ? fa).asInstanceOf[Future[A]]
+        (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
     }
   }
 }
