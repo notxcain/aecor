@@ -1,4 +1,4 @@
-package aecor.core
+package aecor
 
 import scala.collection.immutable.Seq
 
