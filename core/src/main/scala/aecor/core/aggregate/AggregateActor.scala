@@ -2,17 +2,16 @@ package aecor.core.aggregate
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Instant}
+import java.time.{ Duration, Instant }
 
 import aecor.core.aggregate.AggregateActor.Tagger
 import aecor.core.aggregate.behavior.Behavior
 import akka.NotUsed
-import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash}
+import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
-import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
+import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 
-import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
 
 sealed trait SnapshotPolicy {
@@ -44,20 +43,13 @@ object AggregateActor {
     def const[E](value: String): Tagger[E] = _ => value
   }
 
-  def props[Command[_], State, Event](
-      behavior: Behavior[Command, State, Event],
-      entityName: String,
-      identity: Identity,
-      snapshotPolicy: SnapshotPolicy,
-      tagger: Tagger[Event],
-      idleTimeout: FiniteDuration) =
-    Props(
-      new AggregateActor(entityName,
-                         behavior,
-                         identity,
-                         snapshotPolicy,
-                         tagger,
-                         idleTimeout))
+  def props[Command[_], State, Event](behavior: Behavior[Command, State, Event],
+                                      entityName: String,
+                                      identity: Identity,
+                                      snapshotPolicy: SnapshotPolicy,
+                                      tagger: Tagger[Event],
+                                      idleTimeout: FiniteDuration) =
+    Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagger, idleTimeout))
 
   case object Stop
 }
@@ -73,13 +65,13 @@ object AggregateActor {
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
 class AggregateActor[Command[_], State, Event] private[aecor] (
-    entityName: String,
-    behavior: Behavior[Command, State, Event],
-    identity: Identity,
-    snapshotPolicy: SnapshotPolicy,
-    tagger: Tagger[Event],
-    idleTimeout: FiniteDuration)
-    extends PersistentActor
+  entityName: String,
+  behavior: Behavior[Command, State, Event],
+  identity: Identity,
+  snapshotPolicy: SnapshotPolicy,
+  tagger: Tagger[Event],
+  idleTimeout: FiniteDuration
+) extends PersistentActor
     with Stash
     with ActorLogging {
 
@@ -110,7 +102,8 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
         "[{}] Recovery to version [{}] completed in [{} ms]",
         persistenceId,
         lastSequenceNr,
-        Duration.between(recoveryStartTimestamp, Instant.now()).toMillis)
+        Duration.between(recoveryStartTimestamp, Instant.now()).toMillis
+      )
       setIdleTimeout()
 
     case e =>
@@ -126,13 +119,14 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
   }
 
   private def handleCommand(command: Command[Any]) = {
-    val x: State => (Seq[Event], Any) = behavior.commandHandler(command)
-    val (events, response) = x(state)
-    log.debug("[{}] Command [{}] produced response [{}] and events [{}]",
-              persistenceId,
-              command,
-              response,
-              events)
+    val (events, response) = behavior.commandHandler(command)(state)
+    log.debug(
+      "[{}] Command [{}] produced response [{}] and events [{}]",
+      persistenceId,
+      command,
+      response,
+      events
+    )
     val envelopes = events.map(e => Tagged(e, Set(tagger(e))))
     var shouldSaveSnapshot = false
     persistAll(envelopes) { x =>
