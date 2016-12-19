@@ -1,11 +1,12 @@
-package aecor.core.aggregate
+package aecor.aggregate
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
-import aecor.core.aggregate.AggregateActor.Tagger
-import aecor.core.aggregate.behavior.Behavior
+import aecor.aggregate.AggregateActor.Tagger
+
+import aecor.behavior.Behavior
 import akka.NotUsed
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
 import akka.cluster.sharding.ShardRegion

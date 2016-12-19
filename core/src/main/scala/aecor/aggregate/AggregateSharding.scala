@@ -1,12 +1,13 @@
-package aecor.core.aggregate
+package aecor.aggregate
 
-import aecor.core.aggregate.AggregateActor.Tagger
-import aecor.core.aggregate.behavior.Behavior
+import aecor.aggregate.AggregateActor.Tagger
+import aecor.behavior.Behavior
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
+import akka.pattern.ask
 import akka.util.Timeout
 import cats.~>
-import akka.pattern.ask
+
 import scala.concurrent.Future
 
 object AggregateSharding {

@@ -3,8 +3,8 @@ package aecor.schedule
 import java.time.LocalDateTime
 import java.util.UUID
 
-import aecor.core.aggregate.Correlation._
-import aecor.core.streaming.{ AggregateJournal, CommittableJournalEntry, OffsetStore }
+import aecor.aggregate.Correlation._
+import aecor.streaming.{ AggregateJournal, CommittableJournalEntry, OffsetStore }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.ask

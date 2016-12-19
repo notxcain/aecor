@@ -1,4 +1,4 @@
-package aecor.core.aggregate
+package aecor.aggregate
 
 import java.util.concurrent.TimeUnit
 
@@ -8,13 +8,11 @@ import com.typesafe.config.Config
 
 import scala.concurrent.duration._
 
-class AggregateShardingSettings(
-    config: Config,
-    val clusterShardingSettings: ClusterShardingSettings) {
+class AggregateShardingSettings(config: Config,
+                                val clusterShardingSettings: ClusterShardingSettings) {
 
   private def getMillisDuration(config: Config, path: String): FiniteDuration =
-    Duration(config.getDuration(path, TimeUnit.MILLISECONDS),
-             TimeUnit.MILLISECONDS)
+    Duration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
 
   val numberOfShards: Int = config.getInt("number-of-shards")
   val defaultIdleTimeout: FiniteDuration =
@@ -26,8 +24,7 @@ class AggregateShardingSettings(
     else defaultIdleTimeout
   }
 
-  val defaultSnapshotPolicy: SnapshotPolicy = snapshotPolicyAtPath(
-    "default-snapshot-after")
+  val defaultSnapshotPolicy: SnapshotPolicy = snapshotPolicyAtPath("default-snapshot-after")
   def snapshotPolicy(entityName: String): SnapshotPolicy = {
     val key = s"idle-timeout.$entityName"
     if (config.hasPath(key)) snapshotPolicyAtPath(key)
@@ -47,5 +44,6 @@ object AggregateShardingSettings {
   def apply(system: ActorSystem): AggregateShardingSettings =
     new AggregateShardingSettings(
       system.settings.config.getConfig("aecor.aggregate"),
-      ClusterShardingSettings(system))
+      ClusterShardingSettings(system)
+    )
 }

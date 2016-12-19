@@ -1,8 +1,8 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.core.aggregate.Correlation
-import aecor.core.aggregate.behavior.{Behavior, Handler}
+import aecor.aggregate.Correlation
+import aecor.behavior.{ Behavior, Handler }
 import aecor.example.domain.CardAuthorizationAggregate.State.{
   Accepted,
   Created,
@@ -65,64 +65,64 @@ object CardAuthorizationAggregate {
 
   val entityName: String = "CardAuthorization"
 
-  def behavior: Behavior[CardAuthorizationAggregateOp,
-                         State,
-                         CardAuthorizationAggregateEvent] =
+  def behavior: Behavior[CardAuthorizationAggregateOp, State, CardAuthorizationAggregateEvent] =
     Behavior(
-      commandHandler = new (CardAuthorizationAggregateOp ~> Handler[
-        State,
-        CardAuthorizationAggregateEvent,
-        ?]) {
-        def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
-          (events.toVector, Right(Done))
+      commandHandler =
+        new (CardAuthorizationAggregateOp ~> Handler[State, CardAuthorizationAggregateEvent, ?]) {
+          def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
+            (events.toVector, Right(Done))
 
-        def reject[R, E](rejection: R): (Seq[E], Either[R, Done]) =
-          (Seq.empty, Left(rejection))
-        override def apply[A](command: CardAuthorizationAggregateOp[A]) =
-          Handler {
-            case Initial =>
-              command match {
-                case CreateCardAuthorization(cardAuthorizationId,
-                                             accountId,
-                                             amount,
-                                             acquireId,
-                                             terminalId) =>
-                  accept(
-                    CardAuthorizationCreated(
+          def reject[R, E](rejection: R): (Seq[E], Either[R, Done]) =
+            (Seq.empty, Left(rejection))
+          override def apply[A](command: CardAuthorizationAggregateOp[A]) =
+            Handler {
+              case Initial =>
+                command match {
+                  case CreateCardAuthorization(
                       cardAuthorizationId,
                       accountId,
                       amount,
                       acquireId,
-                      terminalId,
-                      TransactionId(UUID.randomUUID().toString)))
-                case c: AcceptCardAuthorization =>
-                  reject(DoesNotExists)
-                case c: DeclineCardAuthorization =>
-                  reject(DoesNotExists)
-              }
-            case Created(id) =>
-              command match {
-                case e: AcceptCardAuthorization =>
-                  accept(CardAuthorizationAccepted(id))
-                case e: DeclineCardAuthorization =>
-                  accept(CardAuthorizationDeclined(id, e.reason))
-                case e: CreateCardAuthorization =>
-                  reject(AlreadyExists)
-              }
-            case Accepted(id) =>
-              command match {
-                case e: AcceptCardAuthorization => reject(AlreadyAccepted)
-                case e: DeclineCardAuthorization => reject(AlreadyAccepted)
-                case e: CreateCardAuthorization => reject(AlreadyExists)
-              }
-            case Declined(id) =>
-              command match {
-                case e: AcceptCardAuthorization => reject(AlreadyDeclined)
-                case e: DeclineCardAuthorization => reject(AlreadyDeclined)
-                case e: CreateCardAuthorization => reject(AlreadyExists)
-              }
-          }
-      },
+                      terminalId
+                      ) =>
+                    accept(
+                      CardAuthorizationCreated(
+                        cardAuthorizationId,
+                        accountId,
+                        amount,
+                        acquireId,
+                        terminalId,
+                        TransactionId(UUID.randomUUID().toString)
+                      )
+                    )
+                  case c: AcceptCardAuthorization =>
+                    reject(DoesNotExists)
+                  case c: DeclineCardAuthorization =>
+                    reject(DoesNotExists)
+                }
+              case Created(id) =>
+                command match {
+                  case e: AcceptCardAuthorization =>
+                    accept(CardAuthorizationAccepted(id))
+                  case e: DeclineCardAuthorization =>
+                    accept(CardAuthorizationDeclined(id, e.reason))
+                  case e: CreateCardAuthorization =>
+                    reject(AlreadyExists)
+                }
+              case Accepted(id) =>
+                command match {
+                  case e: AcceptCardAuthorization => reject(AlreadyAccepted)
+                  case e: DeclineCardAuthorization => reject(AlreadyAccepted)
+                  case e: CreateCardAuthorization => reject(AlreadyExists)
+                }
+              case Declined(id) =>
+                command match {
+                  case e: AcceptCardAuthorization => reject(AlreadyDeclined)
+                  case e: DeclineCardAuthorization => reject(AlreadyDeclined)
+                  case e: CreateCardAuthorization => reject(AlreadyExists)
+                }
+            }
+        },
       initialState = Initial,
       projector = _.applyEvent(_)
     )

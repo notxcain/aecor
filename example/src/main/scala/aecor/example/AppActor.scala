@@ -2,8 +2,8 @@ package aecor.example
 
 import java.time.Clock
 
-import aecor.core.aggregate._
-import aecor.core.streaming._
+import aecor.aggregate._
+import aecor.streaming._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
 import aecor.schedule._

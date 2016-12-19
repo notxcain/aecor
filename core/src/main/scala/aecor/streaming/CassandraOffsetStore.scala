@@ -1,4 +1,4 @@
-package aecor.core.streaming
+package aecor.streaming
 
 import java.util.UUID
 

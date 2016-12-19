@@ -1,6 +1,6 @@
-package aecor.core.aggregate
+package aecor.aggregate
 
-import aecor.core.aggregate.Correlation.CorrelationIdF
+import aecor.aggregate.Correlation.CorrelationIdF
 import cats.~>
 
 object Correlation {

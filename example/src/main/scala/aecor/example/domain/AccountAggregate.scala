@@ -2,8 +2,8 @@ package aecor.example.domain
 
 import java.time.Clock
 
-import aecor.core.aggregate.Correlation
-import aecor.core.aggregate.behavior.{Behavior, Handler}
+import aecor.aggregate.Correlation
+import aecor.behavior.{ Behavior, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
 import aecor.util.function._
@@ -22,8 +22,7 @@ object AccountAggregate {
         fa.accountId.value
     }
 
-  def applyEvent(value: Option[Account],
-                 event: AccountAggregateEvent): Option[Account] =
+  def applyEvent(value: Option[Account], event: AccountAggregateEvent): Option[Account] =
     handle(value, event) {
       case None => {
         case AccountOpened(accountId) =>
@@ -35,15 +34,19 @@ object AccountAggregate {
         case e: AccountOpened => value
         case e: TransactionAuthorized =>
           value.map(
-            _.copy(holds = holds + (e.transactionId -> e.amount),
-                   balance = balance - e.amount,
-                   transactions = transactions + e.transactionId))
+            _.copy(
+              holds = holds + (e.transactionId -> e.amount),
+              balance = balance - e.amount,
+              transactions = transactions + e.transactionId
+            )
+          )
         case e: TransactionVoided =>
           holds
             .get(e.transactionId)
-            .map(holdAmount =>
-              value.map(_.copy(holds = holds - e.transactionId,
-                               balance = balance + holdAmount)))
+            .map(
+              holdAmount =>
+                value.map(_.copy(holds = holds - e.transactionId, balance = balance + holdAmount))
+            )
             .getOrElse(value)
         case e: AccountCredited =>
           value.map(_.copy(balance = balance + e.amount))
@@ -60,9 +63,7 @@ object AccountAggregate {
   val entityName: String = "Account"
 
   def commandHandler(clock: Clock) =
-    new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account],
-                                       AccountAggregateEvent,
-                                       ?]) {
+    new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account], AccountAggregateEvent, ?]) {
       def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
         (events.toVector, Right(Done))
 
@@ -106,8 +107,7 @@ object AccountAggregate {
               case Some(Account(id, balance, holds, transactions)) =>
                 holds.get(transactionId) match {
                   case Some(amount) =>
-                    accept(
-                      TransactionCaptured(id, transactionId, clearingAmount))
+                    accept(TransactionCaptured(id, transactionId, clearingAmount))
                   case None =>
                     reject(HoldNotFound)
                 }
@@ -122,8 +122,9 @@ object AccountAggregate {
         }
     }
 
-  def behavior(clock: Clock)
-    : Behavior[AccountAggregateOp, Option[Account], AccountAggregateEvent] =
+  def behavior(
+    clock: Clock
+  ): Behavior[AccountAggregateOp, Option[Account], AccountAggregateEvent] =
     Behavior(
       commandHandler = commandHandler(clock),
       initialState = Option.empty,

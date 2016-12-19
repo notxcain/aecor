@@ -1,4 +1,4 @@
-package aecor.core.serialization.kafka
+package aecor.serialization.kafka
 
 import java.util
 
