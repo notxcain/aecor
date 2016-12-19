@@ -49,12 +49,9 @@ class CassandraReadJournalExtension(actorSystem: ActorSystem,
         readJournal
           .eventsByTag(tag, TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
           .map {
-            case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
+            case EventEnvelope2(offset: TimeBasedUUID, persistenceId, sequenceNr, event) =>
               CommittableJournalEntry(
-                CommittableOffset(
-                  offset.asInstanceOf[TimeBasedUUID].value,
-                  offsetStore.setOffset(tag, consumerId, _)
-                ),
+                CommittableOffset(offset.value, offsetStore.setOffset(tag, consumerId, _)),
                 persistenceId,
                 sequenceNr,
                 event.asInstanceOf[E]
