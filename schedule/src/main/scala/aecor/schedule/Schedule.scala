@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.aggregate.Correlation._
-import aecor.streaming.{ AggregateJournal, CommittableJournalEntry, OffsetStore }
+import aecor.streaming.{ CassandraAggregateJournal, CommittableJournalEntry, OffsetStore }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.ask
@@ -42,6 +42,7 @@ class ShardedSchedule(system: ActorSystem,
                       tickInterval: FiniteDuration,
                       offsetStore: OffsetStore[UUID])(implicit executionContext: ExecutionContext)
     extends Schedule {
+
   val scheduleRegion = ClusterSharding(system).start(
     typeName = entityName,
     entityProps = ScheduleActorSupervisor.props(entityName, tickInterval),
@@ -52,7 +53,7 @@ class ShardedSchedule(system: ActorSystem,
 
   implicit val askTimeout: Timeout = Timeout(30.seconds)
 
-  val aggregateJournal = AggregateJournal(system, offsetStore)
+  val aggregateJournal = CassandraAggregateJournal(system, offsetStore)
 
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,

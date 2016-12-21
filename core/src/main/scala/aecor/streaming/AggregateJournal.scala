@@ -1,9 +1,7 @@
 package aecor.streaming
 
-import java.util.UUID
-
+import aecor.serialization.PersistentDecoder
 import akka.NotUsed
-import akka.actor.ActorSystem
 import akka.stream.scaladsl.Source
 
 case class CommittableJournalEntry[Offset, +A](offset: CommittableOffset[Offset],
@@ -12,13 +10,8 @@ case class CommittableJournalEntry[Offset, +A](offset: CommittableOffset[Offset]
                                                value: A)
 
 trait AggregateJournal[Offset] {
-  def committableEventSource[E](
+  def committableEventSource[E: PersistentDecoder](
     entityName: String,
     consumerId: String
   ): Source[CommittableJournalEntry[Offset, E], NotUsed]
-}
-
-object AggregateJournal {
-  def apply(actorSystem: ActorSystem, offsetStore: OffsetStore[UUID]): AggregateJournal[UUID] =
-    new CassandraAggregateJournal(actorSystem, offsetStore)
 }

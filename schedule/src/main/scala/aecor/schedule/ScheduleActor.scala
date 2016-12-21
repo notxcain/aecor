@@ -9,6 +9,8 @@ import aecor.aggregate.Correlation.CorrelationId
 import aecor.aggregate._
 import aecor.behavior.{ Behavior, Handler }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
+import aecor.schedule.protobuf.ScheduleEventCodec
+import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.{ Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated }
 import akka.cluster.sharding.ShardRegion.{ ExtractEntityId, ExtractShardId, Passivate }
 import akka.stream.scaladsl.{ Keep, Sink, Source }
@@ -93,7 +95,7 @@ sealed trait ScheduleEvent {
   def scheduleName: String
 }
 
-object ScheduleEvent {
+object ScheduleEvent extends ScheduleEventInstances {
   case class ScheduleEntryAdded(scheduleName: String,
                                 entryId: String,
                                 correlationId: CorrelationId,
@@ -104,6 +106,13 @@ object ScheduleEvent {
                                 entryId: String,
                                 correlationId: CorrelationId)
       extends ScheduleEvent
+}
+
+trait ScheduleEventInstances {
+  implicit val persistentEncoder: PersistentEncoder[ScheduleEvent] =
+    PersistentEncoder.fromCodec(ScheduleEventCodec)
+  implicit val persistentDecoder: PersistentDecoder[ScheduleEvent] =
+    PersistentDecoder.fromCodec(ScheduleEventCodec)
 }
 
 sealed trait ScheduleCommand[_]
@@ -177,7 +186,7 @@ class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String
       entityName,
       ScheduleBehavior(),
       Identity.Provided(scheduleName + "-" + timeBucket),
-      SnapshotPolicy.Never,
+      SnapshotPolicy.never,
       Tagger.const(entityName),
       10.seconds
     ) {

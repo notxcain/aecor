@@ -24,19 +24,6 @@ class AggregateShardingSettings(config: Config,
     else defaultIdleTimeout
   }
 
-  val defaultSnapshotPolicy: SnapshotPolicy = snapshotPolicyAtPath("default-snapshot-after")
-  def snapshotPolicy(entityName: String): SnapshotPolicy = {
-    val key = s"idle-timeout.$entityName"
-    if (config.hasPath(key)) snapshotPolicyAtPath(key)
-    else defaultSnapshotPolicy
-  }
-
-  private def snapshotPolicyAtPath(path: String): SnapshotPolicy =
-    config.getString(path) match {
-      case "off" ⇒ SnapshotPolicy.Never
-      case _ ⇒ SnapshotPolicy.EachNumberOfEvents(config.getInt(path))
-    }
-
   val askTimeout: FiniteDuration = getMillisDuration(config, "ask-timeout")
 }
 

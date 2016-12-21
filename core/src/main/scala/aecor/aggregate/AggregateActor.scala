@@ -5,8 +5,11 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
 import aecor.aggregate.AggregateActor.Tagger
-
+import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.behavior.Behavior
+import aecor.serialization.PersistentDecoder.Result
+import aecor.serialization.akka.PersistentRepr
+import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.NotUsed
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
 import akka.cluster.sharding.ShardRegion
@@ -14,20 +17,24 @@ import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.{ Left, Right }
 
-sealed trait SnapshotPolicy {
-  def shouldSnapshotAtEventCount(eventCount: Long): Boolean
-}
+sealed trait SnapshotPolicy[+E]
 
 object SnapshotPolicy {
+  def never[E]: SnapshotPolicy[E] = Never.asInstanceOf[SnapshotPolicy[E]]
 
-  case object Never extends SnapshotPolicy {
-    override def shouldSnapshotAtEventCount(eventCount: Long): Boolean = false
-  }
+  def eachNumberOfEvents[E: PersistentEncoder: PersistentDecoder](
+    numberOfEvents: Int
+  ): SnapshotPolicy[E] = EachNumberOfEvents(numberOfEvents)
 
-  case class EachNumberOfEvents(numberOfEvents: Int) extends SnapshotPolicy {
-    override def shouldSnapshotAtEventCount(eventCount: Long): Boolean =
-      eventCount % numberOfEvents == 0
+  private[aggregate] case object Never extends SnapshotPolicy[Nothing]
+
+  private[aggregate] case class EachNumberOfEvents[State: PersistentEncoder: PersistentDecoder](
+    numberOfEvents: Int
+  ) extends SnapshotPolicy[State] {
+    def encode(state: State): PersistentRepr = PersistentEncoder[State].encode(state)
+    def decode(repr: PersistentRepr): Result[State] = PersistentDecoder[State].decode(repr)
   }
 
 }
@@ -44,12 +51,14 @@ object AggregateActor {
     def const[E](value: String): Tagger[E] = _ => value
   }
 
-  def props[Command[_], State, Event](behavior: Behavior[Command, State, Event],
-                                      entityName: String,
-                                      identity: Identity,
-                                      snapshotPolicy: SnapshotPolicy,
-                                      tagger: Tagger[Event],
-                                      idleTimeout: FiniteDuration) =
+  def props[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
+    behavior: Behavior[Command, State, Event],
+    entityName: String,
+    identity: Identity,
+    snapshotPolicy: SnapshotPolicy[State],
+    tagger: Tagger[Event],
+    idleTimeout: FiniteDuration
+  ) =
     Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagger, idleTimeout))
 
   case object Stop
@@ -65,11 +74,11 @@ object AggregateActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-class AggregateActor[Command[_], State, Event] private[aecor] (
+class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
   behavior: Behavior[Command, State, Event],
   identity: Identity,
-  snapshotPolicy: SnapshotPolicy,
+  snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagger[Event],
   idleTimeout: FiniteDuration
 ) extends PersistentActor
@@ -95,8 +104,25 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
   private var eventCount = 0L
 
   final override def receiveRecover: Receive = {
-    case SnapshotOffer(_, snapshot) =>
-      state = snapshot.asInstanceOf[State]
+    case repr: PersistentRepr =>
+      PersistentDecoder[Event].decode(repr) match {
+        case Left(cause) =>
+          onRecoveryFailure(cause, Some(repr))
+        case Right(event) =>
+          applyEvent(event)
+      }
+
+    case SnapshotOffer(_, snapshotRepr: PersistentRepr) =>
+      snapshotPolicy match {
+        case Never => ()
+        case e @ EachNumberOfEvents(_) =>
+          e.decode(snapshotRepr) match {
+            case Left(cause) =>
+              onRecoveryFailure(cause, Some(snapshotRepr))
+            case Right(snapshot) =>
+              state = snapshot
+          }
+      }
 
     case RecoveryCompleted =>
       log.info(
@@ -106,9 +132,6 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
         Duration.between(recoveryStartTimestamp, Instant.now()).toMillis
       )
       setIdleTimeout()
-
-    case e =>
-      applyEvent(e.asInstanceOf[Event])
   }
 
   final override def receiveCommand: Receive =
@@ -120,34 +143,40 @@ class AggregateActor[Command[_], State, Event] private[aecor] (
   }
 
   private def handleCommand(command: Command[Any]) = {
-    val (events, response) = behavior.commandHandler(command)(state)
+    val (events, reply) = behavior.commandHandler(command)(state)
     log.debug(
-      "[{}] Command [{}] produced response [{}] and events [{}]",
+      "[{}] Command [{}] produced reply [{}] and events [{}]",
       persistenceId,
       command,
-      response,
+      reply,
       events
     )
-    val envelopes = events.map(e => Tagged(e, Set(tagger(e))))
-    var shouldSaveSnapshot = false
-    persistAll(envelopes) { x =>
-      applyEvent(x.payload.asInstanceOf[Event])
-      if (snapshotPolicy.shouldSnapshotAtEventCount(eventCount))
-        shouldSaveSnapshot = true
-    }
+    val envelopes =
+      events.map(e => Tagged(PersistentEncoder[Event].encode(e), Set(tagger(e))))
+
+    persistAll(envelopes)(_ => ())
+
     deferAsync(NotUsed) { _ =>
-      if (shouldSaveSnapshot)
-        saveSnapshot(state)
-      sender() ! response
+      events.foreach { event =>
+        applyEvent(event)
+        snapshotIfNeeded()
+      }
+      sender() ! reply
     }
   }
 
+  private def snapshotIfNeeded(): Unit =
+    snapshotPolicy match {
+      case e @ EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
+        saveSnapshot(e.encode(state))
+      case _ => ()
+    }
+
   private def applyEvent(event: Event): Unit = {
     state = behavior.projector(state, event)
-    if (recoveryFinished) {
-      log.debug("[{}] New state [{}]", persistenceId, state)
-    }
     eventCount += 1
+    if (recoveryFinished)
+      log.debug("[{}] State [{}]", persistenceId, state)
   }
 
   private def receivePassivationMessages: Receive = {

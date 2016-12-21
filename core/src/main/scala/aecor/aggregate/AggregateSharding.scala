@@ -3,6 +3,7 @@ package aecor.aggregate
 import aecor.aggregate.AggregateActor.Tagger
 import aecor.aggregate.AggregateSharding.HandleCommand
 import aecor.behavior.Behavior
+import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
@@ -19,17 +20,19 @@ object AggregateSharding {
 }
 
 class AggregateSharding(system: ActorSystem) {
-  def start[Command[_], State, Event](behavior: Behavior[Command, State, Event],
-                                      entityName: String,
-                                      correlation: Correlation[Command],
-                                      settings: AggregateShardingSettings =
-                                        AggregateShardingSettings(system)): Command ~> Future = {
+  def start[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
+    behavior: Behavior[Command, State, Event],
+    entityName: String,
+    correlation: Correlation[Command],
+    snapshotPolicy: SnapshotPolicy[State],
+    settings: AggregateShardingSettings = AggregateShardingSettings(system)
+  ): Command ~> Future = {
 
     val props = AggregateActor.props(
       behavior,
       entityName,
       Identity.FromPathName,
-      settings.snapshotPolicy(entityName),
+      snapshotPolicy,
       Tagger.const(entityName),
       settings.idleTimeout(entityName)
     )

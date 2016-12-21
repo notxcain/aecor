@@ -48,20 +48,22 @@ class AppActor extends Actor with ActorLogging {
 
   val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
 
-  val journal = AggregateJournal(system, offsetStore)
+  val journal = CassandraAggregateJournal(system, offsetStore)
 
   val authorizationRegion: CardAuthorizationAggregateOp ~> Future =
     AggregateSharding(system).start(
       CardAuthorizationAggregate.behavior,
       CardAuthorizationAggregate.entityName,
-      CardAuthorizationAggregate.correlation
+      CardAuthorizationAggregate.correlation,
+      SnapshotPolicy.never
     )
 
   val accountRegion: AccountAggregateOp ~> Future =
     AggregateSharding(system).start(
       AccountAggregate.behavior(Clock.systemUTC()),
       AccountAggregate.entityName,
-      AccountAggregate.correlation
+      AccountAggregate.correlation,
+      SnapshotPolicy.never
     )
 
   val scheduleEntityName = "Schedule3"
