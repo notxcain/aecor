@@ -7,7 +7,7 @@ lazy val buildSettings = Seq(
   crossScalaVersions := Seq("2.11.8", "2.12.0")
 )
 
-lazy val akkaVersion = "2.4.16"
+lazy val akkaVersion = "2.4.14"
 lazy val akkaPersistenceCassandra = "0.21"
 lazy val catsVersion = "0.8.1"
 lazy val logbackVersion = "1.1.7"
