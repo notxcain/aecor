@@ -32,21 +32,34 @@ class CassandraAggregateJournal(system: ActorSystem, offsetStore: OffsetStore[UU
         readJournal
           .eventsByTag(tag, TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
           .map {
-            case EventEnvelope2(offset, persistenceId, sequenceNr, repr: PersistentRepr) =>
-              PersistentDecoder[E]
-                .decode(repr)
-                .right
-                .map { event =>
-                  CommittableJournalEntry(
-                    CommittableOffset(offset.asInstanceOf[TimeBasedUUID].value, { x: UUID =>
-                      offsetStore.setOffset(tag, consumerId, x)
-                    }),
-                    persistenceId,
-                    sequenceNr,
-                    event
+            case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
+              offset match {
+                case TimeBasedUUID(offsetValue) =>
+                  event match {
+                    case repr: PersistentRepr =>
+                      PersistentDecoder[E]
+                        .decode(repr)
+                        .right
+                        .map { event =>
+                          CommittableJournalEntry(CommittableOffset(offsetValue, { x: UUID =>
+                            offsetStore.setOffset(tag, consumerId, x)
+                          }), persistenceId, sequenceNr, event)
+                        }
+                        .fold(Failure(_), Success(_))
+                    case other =>
+                      Failure(
+                        new RuntimeException(
+                          s"Unexpected persistent representation $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag], consumerId = [$consumerId]"
+                        )
+                      )
+                  }
+                case other =>
+                  Failure(
+                    new RuntimeException(
+                      s"Unexpected offset $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag], consumerId = [$consumerId]"
+                    )
                   )
-                }
-                .fold(Failure(_), Success(_))
+              }
           }
           .mapAsync(8)(Future.fromTry)
       }

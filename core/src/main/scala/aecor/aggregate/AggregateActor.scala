@@ -4,7 +4,6 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
-import aecor.aggregate.AggregateActor.Tagger
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.behavior.Behavior
 import aecor.serialization.PersistentDecoder.Result
@@ -46,17 +45,13 @@ object Identity {
 }
 
 object AggregateActor {
-  type Tagger[E] = E => String
-  object Tagger {
-    def const[E](value: String): Tagger[E] = _ => value
-  }
 
   def props[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     behavior: Behavior[Command, State, Event],
     entityName: String,
     identity: Identity,
     snapshotPolicy: SnapshotPolicy[State],
-    tagger: Tagger[Event],
+    tagger: EventTagger[Event],
     idleTimeout: FiniteDuration
   ) =
     Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagger, idleTimeout))
@@ -79,7 +74,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   behavior: Behavior[Command, State, Event],
   identity: Identity,
   snapshotPolicy: SnapshotPolicy[State],
-  tagger: Tagger[Event],
+  tagger: EventTagger[Event],
   idleTimeout: FiniteDuration
 ) extends PersistentActor
     with Stash
@@ -99,7 +94,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = behavior.initialState
+  protected var state: State = behavior.init
 
   private var eventCount = 0L
 
@@ -173,7 +168,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
     }
 
   private def applyEvent(event: Event): Unit = {
-    state = behavior.projector(state, event)
+    state = behavior.update(state, event)
     eventCount += 1
     if (recoveryFinished)
       log.debug("[{}] State [{}]", persistenceId, state)

@@ -4,8 +4,6 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{ LocalDateTime, ZoneId }
 
-import aecor.aggregate.AggregateActor.Tagger
-import aecor.aggregate.Correlation.CorrelationId
 import aecor.aggregate._
 import aecor.behavior.{ Behavior, Handler }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
@@ -143,7 +141,7 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[S
   def findEntriesDueTo(date: LocalDateTime): List[ScheduleEntry] =
     entries.filter(_.dueDate.isBefore(date))
 
-  def applyEvent(event: ScheduleEvent): ScheduleState = event match {
+  def update(event: ScheduleEvent): ScheduleState = event match {
     case ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate) =>
       addEntry(entryId, correlationId, dueDate)
     case e: ScheduleEntryFired =>
@@ -173,7 +171,7 @@ object ScheduleBehavior {
                 .toVector -> Done
           }
       }
-    }, initialState = ScheduleState(List.empty, Set.empty), projector = _.applyEvent(_))
+    }, init = ScheduleState(List.empty, Set.empty), update = _ update _)
 }
 
 object ScheduleActor {
@@ -187,7 +185,7 @@ class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String
       ScheduleBehavior(),
       Identity.Provided(scheduleName + "-" + timeBucket),
       SnapshotPolicy.never,
-      Tagger.const(entityName),
+      EventTagger.const(entityName),
       10.seconds
     ) {
   override def shouldPassivate: Boolean = state.entries.isEmpty

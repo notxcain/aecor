@@ -123,8 +123,8 @@ object CardAuthorizationAggregate {
                 }
             }
         },
-      initialState = Initial,
-      projector = _.applyEvent(_)
+      init = Initial,
+      update = _.applyEvent(_)
     )
 
 }

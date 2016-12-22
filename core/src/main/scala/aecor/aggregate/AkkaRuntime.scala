@@ -1,7 +1,6 @@
 package aecor.aggregate
 
-import aecor.aggregate.AggregateActor.Tagger
-import aecor.aggregate.AggregateSharding.HandleCommand
+import aecor.aggregate.AkkaRuntime.HandleCommand
 import aecor.behavior.Behavior
 import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.ActorSystem
@@ -12,20 +11,20 @@ import cats.~>
 
 import scala.concurrent.Future
 
-object AggregateSharding {
-  def apply(system: ActorSystem): AggregateSharding =
-    new AggregateSharding(system)
+object AkkaRuntime {
+  def apply(system: ActorSystem): AkkaRuntime =
+    new AkkaRuntime(system)
 
   private final case class HandleCommand[C[_], A](entityId: String, command: C[A])
 }
 
-class AggregateSharding(system: ActorSystem) {
+class AkkaRuntime(system: ActorSystem) {
   def start[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
-    behavior: Behavior[Command, State, Event],
     entityName: String,
+    behavior: Behavior[Command, State, Event],
     correlation: Correlation[Command],
     snapshotPolicy: SnapshotPolicy[State],
-    settings: AggregateShardingSettings = AggregateShardingSettings(system)
+    settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
   ): Command ~> Future = {
 
     val props = AggregateActor.props(
@@ -33,8 +32,8 @@ class AggregateSharding(system: ActorSystem) {
       entityName,
       Identity.FromPathName,
       snapshotPolicy,
-      Tagger.const(entityName),
-      settings.idleTimeout(entityName)
+      EventTagger.const(entityName),
+      settings.idleTimeout
     )
 
     def extractEntityId: ShardRegion.ExtractEntityId = {

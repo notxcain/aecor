@@ -125,9 +125,5 @@ object AccountAggregate {
   def behavior(
     clock: Clock
   ): Behavior[AccountAggregateOp, Option[Account], AccountAggregateEvent] =
-    Behavior(
-      commandHandler = commandHandler(clock),
-      initialState = Option.empty,
-      projector = applyEvent
-    )
+    Behavior(commandHandler = commandHandler(clock), init = Option.empty, update = applyEvent)
 }
