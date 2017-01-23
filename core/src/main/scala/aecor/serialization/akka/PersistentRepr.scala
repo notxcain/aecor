@@ -1,7 +1,6 @@
 package aecor.serialization.akka
 import akka.actor.ExtendedActorSystem
-
-import scala.util.{ Success, Try }
+import akka.serialization.{ BaseSerializer, SerializerWithStringManifest }
 
 final case class PersistentRepr(manifest: String, payload: Array[Byte])
 
@@ -10,14 +9,18 @@ object PersistentRepr {
     PersistentRepr(a._1, a._2)
 }
 
-object PersistentReprCodec extends Codec[PersistentRepr] {
-  override def manifest(o: PersistentRepr): String = o.manifest
+class PersistentReprSerializer(val system: ExtendedActorSystem)
+    extends SerializerWithStringManifest
+    with BaseSerializer {
 
-  override def decode(bytes: Array[Byte], manifest: String): Try[PersistentRepr] =
-    Success(PersistentRepr(manifest, bytes))
+  override def toBinary(o: AnyRef): Array[Byte] = o match {
+    case pr: PersistentRepr => pr.payload
+  }
 
-  override def encode(o: PersistentRepr): Array[Byte] = o.payload
+  override def manifest(o: AnyRef): String = o match {
+    case pr: PersistentRepr => pr.manifest
+  }
+
+  override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =
+    PersistentRepr(manifest, bytes)
 }
-
-class PersistentReprSerializer(extendedActorSystem: ExtendedActorSystem)
-    extends CodecSerializer(extendedActorSystem, PersistentReprCodec)
