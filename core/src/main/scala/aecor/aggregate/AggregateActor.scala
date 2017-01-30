@@ -5,10 +5,9 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
-import aecor.behavior.Behavior
-import aecor.serialization.PersistentDecoder.Result
-import aecor.serialization.akka.PersistentRepr
-import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.data.Behavior
+import aecor.aggregate.serialization.PersistentDecoder.Result
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
 import akka.NotUsed
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
 import akka.cluster.sharding.ShardRegion
@@ -51,10 +50,10 @@ object AggregateActor {
     entityName: String,
     identity: Identity,
     snapshotPolicy: SnapshotPolicy[State],
-    tagger: EventTagger[Event],
+    tagging: Tagging[Event],
     idleTimeout: FiniteDuration
   ) =
-    Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagger, idleTimeout))
+    Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagging, idleTimeout))
 
   case object Stop
 }
@@ -74,7 +73,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   behavior: Behavior[Command, State, Event],
   identity: Identity,
   snapshotPolicy: SnapshotPolicy[State],
-  tagger: EventTagger[Event],
+  tagger: Tagging[Event],
   idleTimeout: FiniteDuration
 ) extends PersistentActor
     with Stash
@@ -87,8 +86,6 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   }
 
   final override val persistenceId: String = s"$entityName-$entityId"
-
-  protected val tags = Set(entityName)
 
   private val recoveryStartTimestamp: Instant = Instant.now()
 
@@ -138,7 +135,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   }
 
   private def handleCommand(command: Command[Any]) = {
-    val (events, reply) = behavior.commandHandler(command)(state)
+    val (events, reply) = behavior.commandHandler(command).run(state)
     log.debug(
       "[{}] Command [{}] produced reply [{}] and events [{}]",
       persistenceId,
@@ -147,7 +144,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       events
     )
     val envelopes =
-      events.map(e => Tagged(PersistentEncoder[Event].encode(e), Set(tagger(e))))
+      events.map(e => Tagged(PersistentEncoder[Event].encode(e), tagger(e)))
 
     persistAll(envelopes)(_ => ())
 
@@ -168,7 +165,13 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
     }
 
   private def applyEvent(event: Event): Unit = {
-    state = behavior.update(state, event)
+    state = behavior
+      .update(state, event)
+      .getOrElse {
+        val error = new IllegalStateException(s"Illegal state while applying [$event] to [$state]")
+        log.error(error, error.getMessage)
+        throw error
+      }
     eventCount += 1
     if (recoveryFinished)
       log.debug("[{}] State [{}]", persistenceId, state)

@@ -3,11 +3,18 @@ package aecor.example
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import aecor.serialization.{ DecodingFailure, PersistentDecoder, PersistentEncoder }
+import aecor.aggregate.serialization.{
+  DecodingFailure,
+  PersistentDecoder,
+  PersistentEncoder,
+  PersistentRepr
+}
 import io.circe.{ Decoder, Encoder, jawn }
 object persistentEncoderUtil {
   def circePersistentEncoder[A](implicit encoder: Encoder[A]): PersistentEncoder[A] =
-    PersistentEncoder.instance(e => "" -> encoder(e).noSpaces.getBytes(StandardCharsets.UTF_8))
+    PersistentEncoder.instance(
+      e => PersistentRepr("", encoder(e).noSpaces.getBytes(StandardCharsets.UTF_8))
+    )
 
   def circePersistentDecoder[A](implicit decoder: Decoder[A]): PersistentDecoder[A] =
     PersistentDecoder.instance(

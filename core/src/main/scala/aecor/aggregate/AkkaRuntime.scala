@@ -1,8 +1,8 @@
 package aecor.aggregate
 
 import aecor.aggregate.AkkaRuntime.HandleCommand
-import aecor.behavior.Behavior
-import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.data.Behavior
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
@@ -23,7 +23,8 @@ class AkkaRuntime(system: ActorSystem) {
     entityName: String,
     behavior: Behavior[Command, State, Event],
     correlation: Correlation[Command],
-    snapshotPolicy: SnapshotPolicy[State],
+    tagger: Tagging[Event],
+    snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
   ): Command ~> Future = {
 
@@ -32,7 +33,7 @@ class AkkaRuntime(system: ActorSystem) {
       entityName,
       Identity.FromPathName,
       snapshotPolicy,
-      EventTagger.const(entityName),
+      tagger,
       settings.idleTimeout
     )
 

@@ -1,26 +1,6 @@
-package aecor.serialization
-
-import aecor.serialization.akka.{ Codec, PersistentRepr }
+package aecor.aggregate.serialization
 
 import scala.util.{ Failure, Success }
-
-trait PersistentEncoder[A] {
-  def encode(a: A): PersistentRepr
-}
-
-object PersistentEncoder {
-  def apply[A](implicit instance: PersistentEncoder[A]): PersistentEncoder[A] = instance
-
-  def instance[A](f: A => PersistentRepr): PersistentEncoder[A] =
-    new PersistentEncoder[A] {
-      override def encode(a: A) = f(a)
-    }
-
-  def fromCodec[A](codec: Codec[A]): PersistentEncoder[A] = new PersistentEncoder[A] {
-    override def encode(a: A) =
-      PersistentRepr(codec.manifest(a), codec.encode(a))
-  }
-}
 
 trait PersistentDecoder[A] {
   def decode(repr: PersistentRepr): PersistentDecoder.Result[A]
@@ -31,7 +11,7 @@ object PersistentDecoder {
 
   def instance[A](f: PersistentRepr => Result[A]): PersistentDecoder[A] =
     new PersistentDecoder[A] {
-      override def decode(repr: PersistentRepr) = f(repr)
+      override def decode(repr: PersistentRepr): Result[A] = f(repr)
     }
 
   def fromCodec[A](codec: Codec[A]): PersistentDecoder[A] = new PersistentDecoder[A] {

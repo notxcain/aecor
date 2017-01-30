@@ -2,9 +2,10 @@ package aecor.schedule.protobuf
 
 import java.time.{ Instant, ZoneOffset }
 
-import aecor.serialization.akka.Codec
+import aecor.aggregate.serialization.Codec
 import aecor.schedule.ScheduleEvent
 import aecor.schedule.serialization.protobuf.msg.{ ScheduleEntryAdded, ScheduleEntryFired }
+
 import scala.util.Try
 
 object ScheduleEventCodec extends Codec[ScheduleEvent] {

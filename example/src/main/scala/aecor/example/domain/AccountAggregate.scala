@@ -3,10 +3,10 @@ package aecor.example.domain
 import java.time.Clock
 
 import aecor.aggregate.Correlation
-import aecor.behavior.{ Behavior, Handler }
+import aecor.data.Folded.syntax._
+import aecor.data.{ Behavior, Folded, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
-import aecor.util.function._
 import akka.Done
 import cats.~>
 
@@ -22,37 +22,43 @@ object AccountAggregate {
         fa.accountId.value
     }
 
-  def applyEvent(value: Option[Account], event: AccountAggregateEvent): Option[Account] =
-    handle(value, event) {
-      case None => {
-        case AccountOpened(accountId) =>
-          Some(Account(accountId, Amount(0), Map.empty, Set.empty))
-        case other =>
-          throw new IllegalArgumentException(s"Unexpected event $other")
-      }
-      case Some(Account(id, balance, holds, transactions)) => {
-        case e: AccountOpened => value
-        case e: TransactionAuthorized =>
-          value.map(
-            _.copy(
-              holds = holds + (e.transactionId -> e.amount),
-              balance = balance - e.amount,
-              transactions = transactions + e.transactionId
-            )
-          )
-        case e: TransactionVoided =>
-          holds
-            .get(e.transactionId)
-            .map(
-              holdAmount =>
-                value.map(_.copy(holds = holds - e.transactionId, balance = balance + holdAmount))
-            )
-            .getOrElse(value)
-        case e: AccountCredited =>
-          value.map(_.copy(balance = balance + e.amount))
-        case e: TransactionCaptured =>
-          value.map(_.copy(holds = holds - e.transactionId))
-      }
+  def applyEvent(state: Option[Account], event: AccountAggregateEvent): Folded[Option[Account]] =
+    state match {
+      case None =>
+        event match {
+          case AccountOpened(accountId) =>
+            Some(Account(accountId, Amount(0), Map.empty, Set.empty)).next
+          case other =>
+            impossible
+        }
+      case Some(Account(id, balance, holds, transactions)) =>
+        event match {
+          case e: AccountOpened => impossible
+          case e: TransactionAuthorized =>
+            state
+              .map(
+                _.copy(
+                  holds = holds + (e.transactionId -> e.amount),
+                  balance = balance - e.amount,
+                  transactions = transactions + e.transactionId
+                )
+              )
+              .next
+          case e: TransactionVoided =>
+            holds
+              .get(e.transactionId)
+              .map(
+                holdAmount =>
+                  state
+                    .map(_.copy(holds = holds - e.transactionId, balance = balance + holdAmount))
+              )
+              .getOrElse(state)
+              .next
+          case e: AccountCredited =>
+            state.map(_.copy(balance = balance + e.amount)).next
+          case e: TransactionCaptured =>
+            state.map(_.copy(holds = holds - e.transactionId)).next
+        }
     }
 
   case class Account(id: AccountId,

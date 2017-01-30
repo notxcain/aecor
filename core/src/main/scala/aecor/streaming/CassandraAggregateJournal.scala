@@ -2,71 +2,61 @@ package aecor.streaming
 
 import java.util.UUID
 
-import aecor.serialization.PersistentDecoder
-import aecor.serialization.akka.PersistentRepr
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentRepr }
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.{ EventEnvelope2, PersistenceQuery, TimeBasedUUID }
 import akka.stream.scaladsl.Source
 
-import scala.concurrent.Future
-import scala.util.{ Failure, Success }
+import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraAggregateJournal(system: ActorSystem, offsetStore: OffsetStore[UUID])
-    extends AggregateJournal[UUID] {
+class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
+  implicit executionContext: ExecutionContext
+) extends AggregateJournal[UUID] {
 
   private val readJournal: CassandraReadJournal =
-    PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+    PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
 
-  override def committableEventSource[E: PersistentDecoder](
-    tag: String,
-    consumerId: String
-  ): Source[CommittableJournalEntry[UUID, E], NotUsed] =
-    Source
-      .single(NotUsed)
-      .mapAsync(1) { _ =>
-        offsetStore.getOffset(tag, consumerId)
-      }
-      .flatMapConcat { storedOffset =>
-        readJournal
-          .eventsByTag(tag, TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
-          .map {
-            case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
-              offset match {
-                case TimeBasedUUID(offsetValue) =>
-                  event match {
-                    case repr: PersistentRepr =>
-                      PersistentDecoder[E]
-                        .decode(repr)
-                        .right
-                        .map { event =>
-                          CommittableJournalEntry(CommittableOffset(offsetValue, { x: UUID =>
-                            offsetStore.setOffset(tag, consumerId, x)
-                          }), persistenceId, sequenceNr, event)
-                        }
-                        .fold(Failure(_), Success(_))
-                    case other =>
-                      Failure(
-                        new RuntimeException(
-                          s"Unexpected persistent representation $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag], consumerId = [$consumerId]"
-                        )
-                      )
-                  }
+  def eventsByTag[E: PersistentDecoder](
+    tag: String
+  ): Option[UUID] => Source[JournalEntry[UUID, E], NotUsed] = { storedOffset: Option[UUID] =>
+    readJournal
+      .eventsByTag(tag, TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
+      .mapAsync(8) {
+        case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
+          Future(offset).flatMap {
+            case TimeBasedUUID(offsetValue) =>
+              event match {
+                case repr: PersistentRepr =>
+                  PersistentDecoder[E]
+                    .decode(repr)
+                    .right
+                    .map { event =>
+                      JournalEntry(offsetValue, persistenceId, sequenceNr, event)
+                    }
+                    .fold(Future.failed, Future.successful)
                 case other =>
-                  Failure(
+                  Future.failed(
                     new RuntimeException(
-                      s"Unexpected offset $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag], consumerId = [$consumerId]"
+                      s"Unexpected persistent representation $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag]"
                     )
                   )
               }
+            case other =>
+              Future.failed(
+                new RuntimeException(
+                  s"Unexpected offset of type ${other.getClass} at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag]"
+                )
+              )
           }
-          .mapAsync(8)(Future.fromTry)
       }
-
+  }
 }
 
 object CassandraAggregateJournal {
-  def apply(system: ActorSystem, offsetStore: OffsetStore[UUID]): AggregateJournal[UUID] =
-    new CassandraAggregateJournal(system, offsetStore)
+  def apply(system: ActorSystem, journalIdentifier: String = CassandraReadJournal.Identifier)(
+    implicit executionContext: ExecutionContext
+  ): AggregateJournal[UUID] =
+    new CassandraAggregateJournal(system, journalIdentifier)
 }

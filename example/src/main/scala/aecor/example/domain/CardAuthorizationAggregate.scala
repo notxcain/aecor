@@ -2,7 +2,8 @@ package aecor.example.domain
 import java.util.UUID
 
 import aecor.aggregate.Correlation
-import aecor.behavior.{ Behavior, Handler }
+import aecor.data.Folded.syntax._
+import aecor.data.{ Behavior, Folded, Handler }
 import aecor.example.domain.CardAuthorizationAggregate.State.{
   Accepted,
   Created,
@@ -15,7 +16,6 @@ import aecor.example.domain.CardAuthorizationAggregateEvent.{
   CardAuthorizationDeclined
 }
 import aecor.example.domain.CardAuthorizationAggregateOp._
-import aecor.util.function._
 import akka.Done
 import cats.~>
 
@@ -25,29 +25,33 @@ case class TransactionId(value: String) extends AnyVal
 
 object CardAuthorizationAggregate {
   sealed trait State {
-    def applyEvent(event: CardAuthorizationAggregateEvent): State =
-      handle(this, event) {
-        case Initial => {
-          case e: CardAuthorizationCreated =>
-            Created(e.cardAuthorizationId)
-          case other =>
-            throw new IllegalArgumentException(s"Unexpected event $other")
-        }
-        case self: Created => {
-          case e: CardAuthorizationCreated => self
-          case e: CardAuthorizationAccepted => Accepted(self.id)
-          case e: CardAuthorizationDeclined => Declined(self.id)
-        }
-        case self: Accepted => {
-          case e: CardAuthorizationCreated => self
-          case e: CardAuthorizationAccepted => Accepted(self.id)
-          case e: CardAuthorizationDeclined => Declined(self.id)
-        }
-        case self: Declined => {
-          case e: CardAuthorizationCreated => self
-          case e: CardAuthorizationAccepted => Accepted(self.id)
-          case e: CardAuthorizationDeclined => Declined(self.id)
-        }
+    def applyEvent(event: CardAuthorizationAggregateEvent): Folded[State] =
+      this match {
+        case Initial =>
+          event match {
+            case e: CardAuthorizationCreated =>
+              Created(e.cardAuthorizationId).next
+            case _ =>
+              impossible
+          }
+        case self: Created =>
+          event match {
+            case e: CardAuthorizationCreated => impossible
+            case e: CardAuthorizationAccepted => Accepted(self.id).next
+            case e: CardAuthorizationDeclined => Declined(self.id).next
+          }
+        case self: Accepted =>
+          event match {
+            case e: CardAuthorizationCreated => impossible
+            case e: CardAuthorizationAccepted => Accepted(self.id).next
+            case e: CardAuthorizationDeclined => Declined(self.id).next
+          }
+        case self: Declined =>
+          event match {
+            case e: CardAuthorizationCreated => impossible
+            case e: CardAuthorizationAccepted => Accepted(self.id).next
+            case e: CardAuthorizationDeclined => Declined(self.id).next
+          }
       }
   }
   object State {

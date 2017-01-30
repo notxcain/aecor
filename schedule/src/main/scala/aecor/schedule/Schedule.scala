@@ -4,7 +4,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.aggregate.CorrelationId
-import aecor.streaming.{ CassandraAggregateJournal, CommittableJournalEntry, OffsetStore }
+import aecor.streaming._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.ask
@@ -22,7 +22,7 @@ trait Schedule {
   def committableScheduleEvents(
     scheduleName: String,
     consumerId: String
-  ): Source[CommittableJournalEntry[UUID, ScheduleEvent], NotUsed]
+  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed]
 }
 
 object Schedule {
@@ -53,7 +53,7 @@ class ShardedSchedule(system: ActorSystem,
 
   private implicit val askTimeout: Timeout = Timeout(30.seconds)
 
-  private val aggregateJournal = CassandraAggregateJournal(system, offsetStore)
+  private val aggregateJournal = CassandraAggregateJournal(system)
 
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,
@@ -64,10 +64,12 @@ class ShardedSchedule(system: ActorSystem,
   override def committableScheduleEvents(
     scheduleName: String,
     consumerId: String
-  ): Source[CommittableJournalEntry[UUID, ScheduleEvent], NotUsed] =
-    aggregateJournal
-      .committableEventSource[ScheduleEvent](entityName, scheduleName + consumerId)
+  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed] = {
+    val source = aggregateJournal
+      .committableEventsByTag[ScheduleEvent](offsetStore, entityName)
+    source(ConsumerId(scheduleName + consumerId))
       .collect {
-        case m if m.value.scheduleName == scheduleName => m
+        case m if m.value.event.scheduleName == scheduleName => m
       }
+  }
 }

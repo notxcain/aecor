@@ -5,10 +5,11 @@ import java.nio.charset.StandardCharsets
 import java.time.{ LocalDateTime, ZoneId }
 
 import aecor.aggregate._
-import aecor.behavior.{ Behavior, Handler }
+import aecor.data.Folded.syntax._
+import aecor.data.{ Behavior, Folded, Handler }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.protobuf.ScheduleEventCodec
-import aecor.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.{ Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated }
 import akka.cluster.sharding.ShardRegion.{ ExtractEntityId, ExtractShardId, Passivate }
 import akka.stream.scaladsl.{ Keep, Sink, Source }
@@ -16,7 +17,6 @@ import akka.stream.{ ActorMaterializer, ActorMaterializerSettings }
 import akka.{ Done, NotUsed }
 import cats.~>
 
-import scala.collection.immutable.Seq
 import scala.concurrent.duration._
 
 object ScheduleActorSupervisor {
@@ -141,37 +141,44 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[S
   def findEntriesDueTo(date: LocalDateTime): List[ScheduleEntry] =
     entries.filter(_.dueDate.isBefore(date))
 
-  def update(event: ScheduleEvent): ScheduleState = event match {
+  def update(event: ScheduleEvent): Folded[ScheduleState] = event match {
     case ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate) =>
-      addEntry(entryId, correlationId, dueDate)
+      addEntry(entryId, correlationId, dueDate).next
     case e: ScheduleEntryFired =>
-      removeEntry(e.entryId)
+      removeEntry(e.entryId).next
   }
 }
 
 object ScheduleBehavior {
 
   def apply(): Behavior[ScheduleCommand, ScheduleState, ScheduleEvent] =
-    Behavior(commandHandler = new (ScheduleCommand ~> Handler[ScheduleState, ScheduleEvent, ?]) {
-      override def apply[A](fa: ScheduleCommand[A]): (ScheduleState) => (Seq[ScheduleEvent], A) = {
-        state =>
-          fa match {
-            case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
-              if (state.ids.contains(entryId)) {
-                Vector.empty -> Done
-              } else {
-                Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate)) -> Done
-              }
+    Behavior(
+      commandHandler = new (ScheduleCommand ~> Handler[ScheduleState, ScheduleEvent, ?]) {
+        override def apply[A](fa: ScheduleCommand[A]): Handler[ScheduleState, ScheduleEvent, A] =
+          Handler {
+            state =>
+              fa match {
+                case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
+                  if (state.ids.contains(entryId)) {
+                    Vector.empty -> Done
+                  } else {
+                    Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate)) -> Done
+                  }
 
-            case FireDueEntries(scheduleName, now) =>
-              state
-                .findEntriesDueTo(now)
-                .take(100)
-                .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId))
-                .toVector -> Done
+                case FireDueEntries(scheduleName, now) =>
+                  state
+                    .findEntriesDueTo(now)
+                    .take(100)
+                    .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId))
+                    .toVector -> Done
+              }
           }
+      },
+      init = ScheduleState(List.empty, Set.empty),
+      update = { (state, event) =>
+        state.update(event)
       }
-    }, init = ScheduleState(List.empty, Set.empty), update = _ update _)
+    )
 }
 
 object ScheduleActor {
@@ -185,7 +192,7 @@ class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String
       ScheduleBehavior(),
       Identity.Provided(scheduleName + "-" + timeBucket),
       SnapshotPolicy.never,
-      EventTagger.const(entityName),
+      Tagging(entityName),
       10.seconds
     ) {
   override def shouldPassivate: Boolean = state.entries.isEmpty

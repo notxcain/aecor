@@ -48,14 +48,14 @@ class AppActor extends Actor with ActorLogging {
 
   val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
 
-  val journal = CassandraAggregateJournal(system, offsetStore)
+  val journal = CassandraAggregateJournal(system)
 
   val authorizationRegion: CardAuthorizationAggregateOp ~> Future =
     AkkaRuntime(system).start(
       CardAuthorizationAggregate.entityName,
       CardAuthorizationAggregate.behavior,
       CardAuthorizationAggregate.correlation,
-      SnapshotPolicy.never
+      Tagging(CardAuthorizationAggregate.entityName)
     )
 
   val accountRegion: AccountAggregateOp ~> Future =
@@ -63,7 +63,7 @@ class AppActor extends Actor with ActorLogging {
       AccountAggregate.entityName,
       AccountAggregate.behavior(Clock.systemUTC()),
       AccountAggregate.correlation,
-      SnapshotPolicy.never
+      Tagging(AccountAggregate.entityName)
     )
 
   val scheduleEntityName = "Schedule3"
@@ -71,15 +71,13 @@ class AppActor extends Actor with ActorLogging {
   val schedule: Schedule =
     Schedule(system, scheduleEntityName, 1.day, 10.seconds, offsetStore)
 
+  val cardAuthorizationAggregateEventSource = journal
+    .eventsByTag[CardAuthorizationAggregateEvent](CardAuthorizationAggregate.entityName)
+
   val cardAuthorizationEventStream =
     new DefaultEventStream(
       system,
-      journal
-        .committableEventSource[CardAuthorizationAggregateEvent](
-          CardAuthorizationAggregate.entityName,
-          "CardAuthorization-API"
-        )
-        .map(_.value)
+      cardAuthorizationAggregateEventSource(Option.empty).map(_.event)
     )
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(
@@ -96,13 +94,14 @@ class AppActor extends Actor with ActorLogging {
     AuthorizationProcess.flow(8, accountRegion :&: authorizationRegion)
 
   journal
-    .committableEventSource[CardAuthorizationAggregateEvent](
-      CardAuthorizationAggregate.entityName,
-      "processing"
+    .committableEventsByTag[CardAuthorizationAggregateEvent](
+      offsetStore,
+      CardAuthorizationAggregate.entityName
     )
+    .apply(ConsumerId("processing"))
     .collect {
-      case CommittableJournalEntry(offset, _, _, e: CardAuthorizationCreated) =>
-        (e, offset)
+      case c @ Committable(_, JournalEntry(offset, _, _, e: CardAuthorizationCreated)) =>
+        (e, c)
     }
     .via(authorizationProcessFlow)
     .mapAsync(1)(_.commit())

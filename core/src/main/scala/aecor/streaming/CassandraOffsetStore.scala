@@ -4,7 +4,7 @@ import java.util.UUID
 
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import com.datastax.driver.core.Session
-import aecor.util.cassandra._
+import akka.persistence.cassandra._
 import scala.concurrent.{ ExecutionContext, Future }
 
 object CassandraOffsetStore {
@@ -19,7 +19,7 @@ object CassandraOffsetStore {
 
   def createTable(config: Config)(
     implicit executionContext: ExecutionContext
-  ): Session => Future[Unit] = _.executeAsync(config.createTableQuery).map(_ => ())
+  ): Session => Future[Unit] = _.executeAsync(config.createTableQuery).asScala.map(_ => ())
 
   def apply(session: CassandraSession, config: CassandraOffsetStore.Config)(
     implicit executionContext: ExecutionContext
@@ -35,19 +35,22 @@ class CassandraOffsetStore(session: CassandraSession, config: CassandraOffsetSto
   private val updateOffsetStatement =
     session.prepare(config.updateOffsetQuery)
 
-  override def getOffset(tag: String, consumerId: String): Future[Option[UUID]] =
+  override def getOffset(tag: String, consumerId: ConsumerId): Future[Option[UUID]] =
     selectOffsetStatement
-      .map(_.bind(consumerId, tag))
+      .map(_.bind(consumerId.value, tag))
       .flatMap(session.selectOne)
       .map(_.map(_.getUUID("offset")))
 
-  override def setOffset(tag: String, consumerId: String, offset: UUID): Future[Unit] =
-    updateOffsetStatement.map { stmt =>
-      stmt
-        .bind()
-        .setUUID("offset", offset)
-        .setString("tag", tag)
-        .setString("consumer_id", consumerId)
-    }.flatMap(session.executeWrite).map(_ => ())
+  override def setOffset(tag: String, consumerId: ConsumerId, offset: UUID): Future[Unit] =
+    updateOffsetStatement
+      .map { stmt =>
+        stmt
+          .bind()
+          .setUUID("offset", offset)
+          .setString("tag", tag)
+          .setString("consumer_id", consumerId.value)
+      }
+      .flatMap(session.executeWrite)
+      .map(_ => ())
 
 }

@@ -7,11 +7,10 @@ lazy val buildSettings = Seq(
   crossScalaVersions := Seq("2.11.8", "2.12.0")
 )
 
-lazy val akkaVersion = "2.4.14"
-lazy val akkaPersistenceCassandra = "0.21"
-lazy val catsVersion = "0.8.1"
+lazy val akkaVersion = "2.4.16"
+lazy val akkaPersistenceCassandra = "0.22"
+lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
-lazy val monixVersion = "2.1.1"
 
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
@@ -71,7 +70,6 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
-    "io.monix" %% "monix-eval" % monixVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion
   )
@@ -81,7 +79,7 @@ lazy val scheduleSettings = commonProtobufSettings
 
 lazy val exampleSettings = {
   val circeVersion = "0.6.1"
-  val akkaHttpVersion = "10.0.0"
+  val akkaHttpVersion = "10.0.3"
   val akkaHttpJsonVersion = "1.11.0"
   val freekVersion = "0.6.5"
   Seq(
