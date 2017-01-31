@@ -2,20 +2,22 @@ package aecor.example
 
 import java.time.Clock
 
-import aecor.core.aggregate._
-import aecor.core.streaming._
-import aecor.example.domain.CardAuthorization.CardAuthorizationCreated
+import aecor.aggregate._
+import aecor.streaming._
+import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
 import aecor.schedule._
-import akka.actor.{Actor, ActorLogging, Props}
+import akka.NotUsed
+import akka.actor.{ Actor, ActorLogging, ActorSystem, Props }
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Sink
+import akka.stream.{ ActorMaterializer, Materializer }
+import akka.stream.scaladsl.{ Flow, Sink }
 import cats.~>
+import com.typesafe.config.Config
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -27,29 +29,42 @@ object AppActor {
 class AppActor extends Actor with ActorLogging {
   override def receive: Receive = Actor.emptyBehavior
 
-  implicit val system = context.system
-  implicit val materializer = ActorMaterializer()
+  implicit val system: ActorSystem = context.system
+  implicit val materializer: Materializer = ActorMaterializer()
 
   import materializer.executionContext
 
-  val config = system.settings.config
+  val config: Config = system.settings.config
 
-  val queries = new CassandraOffsetStore.Queries(system)
+  val offsetStoreConfig =
+    CassandraOffsetStore.Config(config.getString("cassandra-journal.keyspace"))
 
-  val sessionWrapper =
-    DefaultJournalCassandraSession(system, "app-session", queries.init)
+  val cassandraSession =
+    DefaultJournalCassandraSession(
+      system,
+      "app-session",
+      CassandraOffsetStore.createTable(offsetStoreConfig)
+    )
 
-  val offsetStore = new CassandraOffsetStore(sessionWrapper, queries)
+  val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
 
-  val journal = AggregateJournal(system, offsetStore)
+  val journal = CassandraAggregateJournal(system)
 
-  val authorizationRegion =
-    AggregateSharding(system)
-      .start[CardAuthorization.Command](CardAuthorization())
+  val authorizationRegion: CardAuthorizationAggregateOp ~> Future =
+    AkkaRuntime(system).start(
+      CardAuthorizationAggregate.entityName,
+      CardAuthorizationAggregate.commandHandler,
+      CardAuthorizationAggregate.correlation,
+      Tagging(CardAuthorizationAggregate.entityNameTag)
+    )
 
-  val accountRegion =
-    AggregateSharding(system)
-      .start[AccountAggregateOp](AccountAggregate(Clock.systemUTC()))
+  val accountRegion: AccountAggregateOp ~> Future =
+    AkkaRuntime(system).start(
+      AccountAggregate.entityName,
+      AccountAggregate.commandHandler(Clock.systemUTC()),
+      AccountAggregate.correlation,
+      Tagging(AccountAggregate.entityNameTag)
+    )
 
   val scheduleEntityName = "Schedule3"
 
@@ -60,40 +75,38 @@ class AppActor extends Actor with ActorLogging {
     new DefaultEventStream(
       system,
       journal
-        .committableEventSourceFor[CardAuthorization]("CardAuthorization-API")
-        .map(_.value))
+        .eventsByTag[CardAuthorizationAggregateEvent](
+          CardAuthorizationAggregate.entityNameTag,
+          Option.empty
+        )
+        .map(_.event)
+    )
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(
     authorizationRegion,
     cardAuthorizationEventStream,
-    Logging(system, classOf[AuthorizePaymentAPI]))
+    Logging(system, classOf[AuthorizePaymentAPI])
+  )
   val accountApi = new AccountAPI(accountRegion)
-
-  val accountInterpreter = new (AccountAggregateOp ~> Future) {
-    override def apply[A](fa: AccountAggregateOp[A]): Future[A] =
-      accountRegion.ask(fa)
-  }
-  val cardAuthorizationInterpreter =
-    new (CardAuthorization.Command ~> Future) {
-      override def apply[A](fa: CardAuthorization.Command[A]): Future[A] =
-        authorizationRegion.ask(fa)
-    }
 
   import freek._
 
-  val interpreter = accountInterpreter :&: cardAuthorizationInterpreter
+  def authorizationProcessFlow[PassThrough]
+    : Flow[(CardAuthorizationCreated, PassThrough), PassThrough, NotUsed] =
+    AuthorizationProcess.flow(8, accountRegion :&: authorizationRegion)
 
   journal
-    .committableEventSourceFor[CardAuthorization]("processing")
+    .committableEventsByTag(
+      offsetStore,
+      CardAuthorizationAggregate.entityNameTag,
+      ConsumerId("processing")
+    )
     .collect {
-      case CommittableJournalEntry(offset,
-                                   _,
-                                   _,
-                                   e: CardAuthorizationCreated) =>
-        (e, offset)
+      case x @ Committable(_, JournalEntry(offset, _, _, e: CardAuthorizationCreated)) =>
+        (e, x)
     }
-    .via(AuthorizationProcess.flow(8, interpreter))
-    .mapAsync(1)(_.commitScaladsl())
+    .via(authorizationProcessFlow)
+    .mapAsync(1)(_.commit())
     .runWith(Sink.ignore)
 
   val route = path("check") {
@@ -105,9 +118,7 @@ class AppActor extends Actor with ActorLogging {
       AccountAPI.route(accountApi)
 
   Http()
-    .bindAndHandle(route,
-                   config.getString("http.interface"),
-                   config.getInt("http.port"))
+    .bindAndHandle(route, config.getString("http.interface"), config.getInt("http.port"))
     .onComplete { result =>
       log.info("Bind result [{}]", result)
     }

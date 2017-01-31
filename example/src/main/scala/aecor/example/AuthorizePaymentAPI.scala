@@ -1,17 +1,20 @@
 package aecor.example
 
-import aecor.core.aggregate.AggregateRegionRef
 import aecor.example.AuthorizePaymentAPI._
-import aecor.example.domain.CardAuthorization.{
+import aecor.example.domain.CardAuthorizationAggregateEvent.{
   CardAuthorizationAccepted,
-  CardAuthorizationDeclined,
-  CreateCardAuthorization
+  CardAuthorizationDeclined
+}
+import aecor.example.domain.CardAuthorizationAggregateOp.{
+  CreateCardAuthorization,
+  CreateCardAuthorizationRejection
 }
 import aecor.example.domain._
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
+import cats.~>
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
 
@@ -19,55 +22,53 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 
 class AuthorizePaymentAPI(
-    authorization: AggregateRegionRef[CardAuthorization.Command],
-    eventStream: EventStream[CardAuthorization.Event],
+    authorization: CardAuthorizationAggregateOp ~> Future,
+    eventStream: EventStream[CardAuthorizationAggregateEvent],
     log: LoggingAdapter) {
 
   import DTO._
 
-  def authorizePayment(dto: AuthorizePayment)(implicit ec: ExecutionContext)
-    : Future[Either[CardAuthorization.CreateCardAuthorizationRejection,
-                    AuthorizePaymentAPI.ApiResult]] = dto match {
-    case AuthorizePayment(cardAuthorizationId,
-                          accountId,
-                          amount,
-                          acquireId,
-                          terminalId) =>
-      val command = CreateCardAuthorization(
-        CardAuthorizationId(cardAuthorizationId),
-        AccountId(accountId),
-        Amount(amount),
-        AcquireId(acquireId),
-        TerminalId(terminalId)
-      )
-      log.debug("Sending command [{}]", command)
-      val start = System.nanoTime()
-      eventStream
-        .registerObserver(30.seconds) {
-          case e: CardAuthorizationDeclined
-              if e.cardAuthorizationId.value == cardAuthorizationId =>
-            AuthorizePaymentAPI.ApiResult.Declined(e.reason.toString)
-          case e: CardAuthorizationAccepted
-              if e.cardAuthorizationId.value == cardAuthorizationId =>
-            AuthorizePaymentAPI.ApiResult.Authorized
-        }
-        .flatMap { observer =>
-          authorization
-            .ask(command)
-            .flatMap {
+  def authorizePayment(dto: AuthorizePayment)(
+      implicit ec: ExecutionContext): Future[
+    Either[CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] =
+    dto match {
+      case AuthorizePayment(cardAuthorizationId,
+                            accountId,
+                            amount,
+                            acquireId,
+                            terminalId) =>
+        val command = CreateCardAuthorization(
+          CardAuthorizationId(cardAuthorizationId),
+          AccountId(accountId),
+          Amount(amount),
+          AcquireId(acquireId),
+          TerminalId(terminalId)
+        )
+        log.debug("Sending command [{}]", command)
+        val start = System.nanoTime()
+        eventStream
+          .registerObserver(30.seconds) {
+            case e: CardAuthorizationDeclined
+                if e.cardAuthorizationId.value == cardAuthorizationId =>
+              AuthorizePaymentAPI.ApiResult.Declined(e.reason.toString)
+            case e: CardAuthorizationAccepted
+                if e.cardAuthorizationId.value == cardAuthorizationId =>
+              AuthorizePaymentAPI.ApiResult.Authorized
+          }
+          .flatMap { observer =>
+            authorization(command).flatMap {
               case Left(rejection) => Future.successful(Left(rejection))
               case _ => observer.result.map(Right(_))
-            }
-            .map { x =>
+            }.map { x =>
               log.debug("Command [{}] processed with result [{}] in [{}]",
                         command,
                         x,
                         (System.nanoTime() - start) / 1000000)
               x
             }
-        }
+          }
 
-  }
+    }
 }
 
 object AuthorizePaymentAPI {

@@ -1,41 +1,8 @@
 package aecor.example.domain
 
-import aecor.core.message.Correlation
 import akka.Done
-import cats.free.Free
 
 object AccountAggregateOp {
-  implicit def correlation: Correlation[AccountAggregateOp[_]] =
-    Correlation.instance(_.accountId.value)
-
-  type AccountAggregateOpF[A] = Free[AccountAggregateOp, A]
-
-  def openAccount(
-      accountId: AccountId): AccountAggregateOpF[Rejection Either Done] =
-    Free.liftF(OpenAccount(accountId))
-
-  def authorizeTransaction(accountId: AccountId,
-                           transactionId: TransactionId,
-                           amount: Amount)
-    : AccountAggregateOpF[AuthorizeTransactionRejection Either Done] =
-    Free.liftF(AuthorizeTransaction(accountId, transactionId, amount))
-
-  def voidTransaction(accountId: AccountId, transactionId: TransactionId)
-    : AccountAggregateOpF[Rejection Either Done] =
-    Free.liftF(VoidTransaction(accountId, transactionId))
-
-  def captureTransaction(
-      accountId: AccountId,
-      transactionId: TransactionId,
-      amount: Amount): AccountAggregateOpF[Rejection Either Done] =
-    Free.liftF(CaptureTransaction(accountId, transactionId, amount))
-
-  def creditAccount(
-      accountId: AccountId,
-      transactionId: TransactionId,
-      amount: Amount): AccountAggregateOpF[Rejection Either Done] =
-    Free.liftF(CreditAccount(accountId, transactionId, amount))
-
   case class OpenAccount(accountId: AccountId)
       extends AccountAggregateOp[Either[Rejection, Done]]
 
