@@ -6,6 +6,10 @@ sealed trait Tagging[A] {
   def apply(e: A): Set[String]
 }
 
+/**
+  * Please refer to akka-persistence-cassandra documentation and its reference.conf
+  * to understand how tagging works internally
+  */
 object Tagging {
 
   def apply[A](tag1: EventTag[A]): Tagging[A] =
