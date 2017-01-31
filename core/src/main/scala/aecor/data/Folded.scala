@@ -11,6 +11,10 @@ sealed abstract class Folded[+A] {
     case Impossible => Impossible
     case Next(a) => Next(f(a))
   }
+  def flatMap[B](f: A => Folded[B]): Folded[B] = this match {
+    case Impossible => Impossible
+    case Next(a) => f(a)
+  }
   def getOrElse[AA >: A](that: => AA): AA = this match {
     case Impossible => that
     case Next(a) => a
