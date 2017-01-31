@@ -5,14 +5,15 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
-import aecor.data.Behavior
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
+import aecor.data.{ Folded, Handler }
 import akka.NotUsed
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
+import cats.~>
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
@@ -46,13 +47,13 @@ object Identity {
 object AggregateActor {
 
   def props[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
-    behavior: Behavior[Command, State, Event],
     entityName: String,
+    behavior: Command ~> Handler[State, Event, ?],
     identity: Identity,
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
     idleTimeout: FiniteDuration
-  ) =
+  )(implicit folder: Folder[Folded, Event, State]): Props =
     Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagging, idleTimeout))
 
   case object Stop
@@ -70,12 +71,13 @@ object AggregateActor {
   */
 class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
-  behavior: Behavior[Command, State, Event],
+  behavior: Command ~> Handler[State, Event, ?],
   identity: Identity,
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
   idleTimeout: FiniteDuration
-) extends PersistentActor
+)(implicit folder: Folder[Folded, Event, State])
+    extends PersistentActor
     with Stash
     with ActorLogging {
 
@@ -91,7 +93,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = behavior.init
+  protected var state: State = folder.zero
 
   private var eventCount = 0L
 
@@ -135,7 +137,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   }
 
   private def handleCommand(command: Command[_]): Unit = {
-    val (events, reply) = behavior.commandHandler(command).run(state)
+    val (events, reply) = behavior(command).run(state)
     log.debug(
       "[{}] Command [{}] produced reply [{}] and events [{}]",
       persistenceId,
@@ -165,8 +167,8 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
     }
 
   private def applyEvent(event: Event): Unit = {
-    state = behavior
-      .update(state, event)
+    state = folder
+      .fold(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state while applying [$event] to [$state]")
         log.error(error, error.getMessage)

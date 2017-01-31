@@ -2,12 +2,13 @@ package aecor.example.domain
 
 import java.time.Clock
 
-import aecor.aggregate.Correlation
+import aecor.aggregate.{ Correlation, CorrelationIdF, Folder }
 import aecor.data.Folded.syntax._
-import aecor.data.{ Behavior, Folded, Handler }
+import aecor.data.{ Folded, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
 import akka.Done
+import cats.arrow.FunctionK
 import cats.~>
 
 import scala.collection.immutable.Seq
@@ -16,11 +17,11 @@ case class AccountId(value: String) extends AnyVal
 
 object AccountAggregate {
 
-  def correlation: Correlation[AccountAggregateOp] =
-    new Correlation[AccountAggregateOp] {
-      override def apply[A](fa: AccountAggregateOp[A]): String =
-        fa.accountId.value
-    }
+  def correlation: Correlation[AccountAggregateOp] = {
+    def mk[A](fa: AccountAggregateOp[A]): CorrelationIdF[A] =
+      fa.accountId.value
+    FunctionK.lift(mk _)
+  }
 
   def applyEvent(state: Option[Account], event: AccountAggregateEvent): Folded[Option[Account]] =
     state match {
@@ -65,6 +66,45 @@ object AccountAggregate {
                      balance: Amount,
                      holds: Map[TransactionId, Amount],
                      transactions: Set[TransactionId])
+
+  object Account {
+    implicit val folder: Folder[Folded, AccountAggregateEvent, Option[Account]] =
+      Folder.instanceFor[AccountAggregateEvent](Option.empty[Account]) {
+        case None => {
+          case AccountOpened(accountId) =>
+            Some(Account(accountId, Amount(0), Map.empty, Set.empty)).next
+          case other =>
+            impossible
+        }
+        case state @ Some(Account(id, balance, holds, transactions)) => {
+          case e: AccountOpened => impossible
+          case e: TransactionAuthorized =>
+            state
+              .map(
+                _.copy(
+                  holds = holds + (e.transactionId -> e.amount),
+                  balance = balance - e.amount,
+                  transactions = transactions + e.transactionId
+                )
+              )
+              .next
+          case e: TransactionVoided =>
+            holds
+              .get(e.transactionId)
+              .map(
+                holdAmount =>
+                  state
+                    .map(_.copy(holds = holds - e.transactionId, balance = balance + holdAmount))
+              )
+              .getOrElse(state)
+              .next
+          case e: AccountCredited =>
+            state.map(_.copy(balance = balance + e.amount)).next
+          case e: TransactionCaptured =>
+            state.map(_.copy(holds = holds - e.transactionId)).next
+        }
+      }
+  }
 
   val entityName: String = "Account"
 
@@ -127,9 +167,4 @@ object AccountAggregate {
             }
         }
     }
-
-  def behavior(
-    clock: Clock
-  ): Behavior[AccountAggregateOp, Option[Account], AccountAggregateEvent] =
-    Behavior(commandHandler = commandHandler(clock), init = Option.empty, update = applyEvent)
 }

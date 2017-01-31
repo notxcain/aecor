@@ -1,8 +1,8 @@
 package aecor.aggregate
 
 import aecor.aggregate.AkkaRuntime.HandleCommand
-import aecor.data.{ Behavior, Folded, Handler }
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.data.{ Folded, Handler }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
@@ -21,16 +21,16 @@ object AkkaRuntime {
 class AkkaRuntime(system: ActorSystem) {
   def start[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Behavior[Command, State, Event],
+    behavior: Command ~> Handler[State, Event, ?],
     correlation: Correlation[Command],
     tagging: Tagging[Event],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
-  ): Command ~> Future = {
+  )(implicit folder: Folder[Folded, Event, State]): Command ~> Future = {
 
     val props = AggregateActor.props(
-      behavior,
       entityName,
+      behavior,
       Identity.FromPathName,
       snapshotPolicy,
       tagging,

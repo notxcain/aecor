@@ -53,7 +53,7 @@ class AppActor extends Actor with ActorLogging {
   val authorizationRegion: CardAuthorizationAggregateOp ~> Future =
     AkkaRuntime(system).start(
       CardAuthorizationAggregate.entityName,
-      CardAuthorizationAggregate.behavior,
+      CardAuthorizationAggregate.commandHandler,
       CardAuthorizationAggregate.correlation,
       Tagging(CardAuthorizationAggregate.entityName)
     )
@@ -61,7 +61,7 @@ class AppActor extends Actor with ActorLogging {
   val accountRegion: AccountAggregateOp ~> Future =
     AkkaRuntime(system).start(
       AccountAggregate.entityName,
-      AccountAggregate.behavior(Clock.systemUTC()),
+      AccountAggregate.commandHandler(Clock.systemUTC()),
       AccountAggregate.correlation,
       Tagging(AccountAggregate.entityName)
     )

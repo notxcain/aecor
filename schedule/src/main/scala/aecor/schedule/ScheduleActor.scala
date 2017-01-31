@@ -5,11 +5,11 @@ import java.nio.charset.StandardCharsets
 import java.time.{ LocalDateTime, ZoneId }
 
 import aecor.aggregate._
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.data.Folded.syntax._
-import aecor.data.{ Behavior, Folded, Handler }
+import aecor.data.{ Folded, Handler }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.protobuf.ScheduleEventCodec
-import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.{ Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated }
 import akka.cluster.sharding.ShardRegion.{ ExtractEntityId, ExtractShardId, Passivate }
 import akka.stream.scaladsl.{ Keep, Sink, Source }
@@ -149,36 +149,33 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[S
   }
 }
 
+object ScheduleState {
+  implicit val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
+    Folder.instance(ScheduleState(List.empty, Set.empty))(_.update)
+}
+
 object ScheduleBehavior {
 
-  def apply(): Behavior[ScheduleCommand, ScheduleState, ScheduleEvent] =
-    Behavior(
-      commandHandler = new (ScheduleCommand ~> Handler[ScheduleState, ScheduleEvent, ?]) {
-        override def apply[A](fa: ScheduleCommand[A]): Handler[ScheduleState, ScheduleEvent, A] =
-          Handler {
-            state =>
-              fa match {
-                case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
-                  if (state.ids.contains(entryId)) {
-                    Vector.empty -> Done
-                  } else {
-                    Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate)) -> Done
-                  }
+  def apply() = new (ScheduleCommand ~> Handler[ScheduleState, ScheduleEvent, ?]) {
+    override def apply[A](fa: ScheduleCommand[A]): Handler[ScheduleState, ScheduleEvent, A] =
+      Handler { state =>
+        fa match {
+          case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
+            if (state.ids.contains(entryId)) {
+              Vector.empty -> Done
+            } else {
+              Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate)) -> Done
+            }
 
-                case FireDueEntries(scheduleName, now) =>
-                  state
-                    .findEntriesDueTo(now)
-                    .take(100)
-                    .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId))
-                    .toVector -> Done
-              }
-          }
-      },
-      init = ScheduleState(List.empty, Set.empty),
-      update = { (state, event) =>
-        state.update(event)
+          case FireDueEntries(scheduleName, now) =>
+            state
+              .findEntriesDueTo(now)
+              .take(100)
+              .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId))
+              .toVector -> Done
+        }
       }
-    )
+  }
 }
 
 object ScheduleActor {
