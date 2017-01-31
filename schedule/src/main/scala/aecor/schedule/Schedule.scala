@@ -21,7 +21,7 @@ trait Schedule {
                        dueDate: LocalDateTime): Future[Done]
   def committableScheduleEvents(
     scheduleName: String,
-    consumerId: String
+    consumerId: ConsumerId
   ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed]
 }
 
@@ -63,13 +63,15 @@ class ShardedSchedule(system: ActorSystem,
 
   override def committableScheduleEvents(
     scheduleName: String,
-    consumerId: String
-  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed] = {
-    val source = aggregateJournal
-      .committableEventsByTag[ScheduleEvent](offsetStore, entityName)
-    source(ConsumerId(scheduleName + consumerId))
+    consumerId: ConsumerId
+  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed] =
+    aggregateJournal
+      .committableEventsByTag[ScheduleEvent](
+        offsetStore,
+        entityName,
+        ConsumerId(scheduleName + consumerId.value)
+      )
       .collect {
         case m if m.value.event.scheduleName == scheduleName => m
       }
-  }
 }

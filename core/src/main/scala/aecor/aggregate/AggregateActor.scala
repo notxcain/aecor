@@ -131,10 +131,10 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   private def receiveCommandMessage: Receive = {
     case command =>
-      handleCommand(command.asInstanceOf[Command[Any]])
+      handleCommand(command.asInstanceOf[Command[_]])
   }
 
-  private def handleCommand(command: Command[Any]) = {
+  private def handleCommand(command: Command[_]): Unit = {
     val (events, reply) = behavior.commandHandler(command).run(state)
     log.debug(
       "[{}] Command [{}] produced reply [{}] and events [{}]",

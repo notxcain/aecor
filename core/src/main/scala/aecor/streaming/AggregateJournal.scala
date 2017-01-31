@@ -6,7 +6,9 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.Future
 
-final case class JournalEntry[+O, +A](offset: O, persistenceId: String, sequenceNr: Long, event: A)
+final case class JournalEntry[+O, +A](offset: O, persistenceId: String, sequenceNr: Long, event: A) {
+  def mapOffset[I](f: O => I): JournalEntry[I, A] = copy(f(offset))
+}
 
 object JournalEntry {
   implicit def committable[Offset, A](
@@ -20,11 +22,21 @@ object JournalEntry {
 trait AggregateJournal[Offset] {
   def committableEventsByTag[E: PersistentDecoder](
     offsetStore: OffsetStore[Offset],
-    tag: String
-  ): ConsumerId => Source[Committable[JournalEntry[Offset, E]], NotUsed] =
-    CommittableSource(offsetStore, tag, eventsByTag(tag))(_.offset)
+    tag: String,
+    consumerId: ConsumerId
+  ): Source[Committable[JournalEntry[Offset, E]], NotUsed] =
+    Source
+      .single(NotUsed)
+      .mapAsync(1) { _ =>
+        offsetStore.getOffset(tag, consumerId)
+      }
+      .flatMapConcat { storedOffset =>
+        eventsByTag[E](tag, storedOffset)
+          .map(x => Committable(() => offsetStore.setOffset(tag, consumerId, x.offset), x))
+      }
 
   def eventsByTag[E: PersistentDecoder](
-    tag: String
-  ): Option[Offset] => Source[JournalEntry[Offset, E], NotUsed]
+    tag: String,
+    offset: Option[Offset]
+  ): Source[JournalEntry[Offset, E], NotUsed]
 }

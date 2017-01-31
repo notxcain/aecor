@@ -71,13 +71,15 @@ class AppActor extends Actor with ActorLogging {
   val schedule: Schedule =
     Schedule(system, scheduleEntityName, 1.day, 10.seconds, offsetStore)
 
-  val cardAuthorizationAggregateEventSource = journal
-    .eventsByTag[CardAuthorizationAggregateEvent](CardAuthorizationAggregate.entityName)
-
   val cardAuthorizationEventStream =
     new DefaultEventStream(
       system,
-      cardAuthorizationAggregateEventSource(Option.empty).map(_.event)
+      journal
+        .eventsByTag[CardAuthorizationAggregateEvent](
+          CardAuthorizationAggregate.entityName,
+          Option.empty
+        )
+        .map(_.event)
     )
 
   val authorizePaymentAPI = new AuthorizePaymentAPI(
@@ -96,12 +98,12 @@ class AppActor extends Actor with ActorLogging {
   journal
     .committableEventsByTag[CardAuthorizationAggregateEvent](
       offsetStore,
-      CardAuthorizationAggregate.entityName
+      CardAuthorizationAggregate.entityName,
+      ConsumerId("processing")
     )
-    .apply(ConsumerId("processing"))
     .collect {
-      case c @ Committable(_, JournalEntry(offset, _, _, e: CardAuthorizationCreated)) =>
-        (e, c)
+      case x @ Committable(_, JournalEntry(offset, _, _, e: CardAuthorizationCreated)) =>
+        (e, x)
     }
     .via(authorizationProcessFlow)
     .mapAsync(1)(_.commit())

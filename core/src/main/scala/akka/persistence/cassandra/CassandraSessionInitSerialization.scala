@@ -23,15 +23,19 @@ object CassandraSessionInitSerialization {
     * to avoid "Column family ID mismatch" exception in Cassandra.
     */
   def serialize(
-    inits: (Session => Future[Done])*
-  )(implicit executionContext: ExecutionContext): Session => Future[Done] = {
-    def executeCreate: Session => Future[Done] = { session =>
-      def create(): Future[Done] =
-        inits.foldLeft(Future.successful(Done: Done)) {
+    inits: (Session => Future[Unit])*
+  )(implicit executionContext: ExecutionContext): Session => Future[Unit] = {
+    def executeCreate: Session => Future[Unit] = { session =>
+      def create(): Future[Unit] =
+        inits.foldLeft(Future.successful(())) {
           case (x, init) => x.flatMap(_ => init(session))
         }
       CassandraSession
-        .serializedExecution(recur = () => executeCreate(session), exec = () => create())
+        .serializedExecution(
+          recur = () => executeCreate(session).map(_ => Done),
+          exec = () => create().map(_ => Done)
+        )
+        .map(_ => ())
     }
     executeCreate
   }

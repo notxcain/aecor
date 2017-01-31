@@ -19,13 +19,14 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
 
   def eventsByTag[E: PersistentDecoder](
-    tag: String
-  ): Option[UUID] => Source[JournalEntry[UUID, E], NotUsed] = { storedOffset: Option[UUID] =>
+    tag: String,
+    offset: Option[UUID]
+  ): Source[JournalEntry[UUID, E], NotUsed] =
     readJournal
-      .eventsByTag(tag, TimeBasedUUID(storedOffset.getOrElse(readJournal.firstOffset)))
+      .eventsByTag(tag, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
       .mapAsync(8) {
-        case EventEnvelope2(offset, persistenceId, sequenceNr, event) =>
-          Future(offset).flatMap {
+        case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
+          Future(eventOffset).flatMap {
             case TimeBasedUUID(offsetValue) =>
               event match {
                 case repr: PersistentRepr =>
@@ -51,7 +52,7 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
               )
           }
       }
-  }
+
 }
 
 object CassandraAggregateJournal {
