@@ -4,6 +4,7 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.aggregate.CorrelationId
+import aecor.data.EventTag
 import aecor.streaming._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
@@ -68,7 +69,7 @@ class ShardedSchedule(system: ActorSystem,
     aggregateJournal
       .committableEventsByTag[ScheduleEvent](
         offsetStore,
-        entityName,
+        EventTag(entityName),
         ConsumerId(scheduleName + consumerId.value)
       )
       .collect {

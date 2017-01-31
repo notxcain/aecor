@@ -55,7 +55,7 @@ class AppActor extends Actor with ActorLogging {
       CardAuthorizationAggregate.entityName,
       CardAuthorizationAggregate.commandHandler,
       CardAuthorizationAggregate.correlation,
-      Tagging(CardAuthorizationAggregate.entityName)
+      Tagging(CardAuthorizationAggregate.entityNameTag)
     )
 
   val accountRegion: AccountAggregateOp ~> Future =
@@ -63,7 +63,7 @@ class AppActor extends Actor with ActorLogging {
       AccountAggregate.entityName,
       AccountAggregate.commandHandler(Clock.systemUTC()),
       AccountAggregate.correlation,
-      Tagging(AccountAggregate.entityName)
+      Tagging(AccountAggregate.entityNameTag)
     )
 
   val scheduleEntityName = "Schedule3"
@@ -76,7 +76,7 @@ class AppActor extends Actor with ActorLogging {
       system,
       journal
         .eventsByTag[CardAuthorizationAggregateEvent](
-          CardAuthorizationAggregate.entityName,
+          CardAuthorizationAggregate.entityNameTag,
           Option.empty
         )
         .map(_.event)
@@ -96,9 +96,9 @@ class AppActor extends Actor with ActorLogging {
     AuthorizationProcess.flow(8, accountRegion :&: authorizationRegion)
 
   journal
-    .committableEventsByTag[CardAuthorizationAggregateEvent](
+    .committableEventsByTag(
       offsetStore,
-      CardAuthorizationAggregate.entityName,
+      CardAuthorizationAggregate.entityNameTag,
       ConsumerId("processing")
     )
     .collect {

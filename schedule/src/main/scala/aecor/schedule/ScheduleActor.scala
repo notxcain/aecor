@@ -7,7 +7,7 @@ import java.time.{ LocalDateTime, ZoneId }
 import aecor.aggregate._
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.data.Folded.syntax._
-import aecor.data.{ Folded, Handler }
+import aecor.data.{ EventTag, Folded, Handler }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.protobuf.ScheduleEventCodec
 import akka.actor.{ Actor, ActorRef, NotInfluenceReceiveTimeout, Props, Terminated }
@@ -189,7 +189,7 @@ class ScheduleActor(entityName: String, scheduleName: String, timeBucket: String
       ScheduleBehavior(),
       Identity.Provided(scheduleName + "-" + timeBucket),
       SnapshotPolicy.never,
-      Tagging(entityName),
+      Tagging(EventTag[ScheduleEvent](entityName)),
       10.seconds
     ) {
   override def shouldPassivate: Boolean = state.entries.isEmpty

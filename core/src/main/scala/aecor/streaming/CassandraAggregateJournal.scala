@@ -3,6 +3,7 @@ package aecor.streaming
 import java.util.UUID
 
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentRepr }
+import aecor.data.EventTag
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
@@ -19,11 +20,11 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
 
   def eventsByTag[E: PersistentDecoder](
-    tag: String,
+    tag: EventTag[E],
     offset: Option[UUID]
   ): Source[JournalEntry[UUID, E], NotUsed] =
     readJournal
-      .eventsByTag(tag, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
+      .eventsByTag(tag.value, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
       .mapAsync(8) {
         case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
           Future(eventOffset).flatMap {

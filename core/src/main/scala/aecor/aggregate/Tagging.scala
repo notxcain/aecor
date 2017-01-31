@@ -1,28 +1,30 @@
 package aecor.aggregate
 
+import aecor.data.EventTag
+
 sealed trait Tagging[A] {
   def apply(e: A): Set[String]
 }
 
 object Tagging {
 
-  def apply[A](tag1: String): Tagging[A] =
+  def apply[A](tag1: EventTag[A]): Tagging[A] =
     new Tagging[A] {
-      override def apply(e: A): Set[String] = Set(tag1)
+      override def apply(e: A): Set[String] = Set(tag1.value)
     }
 
-  def apply[A](tag1: A => String): Tagging[A] =
+  def apply[A](tag1: A => EventTag[A]): Tagging[A] =
     new Tagging[A] {
-      override def apply(e: A): Set[String] = Set(tag1(e))
+      override def apply(e: A): Set[String] = Set(tag1(e).value)
     }
 
-  def apply[A](tag1: String, tag2: String): Tagging[A] =
+  def apply[A](tag1: EventTag[A], tag2: EventTag[A]): Tagging[A] =
     new Tagging[A] {
-      override def apply(e: A): Set[String] = Set(tag1, tag2)
+      override def apply(e: A): Set[String] = Set(tag1.value, tag2.value)
     }
 
-  def apply[A](tag1: A => String, tag2: String): Tagging[A] =
+  def apply[A](tag1: A => EventTag[A], tag2: EventTag[A]): Tagging[A] =
     new Tagging[A] {
-      override def apply(e: A): Set[String] = Set(tag1(e), tag2)
+      override def apply(e: A): Set[String] = Set(tag1(e).value, tag2.value)
     }
 }

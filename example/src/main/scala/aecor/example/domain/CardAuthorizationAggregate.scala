@@ -3,7 +3,7 @@ import java.util.UUID
 
 import aecor.aggregate.{ Correlation, CorrelationIdF, Folder }
 import aecor.data.Folded.syntax._
-import aecor.data.{ Folded, Handler }
+import aecor.data.{ EventTag, Folded, Handler }
 import aecor.example.domain.CardAuthorizationAggregate.State.{
   Accepted,
   Created,
@@ -72,6 +72,8 @@ object CardAuthorizationAggregate {
   }
 
   val entityName: String = "CardAuthorization"
+
+  val entityNameTag: EventTag[CardAuthorizationAggregateEvent] = EventTag(entityName)
 
   def commandHandler =
     new (CardAuthorizationAggregateOp ~> Handler[State, CardAuthorizationAggregateEvent, ?]) {

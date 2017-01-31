@@ -4,7 +4,7 @@ import java.time.Clock
 
 import aecor.aggregate.{ Correlation, CorrelationIdF, Folder }
 import aecor.data.Folded.syntax._
-import aecor.data.{ Folded, Handler }
+import aecor.data.{ EventTag, Folded, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
 import akka.Done
@@ -107,6 +107,8 @@ object AccountAggregate {
   }
 
   val entityName: String = "Account"
+
+  val entityNameTag: EventTag[AccountAggregateEvent] = EventTag(entityName)
 
   def commandHandler(clock: Clock) =
     new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account], AccountAggregateEvent, ?]) {

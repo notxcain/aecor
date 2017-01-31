@@ -1,6 +1,7 @@
 package aecor.streaming
 
 import aecor.aggregate.serialization.PersistentDecoder
+import aecor.data.EventTag
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
@@ -22,21 +23,21 @@ object JournalEntry {
 trait AggregateJournal[Offset] {
   def committableEventsByTag[E: PersistentDecoder](
     offsetStore: OffsetStore[Offset],
-    tag: String,
+    tag: EventTag[E],
     consumerId: ConsumerId
   ): Source[Committable[JournalEntry[Offset, E]], NotUsed] =
     Source
       .single(NotUsed)
       .mapAsync(1) { _ =>
-        offsetStore.getOffset(tag, consumerId)
+        offsetStore.getOffset(tag.value, consumerId)
       }
       .flatMapConcat { storedOffset =>
         eventsByTag[E](tag, storedOffset)
-          .map(x => Committable(() => offsetStore.setOffset(tag, consumerId, x.offset), x))
+          .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
       }
 
   def eventsByTag[E: PersistentDecoder](
-    tag: String,
+    tag: EventTag[E],
     offset: Option[Offset]
   ): Source[JournalEntry[Offset, E], NotUsed]
 }
