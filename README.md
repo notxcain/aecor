@@ -14,5 +14,13 @@ Aecor works on Scala 2.11 and 2.12 with Java 8.
 
 The name `Aecor` (_lat. ocean_) is inspired by a vision of modern distributed applications, as an ocean of messages with pure behaviors floating in it.
     
-   
+### Installing Aecor
+
+To start using Aecor Runtime add the following to your `build.sbt` file:
+
+```scala
+scalaOrganization := "org.typelevel"
+libraryDependencies += "io.aecor" %% "aecor-core" % "0.13.0"
+scalacOptions += "-Ypartial-unification"
+```
 
