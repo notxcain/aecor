@@ -8,4 +8,4 @@ import akka.actor.ExtendedActorSystem
   *
   * @param system Actor system
   */
-class OldSerializer120(system: ExtendedActorSystem) extends PersistentReprSerializer(system)
+class ScheduleEventSerializer(system: ExtendedActorSystem) extends PersistentReprSerializer(system)
