@@ -42,7 +42,7 @@ object SubscriptionOp {
 
 Entity events:
 
-```
+```scala
 import aecor.data.Folded.syntax._
 import cats.syntax.option._
 
@@ -53,14 +53,12 @@ object SubscriptionEvent {
   case class SubscriptionResumed(subscriptionId: String) extends SubscriptionEvent
   case class SubscriptionCancelled(subscriptionId: String) extends SubscriptionEvent
 }
-
 ```
 
 `Folder[F, E, S]` instance represents the ability to fold `E`s into `S`, with effect `F` on each step
 Aecor runtime uses `Folded[A]` datatype, with two possible states
 `Next(a)` - says that a should be used as a state for next folding step
 `Impossible` - says that folding should be aborted (underlying runtime actor throws `IllegalStateException`)
-
 
 ```scala
 sealed trait SubscriptionStatus
@@ -97,7 +95,10 @@ object Subscription {
 
 ```
 
-Now let's define a behavior that converts operation to its handler
+Now let's define a behavior that converts operation to its handler.
+A `Handler[State, Event, Reply]` is just a wrapper around `State => (Seq[Event], Reply)`,
+you can think of it as `Kleisli[(Seq[Event], ?), State, Reply]`
+i.e. a side-effecting function with a side effect being a sequence of events representing state change caused by operation.
 
 ```scala
 val behavior = Lambda[SubscriptionOp ~> Handler[Option[Subscription], SubscriptionEvent, ?]] {
