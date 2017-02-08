@@ -24,3 +24,79 @@ libraryDependencies += "io.aecor" %% "aecor-core" % "0.13.2"
 scalacOptions += "-Ypartial-unification"
 ```
 
+### Defining and running behavior
+
+Let's start with entity operations:
+
+```scala
+sealed trait SubscriptionOp[A] {
+  def subscriptionId: String
+}
+object SubscriptionOp {
+  case class CreateSubscription(subscriptionId: String, userId: String, planId: String) extends SubscriptionOp[Unit]
+  case class PauseSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
+  case class ResumeSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
+  case class CancelSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
+}
+```
+
+then we define entity state and domain events:
+
+```
+import aecor.data.Folded.syntax._
+import cats.syntax.option._
+
+sealed trait SubscriptionEvent
+object SubscriptionEvent {
+  case class SubscriptionCreated(subscriptionId: String, userId: String, planId: String) extends SubscriptionEvent
+  case class SubscriptionPaused(subscriptionId: String) extends SubscriptionEvent
+  case class SubscriptionResumed(subscriptionId: String) extends SubscriptionEvent
+  case class SubscriptionCancelled(subscriptionId: String) extends SubscriptionEvent
+}
+
+sealed trait SubscriptionStatus
+object SubscriptionStatus {
+  case object Active extends SubscriptionStatus
+  case object Paused extends SubscriptionStatus
+  case object Cancelled extends SubscriptionStatus
+}
+
+```
+
+`Folder[F, E, S]`` instance represents the ability to fold `E`s into `S`, with effect `F` on each step
+Aecor runtime uses `Folded[A]` datatype, with two possible states
+`Next(a)` - says that a should be used as a state for next folding step
+`Impossible` - says that folding should be aborted (underlying runtime actor throws `IllegalStateException`)
+
+
+```
+case class Subscription(status: SubscriptionStatus)
+object Subscription {
+  import SubscriptionStatus._
+
+
+  implicit def folder: Folder[Folded, SubscriptionEvent, Option[Subscription]] =
+    Folder.instance(Option.empty[Subscription]) {
+      case Some(subscription) => {
+        case e: SubscriptionCreated =>
+          impossible
+        case e: SubscriptionPaused =>
+          subscription.copy(status = Paused).some.next
+        case e: SubscriptionResumed =>
+          subscription.copy(status = Active).some.next
+        case e: SubscriptionCancelled =>
+          subscription.copy(status = Cancelled).some.next
+      }
+      case None => {
+        case SubscriptionCreated(subscriptionId, userId, productId, planId) =>
+          Subscription(Active).some.next
+        case _ =>
+          impossible
+      }
+    }
+}
+
+```
+
+
+
