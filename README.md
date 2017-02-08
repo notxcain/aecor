@@ -40,7 +40,7 @@ object SubscriptionOp {
 }
 ```
 
-then we define entity state and domain events:
+Entity events:
 
 ```
 import aecor.data.Folded.syntax._
@@ -54,13 +54,6 @@ object SubscriptionEvent {
   case class SubscriptionCancelled(subscriptionId: String) extends SubscriptionEvent
 }
 
-sealed trait SubscriptionStatus
-object SubscriptionStatus {
-  case object Active extends SubscriptionStatus
-  case object Paused extends SubscriptionStatus
-  case object Cancelled extends SubscriptionStatus
-}
-
 ```
 
 `Folder[F, E, S]` instance represents the ability to fold `E`s into `S`, with effect `F` on each step
@@ -69,7 +62,14 @@ Aecor runtime uses `Folded[A]` datatype, with two possible states
 `Impossible` - says that folding should be aborted (underlying runtime actor throws `IllegalStateException`)
 
 
-```
+```scala
+sealed trait SubscriptionStatus
+object SubscriptionStatus {
+  case object Active extends SubscriptionStatus
+  case object Paused extends SubscriptionStatus
+  case object Cancelled extends SubscriptionStatus
+}
+
 case class Subscription(status: SubscriptionStatus)
 object Subscription {
   import SubscriptionStatus._
