@@ -33,7 +33,7 @@ sealed trait SubscriptionOp[A] {
   def subscriptionId: String
 }
 object SubscriptionOp {
-  case class CreateSubscription(subscriptionId: String, userId: String, planId: String) extends SubscriptionOp[Unit]
+  case class CreateSubscription(subscriptionId: String, userId: String, productId: String, planId: String) extends SubscriptionOp[Unit]
   case class PauseSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
   case class ResumeSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
   case class CancelSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
@@ -48,7 +48,7 @@ import cats.syntax.option._
 
 sealed trait SubscriptionEvent
 object SubscriptionEvent {
-  case class SubscriptionCreated(subscriptionId: String, userId: String, planId: String) extends SubscriptionEvent
+  case class SubscriptionCreated(subscriptionId: String, userId: String, productId: String, planId: String) extends SubscriptionEvent
   case class SubscriptionPaused(subscriptionId: String) extends SubscriptionEvent
   case class SubscriptionResumed(subscriptionId: String) extends SubscriptionEvent
   case class SubscriptionCancelled(subscriptionId: String) extends SubscriptionEvent
@@ -63,7 +63,7 @@ object SubscriptionStatus {
 
 ```
 
-`Folder[F, E, S]`` instance represents the ability to fold `E`s into `S`, with effect `F` on each step
+`Folder[F, E, S]` instance represents the ability to fold `E`s into `S`, with effect `F` on each step
 Aecor runtime uses `Folded[A]` datatype, with two possible states
 `Next(a)` - says that a should be used as a state for next folding step
 `Impossible` - says that folding should be aborted (underlying runtime actor throws `IllegalStateException`)
@@ -73,7 +73,6 @@ Aecor runtime uses `Folded[A]` datatype, with two possible states
 case class Subscription(status: SubscriptionStatus)
 object Subscription {
   import SubscriptionStatus._
-
 
   implicit def folder: Folder[Folded, SubscriptionEvent, Option[Subscription]] =
     Folder.instance(Option.empty[Subscription]) {
@@ -96,6 +95,39 @@ object Subscription {
     }
 }
 
+```
+
+Now let's define a behavior that converts operation to its handler
+
+```scala
+val behavior = Lambda[SubscriptionOp ~> Handler[Option[Subscription], SubscriptionEvent, ?]] {
+  case CreateSubscription(subscriptionId, userId, productId, planId) => {
+    case Some(subscription) =>
+      // Do nothing reply with ()
+      Seq.empty -> ()
+    case None =>
+      // Produce event and reply with ()
+      Seq(SubscriptionCreated(subscriptionId, userId, productId, planId)) -> ()
+  }
+  case PauseSubscription(subscriptionId) => {
+    case Some(subscription) if subscription.status == Active =>
+      Seq(SubscriptionPaused(subscriptionId)) -> ()
+    case _ =>
+      Seq() -> ()
+  }
+  case ResumeSubscription(subscriptionId) => {
+    case Some(subscription) if subscription.status == Paused =>
+      Seq(SubscriptionResumed(subscriptionId)) -> ()
+    case _ =>
+      Seq() -> ()
+  }
+  case CancelSubscription(subscriptionId) => {
+    case Some(subscription) =>
+      Seq(SubscriptionCancelled(subscriptionId)) -> ()
+    case _ =>
+      Seq() -> ()
+  }
+}
 ```
 
 
