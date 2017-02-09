@@ -23,7 +23,7 @@ object AccountAggregate {
     FunctionK.lift(mk _)
   }
 
-  def applyEvent(state: Option[Account], event: AccountAggregateEvent): Folded[Option[Account]] =
+  def applyEvent(state: Option[Account])(event: AccountAggregateEvent): Folded[Option[Account]] =
     state match {
       case None =>
         event match {
@@ -69,41 +69,7 @@ object AccountAggregate {
 
   object Account {
     implicit val folder: Folder[Folded, AccountAggregateEvent, Option[Account]] =
-      Folder.instanceFor[AccountAggregateEvent](Option.empty[Account]) {
-        case None => {
-          case AccountOpened(accountId) =>
-            Some(Account(accountId, Amount(0), Map.empty, Set.empty)).next
-          case other =>
-            impossible
-        }
-        case state @ Some(Account(id, balance, holds, transactions)) => {
-          case e: AccountOpened => impossible
-          case e: TransactionAuthorized =>
-            state
-              .map(
-                _.copy(
-                  holds = holds + (e.transactionId -> e.amount),
-                  balance = balance - e.amount,
-                  transactions = transactions + e.transactionId
-                )
-              )
-              .next
-          case e: TransactionVoided =>
-            holds
-              .get(e.transactionId)
-              .map(
-                holdAmount =>
-                  state
-                    .map(_.copy(holds = holds - e.transactionId, balance = balance + holdAmount))
-              )
-              .getOrElse(state)
-              .next
-          case e: AccountCredited =>
-            state.map(_.copy(balance = balance + e.amount)).next
-          case e: TransactionCaptured =>
-            state.map(_.copy(holds = holds - e.transactionId)).next
-        }
-      }
+      Folder.instanceFor[AccountAggregateEvent](Option.empty[Account])(applyEvent)
   }
 
   val entityName: String = "Account"
