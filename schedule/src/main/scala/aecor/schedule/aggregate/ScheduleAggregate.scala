@@ -1,18 +1,17 @@
 package aecor.schedule.aggregate
 
-import java.time.{ LocalDateTime, ZoneId }
+import java.time.LocalDateTime
 
 import aecor.aggregate._
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.data.Folded.syntax._
 import aecor.data.{ Folded, Handler }
-import aecor.schedule.aggregate.ScheduleCommand.{ AddScheduleEntry, FireDueEntries }
+import aecor.schedule.aggregate.ScheduleCommand.{ AddScheduleEntry, FireEntry }
 import aecor.schedule.aggregate.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
-import aecor.schedule.aggregate.ScheduleState.ScheduleEntry
 import aecor.schedule.protobuf.ScheduleEventCodec
 import cats.arrow.FunctionK
 import cats.~>
-
+import cats.implicits._
 import scala.concurrent.duration._
 
 sealed trait ScheduleEvent {
@@ -39,7 +38,10 @@ trait ScheduleEventInstances {
     PersistentDecoder.fromCodec(ScheduleEventCodec)
 }
 
-sealed abstract class ScheduleCommand[A]
+sealed abstract class ScheduleCommand[A] {
+  def scheduleName: String
+  def entryId: String
+}
 object ScheduleCommand {
   final case class AddScheduleEntry(scheduleName: String,
                                     entryId: String,
@@ -47,38 +49,29 @@ object ScheduleCommand {
                                     dueDate: LocalDateTime)
       extends ScheduleCommand[Unit]
 
-  final case class FireDueEntries(scheduleName: String, now: LocalDateTime)
-      extends ScheduleCommand[Unit]
+  final case class FireEntry(scheduleName: String, entryId: String) extends ScheduleCommand[Unit]
 }
 
-private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[String]) {
-  def addEntry(entryId: String,
-               correlationId: CorrelationId,
-               dueDate: LocalDateTime): ScheduleState =
-    copy(entries = ScheduleEntry(entryId, correlationId, dueDate) :: entries, ids = ids + entryId)
-
-  def removeEntry(entryId: String): ScheduleState =
-    copy(entries = entries.filterNot(_.id == entryId))
-
-  def findEntriesDueTo(date: LocalDateTime): List[ScheduleEntry] =
-    entries.filter(_.dueDate.isBefore(date))
-
-  def update(event: ScheduleEvent): Folded[ScheduleState] = event match {
-    case ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate) =>
-      addEntry(entryId, correlationId, dueDate).next
-    case e: ScheduleEntryFired =>
-      removeEntry(e.entryId).next
-  }
-}
+private[aecor] case class ScheduleState(correlationId: CorrelationId,
+                                        dueDate: LocalDateTime,
+                                        fired: Boolean)
 
 object ScheduleState {
-
-  private[aggregate] case class ScheduleEntry(id: String,
-                                              correlationId: CorrelationId,
-                                              dueDate: LocalDateTime)
-
-  implicit val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
-    Folder.instance(ScheduleState(List.empty, Set.empty))(_.update)
+  implicit val folder: Folder[Folded, ScheduleEvent, Option[ScheduleState]] =
+    Folder.instance(Option.empty[ScheduleState]) {
+      case None => {
+        case ScheduleEntryAdded(_, _, correlationId, dueDate) =>
+          ScheduleState(correlationId, dueDate, fired = false).some.next
+        case _ =>
+          impossible
+      }
+      case Some(state) => {
+        case _: ScheduleEntryAdded =>
+          impossible
+        case _: ScheduleEntryFired =>
+          state.copy(fired = true).some.next
+      }
+    }
 }
 
 trait ScheduleAggregate[F[_]] {
@@ -87,13 +80,13 @@ trait ScheduleAggregate[F[_]] {
                        correlationId: CorrelationId,
                        dueDate: LocalDateTime): F[Unit]
 
-  def fireDueEntries(scheduleName: String, now: LocalDateTime): F[Unit]
+  def fireEntry(scheduleName: String, entryId: String): F[Unit]
   def asFunctionK: ScheduleCommand ~> F =
     λ[ScheduleCommand ~> F] {
       case AddScheduleEntry(scheduleName, entryId, correlationId, dueDate) =>
         addScheduleEntry(scheduleName, entryId, correlationId, dueDate)
-      case FireDueEntries(scheduleName, now) =>
-        fireDueEntries(scheduleName, now)
+      case FireEntry(scheduleName, entryId) =>
+        fireEntry(scheduleName, entryId)
     }
 }
 
@@ -105,28 +98,18 @@ object ScheduleAggregate {
                                     correlationId: CorrelationId,
                                     dueDate: LocalDateTime): F[Unit] =
         f(AddScheduleEntry(scheduleName, entryId, correlationId, dueDate))
-      override def fireDueEntries(scheduleName: String, now: LocalDateTime): F[Unit] =
-        f(FireDueEntries(scheduleName, now))
+
+      override def fireEntry(scheduleName: String, entryId: String): F[Unit] =
+        f(FireEntry(scheduleName, entryId))
     }
 }
 
 object DefaultScheduleAggregate
-    extends ScheduleAggregate[Handler[ScheduleState, ScheduleEvent, ?]] {
+    extends ScheduleAggregate[Handler[Option[ScheduleState], ScheduleEvent, ?]] {
 
   def correlation(bucketLength: FiniteDuration): Correlation[ScheduleCommand] = {
-    def timeBucket(date: LocalDateTime) =
-      date.atZone(ZoneId.systemDefault()).toEpochSecond / bucketLength.toSeconds
-
-    def bucketId(scheduleName: String, dueDate: LocalDateTime) =
-      s"$scheduleName-${timeBucket(dueDate)}"
-
     def mk[A](c: ScheduleCommand[A]): CorrelationIdF[A] =
-      c match {
-        case AddScheduleEntry(scheduleName, _, _, dueDate) =>
-          bucketId(scheduleName, dueDate)
-        case FireDueEntries(scheduleName, now) =>
-          bucketId(scheduleName, now)
-      }
+      CorrelationId.composite("::", c.scheduleName, c.entryId)
     FunctionK.lift(mk _)
   }
 
@@ -135,21 +118,19 @@ object DefaultScheduleAggregate
     entryId: String,
     correlationId: CorrelationId,
     dueDate: LocalDateTime
-  ): Handler[ScheduleState, ScheduleEvent, Unit] =
-    Handler { state =>
-      if (state.ids.contains(entryId)) {
+  ): Handler[Option[ScheduleState], ScheduleEvent, Unit] =
+    Handler {
+      case Some(state) =>
         Vector.empty -> (())
-      } else {
+      case None =>
         Vector(ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate)) -> (())
-      }
-
     }
-  override def fireDueEntries(scheduleName: String,
-                              now: LocalDateTime): Handler[ScheduleState, ScheduleEvent, Unit] =
-    Handler { state =>
-      state
-        .findEntriesDueTo(now)
-        .map(entry => ScheduleEntryFired(scheduleName, entry.id, entry.correlationId))
-        .toVector -> (())
+  override def fireEntry(scheduleName: String,
+                         entryId: String): Handler[Option[ScheduleState], ScheduleEvent, Unit] =
+    Handler {
+      case Some(state) =>
+        Vector(ScheduleEntryFired(scheduleName, entryId, state.correlationId)) -> (())
+      case None =>
+        Vector.empty -> (())
     }
 }
