@@ -2,7 +2,7 @@ package aecor.tests
 
 import java.time.LocalDateTime
 
-import aecor.schedule.aggregate.ScheduleEvent
+import aecor.schedule.ScheduleEvent
 import aecor.schedule.protobuf.ScheduleEventCodec
 import org.scalacheck.Shapeless._
 import org.scalacheck.{ Arbitrary, Gen }

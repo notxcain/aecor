@@ -3,7 +3,7 @@ package aecor.schedule.protobuf
 import java.time.{ Instant, ZoneOffset }
 
 import aecor.aggregate.serialization.Codec
-import aecor.schedule.aggregate.ScheduleEvent
+import aecor.schedule.ScheduleEvent
 import aecor.schedule.serialization.protobuf.msg.{ ScheduleEntryAdded, ScheduleEntryFired }
 
 import scala.util.Try
@@ -20,10 +20,17 @@ object ScheduleEventCodec extends Codec[ScheduleEvent] {
   override def decode(bytes: Array[Byte], manifest: String): Try[ScheduleEvent] = manifest match {
     case ScheduleEntryAddedManifest =>
       ScheduleEntryAdded.validate(bytes).map {
-        case ScheduleEntryAdded(scheduleName, entryId, correlationId, dueToInEpochMillisUTC) =>
+        case ScheduleEntryAdded(
+            scheduleName,
+            scheduleBucket,
+            entryId,
+            correlationId,
+            dueToInEpochMillisUTC
+            ) =>
           val dateTime =
             Instant.ofEpochMilli(dueToInEpochMillisUTC).atOffset(ZoneOffset.UTC).toLocalDateTime
-          ScheduleEvent.ScheduleEntryAdded(scheduleName, entryId, correlationId, dateTime)
+          ScheduleEvent
+            .ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, correlationId, dateTime)
       }
     case ScheduleEntryFiredManifest =>
       ScheduleEntryFired.validate(bytes).map {
@@ -33,9 +40,11 @@ object ScheduleEventCodec extends Codec[ScheduleEvent] {
   }
 
   override def encode(o: ScheduleEvent): Array[Byte] = o match {
-    case ScheduleEvent.ScheduleEntryAdded(scheduleName, entryId, correlationId, dueDate) =>
+    case ScheduleEvent
+          .ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, correlationId, dueDate) =>
       ScheduleEntryAdded(
         scheduleName,
+        scheduleBucket,
         entryId,
         correlationId,
         dueDate.toInstant(ZoneOffset.UTC).toEpochMilli

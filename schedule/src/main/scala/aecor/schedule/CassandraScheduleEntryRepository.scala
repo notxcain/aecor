@@ -5,29 +5,33 @@ import java.time.format.DateTimeFormatter
 import java.util.{ Date, UUID }
 
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
-import aecor.schedule.ScheduleEntryRepository.ScheduleEntryView
+import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import akka.NotUsed
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.stream.scaladsl.Source
 import com.datastax.driver.core.utils.UUIDs
 import com.datastax.driver.core.{ Row, Session }
+import org.slf4j.LoggerFactory
 
 import scala.concurrent.{ ExecutionContext, Future }
 
 class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queries: Queries)(
   implicit executionContext: ExecutionContext
 ) extends ScheduleEntryRepository {
+  val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository])
   private val preparedInsertEntry = cassandraSession.prepare(queries.insertEntry)
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
 
   override def insertScheduleEntry(scheduleName: String,
+                                   scheduleBucket: String,
                                    entryId: String,
                                    dueDate: LocalDateTime): Future[Unit] =
     preparedInsertEntry
       .map(
         _.bind()
           .setString("schedule_name", scheduleName)
+          .setString("schedule_bucket", scheduleBucket)
           .setString("entry_id", entryId)
           .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
           .setTimestamp("due_date", {
@@ -39,7 +43,7 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
 
   def getBucket(timeBucket: TimeBucket,
                 from: LocalDateTime,
-                to: LocalDateTime): Source[ScheduleEntryView, NotUsed] =
+                to: LocalDateTime): Source[ScheduleEntry, NotUsed] =
     Source
       .fromFuture(
         preparedSelectEntries.map(
@@ -55,27 +59,31 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
   override def getEntries(
     from: LocalDateTime,
     to: LocalDateTime
-  ): Source[ScheduleEntryRepository.ScheduleEntryView, NotUsed] =
+  ): Source[ScheduleEntryRepository.ScheduleEntry, NotUsed] =
     if (to isBefore from) {
       getEntries(to, from)
     } else {
-      def rec(bucket: TimeBucket): Source[ScheduleEntryView, NotUsed] =
+      def rec(bucket: TimeBucket): Source[ScheduleEntry, NotUsed] = {
+        log.debug("Querying bucket [{}] from [{}] to [{}]", bucket, from, to)
         getBucket(bucket, from, to).concat {
           Source.lazily { () =>
             val nextBucket = bucket.next
             if (nextBucket.day.isAfter(to.toLocalDate)) {
+              log.debug("Skipping next bucket")
               Source.empty
             } else {
               rec(nextBucket)
             }
           }
         }
+      }
       rec(TimeBucket(from.toLocalDate))
     }
 
-  private def fromRow(row: Row): ScheduleEntryView =
-    ScheduleEntryView(
+  private def fromRow(row: Row): ScheduleEntry =
+    ScheduleEntry(
       row.getString("schedule_name"),
+      row.getString("schedule_bucket"),
       row.getString("entry_id"),
       LocalDateTime.ofInstant(row.getTimestamp("due_date").toInstant, ZoneOffset.UTC),
       row.getString("time_bucket")
@@ -83,6 +91,12 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
 }
 
 object CassandraScheduleEntryRepository {
+
+  def apply(cassandraSession: CassandraSession, queries: Queries)(
+    implicit executionContext: ExecutionContext
+  ): CassandraScheduleEntryRepository =
+    new CassandraScheduleEntryRepository(cassandraSession, queries)
+
   final case class TimeBucket(day: LocalDate, key: String) {
     def next: TimeBucket =
       TimeBucket(day.plusDays(1))
@@ -123,10 +137,11 @@ object CassandraScheduleEntryRepository {
       s"""
          CREATE TABLE IF NOT EXISTS $keyspace.$tableName (
            schedule_name text,
+           schedule_bucket text,
            entry_id text,
            time_bucket text,
            due_date timestamp,
-           PRIMARY KEY ((schedule_name, entry_id), due_date, time_bucket)
+           PRIMARY KEY ((schedule_name, schedule_bucket, entry_id), due_date, time_bucket)
          )
        """
     val createMaterializedView: String =
@@ -137,20 +152,24 @@ object CassandraScheduleEntryRepository {
            time_bucket IS NOT NULL
            AND due_date IS NOT NULL
            AND schedule_name IS NOT NULL
+           AND schedule_bucket IS NOT NULL
            AND entry_id IS NOT NULL
-         PRIMARY KEY (time_bucket, due_date, schedule_name, entry_id)
+         PRIMARY KEY (time_bucket, due_date, schedule_name, schedule_bucket, entry_id)
          WITH CLUSTERING ORDER BY (due_date ASC, timestamp ASC);
        """
 
     def insertEntry: String =
       s"""
-         INSERT INTO $keyspace.$tableName (schedule_name, entry_id, time_bucket, due_date)
-         VALUES (:schedule_name, :entry_id, :time_bucket, :due_date);
+         INSERT INTO $keyspace.$tableName (schedule_name, schedule_bucket, entry_id, time_bucket, due_date)
+         VALUES (:schedule_name, :schedule_bucket, :entry_id, :time_bucket, :due_date);
        """
 
     def selectEntry: String =
       s"""
-         SELECT * FROM $keyspace.$tableName WHERE schedule_name = :schedule_name AND entry_id = :entry_id
+         SELECT * FROM $keyspace.$tableName
+         WHERE schedule_name = :schedule_name
+           AND schedule_bucket = :schedule_bucket
+           AND entry_id = :entry_id
        """
 
     def selectEntries: String =

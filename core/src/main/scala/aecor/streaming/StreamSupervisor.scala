@@ -8,8 +8,9 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Source }
 import akka.util.Timeout
 
-import scala.concurrent.Future
+import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration.{ FiniteDuration, _ }
+import cats.implicits._
 
 class StreamSupervisor(system: ActorSystem) {
   def startClusterSingleton[A, SM, FM](
@@ -41,7 +42,10 @@ class StreamSupervisor(system: ActorSystem) {
 
 object StreamSupervisor {
   def apply(system: ActorSystem): StreamSupervisor = new StreamSupervisor(system)
-  final case class StreamKillSwitch(trigger: Timeout => Future[Unit])
+  final case class StreamKillSwitch(trigger: Timeout => Future[Unit]) {
+    def and(other: StreamKillSwitch)(implicit ec: ExecutionContext): StreamKillSwitch =
+      StreamKillSwitch(trigger.flatMap(_ => other.trigger))
+  }
 }
 
 final case class StreamSupervisorSettings(

@@ -1,24 +1,29 @@
 package aecor.example
 
 import java.time.{ Clock, LocalDate, LocalDateTime }
-import java.util.UUID
 
-import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
-import aecor.streaming.{ CassandraOffsetStore, ConsumerId }
+import aecor.data.EventTag
+import aecor.schedule.ScheduleEvent.ScheduleEntryAdded
+import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule, ScheduleEvent }
+import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore }
+import akka.Done
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{ Sink, Source }
+import akka.stream.scaladsl.Sink
 import cats.data.Reader
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 object ScheduleApp extends App {
 
   implicit val system = ActorSystem("aecor-example")
   implicit val materializer = ActorMaterializer()
+
+  val clock = Clock.systemDefaultZone()
 
   import materializer.executionContext
 
@@ -35,57 +40,57 @@ object ScheduleApp extends App {
   )
   val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
   val scheduleEntryRepository =
-    new CassandraScheduleEntryRepository(cassandraSession, scheduleEntryRepositoryQueries)
+    CassandraScheduleEntryRepository(cassandraSession, scheduleEntryRepositoryQueries)
 
-  val clock = Clock.systemDefaultZone()
+  case class Counter(state: Map[(String, String, String), Int]) {
+    def inc(e: ScheduleEntryAdded): Counter = {
+      val key = (e.scheduleName, e.scheduleBucket, e.entryId)
+      copy(state = state.updated(key, state.getOrElse(key, 0) + 1))
+    }
+    def duplicated: Set[(String, String, String)] =
+      state.collect {
+        case (x, v) if v > 1 => x
+      }.toSet
+  }
+
+  def runRepositoryScanStream: Reader[Unit, Future[Done]] =
+    Reader { _ =>
+      scheduleEntryRepository
+        .getEntries(LocalDate.of(2017, 1, 1).atStartOfDay(), LocalDateTime.now(clock))
+        .runForeach(println)
+    }
 
   def runSchedule: Reader[Unit, Schedule] =
     Reader { _ =>
       Schedule(
-        system,
-        "Schedule",
-        clock,
-        LocalDate.of(2017, 2, 10),
-        30.seconds,
-        2.seconds,
-        offsetStore,
-        scheduleEntryRepository
+        system = system,
+        entityName = "Schedule",
+        clock = clock,
+        dayZero = LocalDate.of(2016, 5, 10),
+        bucketLength = 1.day,
+        refreshInterval = 1.second,
+        offsetStore = offsetStore,
+        repository = scheduleEntryRepository
       )
     }
 
-  def runAdder(schedule: Schedule): Reader[Unit, Any] =
+  def runEventWatch: Reader[Unit, Future[Done]] =
     Reader { _ =>
-      Source
-        .tick(0.seconds, 2.seconds, ())
-        .mapAsync(8) { _ =>
-          schedule.addScheduleEntry(
-            "Test",
-            UUID.randomUUID().toString,
-            "test",
-            LocalDateTime.now(clock).plusSeconds(3)
-          )
-        }
-        .runWith(Sink.ignore)
-    }
-
-  def runEventWatch(schedule: Schedule): Reader[Unit, Any] =
-    Reader { _ =>
-      schedule
-        .committableScheduleEvents("Test", ConsumerId("println"))
-        .mapAsync(1) { x =>
-          println(x.value)
-          x.commit()
+      CassandraAggregateJournal(system)
+        .eventsByTag(EventTag[ScheduleEvent]("Schedule"), None)
+        .scan(0) { (counter, in) =>
+          println(s"$counter => $in")
+          counter + 1
         }
         .runWith(Sink.ignore)
     }
 
   val app: Reader[Unit, Unit] =
     for {
-      schedule <- runSchedule
-      _ <- runAdder(schedule)
-      _ <- runEventWatch(schedule)
+      _ <- runSchedule
+//      _ <- runRepositoryScanStream
+//      _ <- runEventWatch
     } yield ()
 
   app.run(())
-
 }

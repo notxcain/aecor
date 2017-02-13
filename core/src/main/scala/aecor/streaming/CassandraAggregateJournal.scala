@@ -19,40 +19,55 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
   private val readJournal: CassandraReadJournal =
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
 
+  private def createSource[E: PersistentDecoder](
+    inner: Source[EventEnvelope2, NotUsed]
+  ): Source[JournalEntry[UUID, E], NotUsed] =
+    inner.mapAsync(8) {
+      case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
+        Future(eventOffset).flatMap {
+          case TimeBasedUUID(offsetValue) =>
+            event match {
+              case repr: PersistentRepr =>
+                PersistentDecoder[E]
+                  .decode(repr)
+                  .right
+                  .map { event =>
+                    JournalEntry(offsetValue, persistenceId, sequenceNr, event)
+                  }
+                  .fold(Future.failed, Future.successful)
+              case other =>
+                Future.failed(
+                  new RuntimeException(
+                    s"Unexpected persistent representation $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId]"
+                  )
+                )
+            }
+          case other =>
+            Future.failed(
+              new RuntimeException(
+                s"Unexpected offset of type ${other.getClass} at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId]"
+              )
+            )
+        }
+    }
+
   def eventsByTag[E: PersistentDecoder](
     tag: EventTag[E],
     offset: Option[UUID]
   ): Source[JournalEntry[UUID, E], NotUsed] =
-    readJournal
-      .eventsByTag(tag.value, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
-      .mapAsync(8) {
-        case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
-          Future(eventOffset).flatMap {
-            case TimeBasedUUID(offsetValue) =>
-              event match {
-                case repr: PersistentRepr =>
-                  PersistentDecoder[E]
-                    .decode(repr)
-                    .right
-                    .map { event =>
-                      JournalEntry(offsetValue, persistenceId, sequenceNr, event)
-                    }
-                    .fold(Future.failed, Future.successful)
-                case other =>
-                  Future.failed(
-                    new RuntimeException(
-                      s"Unexpected persistent representation $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag]"
-                    )
-                  )
-              }
-            case other =>
-              Future.failed(
-                new RuntimeException(
-                  s"Unexpected offset of type ${other.getClass} at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId], tag = [$tag]"
-                )
-              )
-          }
-      }
+    createSource(
+      readJournal
+        .eventsByTag(tag.value, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
+    )
+
+  override def currentEventsByTag[E: PersistentDecoder](
+    tag: EventTag[E],
+    offset: Option[UUID]
+  ): Source[JournalEntry[UUID, E], NotUsed] =
+    createSource(
+      readJournal
+        .currentEventsByTag(tag.value, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
+    )
 
 }
 

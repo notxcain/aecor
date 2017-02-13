@@ -20,5 +20,5 @@
     <logger name="com.websudos.phantom" level="WARN" />
     <logger name="akka.persistence.cassandra.query.EventsByTagPublisher" level="INFO" />
     <logger name="aecor.core.schedule.ScheduleActor" level="INFO" />
-    <logger name="aecor.aggregate.AggregateActor" level="OFF" />
+    <logger name="aecor.aggregate.AggregateActor" level="DEBUG" />
 </configuration>

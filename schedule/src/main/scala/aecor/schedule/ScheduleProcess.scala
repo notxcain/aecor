@@ -3,21 +3,22 @@ package aecor.schedule
 import java.time._
 import java.util.UUID
 
-import aecor.schedule.ScheduleEntryRepository.ScheduleEntryView
-import aecor.schedule.aggregate.{ ScheduleAggregate, ScheduleEvent }
-import aecor.schedule.aggregate.ScheduleEvent.ScheduleEntryAdded
+import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
+import aecor.schedule.ScheduleEvent.ScheduleEntryAdded
 import aecor.streaming.StreamSupervisor.StreamKillSwitch
 import aecor.streaming.{ Committable, ConsumerId, OffsetStore, StreamSupervisor }
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import akka.stream.scaladsl.{ Flow, Source }
+import akka.stream.scaladsl.{ Flow, Sink, Source }
 import com.datastax.driver.core.utils.UUIDs
-import cats.instances.future._
+
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
+import cats.instances.future._
 
 class ScheduleProcess(system: ActorSystem,
+                      entityName: String,
                       consumerId: ConsumerId,
                       dayZero: LocalDate,
                       tickInterval: FiniteDuration,
@@ -30,8 +31,11 @@ class ScheduleProcess(system: ActorSystem,
 
   import materializer.executionContext
 
-  private val source1 = Source
-    .lazily(() => Source.fromFuture(offsetStore.getOffset("ScheduleEntries", consumerId)))
+  val tag = "io.aecor.ScheduleDueEntries"
+
+  private val dueEntries = Source
+    .single(())
+    .mapAsync(1)(_ => offsetStore.getOffset(tag, consumerId))
     .map {
       case Some(offset) =>
         LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(offset)), clock.getZone)
@@ -39,51 +43,54 @@ class ScheduleProcess(system: ActorSystem,
         dayZero.atStartOfDay()
     }
     .flatMapConcat { offset =>
-      def rec(from: LocalDateTime): Source[Committable[ScheduleEntryView], NotUsed] = {
-        val to: LocalDateTime = LocalDateTime.now(clock)
-        repository
-          .getEntries(from, to)
-          .map { entry =>
-            val offset = UUIDs.startOf(entry.dueDate.atZone(clock.getZone).toInstant.toEpochMilli)
-            Committable(() => offsetStore.setOffset("ScheduleEntries", consumerId, offset), entry)
-          }
-          .concat(
-            Source
-              .tick(tickInterval, tickInterval, ())
-              .take(1)
-              .flatMapConcat { _ =>
-                rec(to)
-              }
-          )
-      }
-      rec(offset)
-    }
-    .mapAsync(parallelism) { c =>
-      c.traverse { entry =>
-        scheduleAggregate.fireEntry(entry.scheduleName, entry.entryId)
+      repository.dueEntries(offset, tickInterval, clock).map { entry =>
+        val offset = UUIDs.startOf(entry.dueDate.atZone(clock.getZone).toInstant.toEpochMilli)
+        Committable(() => offsetStore.setOffset(tag, consumerId, offset), entry)
       }
     }
 
-  def processEvent: ScheduleEvent => Future[Unit] = {
-    case ScheduleEntryAdded(scheduleName, entryId, _, dueDate) =>
-      if (dueDate.isEqual(LocalDateTime.now(clock)) || dueDate.isBefore(LocalDateTime.now(clock))) {
-        scheduleAggregate.fireEntry(scheduleName, entryId)
-      } else {
-        repository.insertScheduleEntry(scheduleName, entryId, dueDate)
-      }
-    case _ =>
-      Future.successful(())
-  }
+  private val fireDueEntries = Flow[Committable[ScheduleEntry]]
+    .mapAsync(parallelism)(_.traverse { entry =>
+      scheduleAggregate.fireEntry(entry.scheduleName, entry.scheduleBucket, entry.entryId)
+    })
+    .mapAsync(1)(_.commit())
 
-  private val source2 = eventSource(consumerId)
-    .mapAsync(8)(_.traverse(processEvent))
+  val added = new java.util.concurrent.atomic.AtomicInteger(0)
+  val total = new java.util.concurrent.atomic.AtomicInteger(0)
+  private val entryAddedEvents = eventSource(consumerId)
+    .map { x =>
+      println(s"Event processed: ${total.incrementAndGet()}")
+      x
+    }
+    .collect {
+      case Committable(c, e: ScheduleEntryAdded) =>
+        Committable(c, e)
+    }
 
-  private val flow = Flow[Committable[Unit]].mapAsync(1)(_.commit())
+  Source
+    .single(())
+    .mapAsync(1) { _ =>
+      entryAddedEvents.via(addEntry).runWith(Sink.ignore)
+    }
+    .flatMapConcat { _ =>
+      dueEntries.via(fireDueEntries)
+    }
+
+  private val addEntry = Flow[Committable[ScheduleEntryAdded]]
+    .mapAsync(parallelism)(_.traverse {
+      case ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, _, dueDate) =>
+        for {
+          _ <- repository.insertScheduleEntry(scheduleName, scheduleBucket, entryId, dueDate)
+          _ = println(s"Entries added: ${added.incrementAndGet()}")
+        } yield ()
+    })
+    .mapAsync(1)(_.commit())
 
   def run(): StreamKillSwitch =
-    StreamSupervisor(system).startClusterSingleton(
-      consumerId.value,
-      source1.merge(source2, eagerComplete = true),
-      flow
-    )
+    StreamSupervisor(system)
+      .startClusterSingleton(s"$entityName-DueEntries", dueEntries, fireDueEntries)
+      .and(
+        StreamSupervisor(system)
+          .startClusterSingleton(s"$entityName-ScheduleEntries", entryAddedEvents, addEntry)
+      )
 }

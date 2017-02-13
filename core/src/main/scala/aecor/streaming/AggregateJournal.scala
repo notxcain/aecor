@@ -40,4 +40,9 @@ trait AggregateJournal[Offset] {
     tag: EventTag[E],
     offset: Option[Offset]
   ): Source[JournalEntry[Offset, E], NotUsed]
+
+  def currentEventsByTag[E: PersistentDecoder](
+    tag: EventTag[E],
+    offset: Option[Offset]
+  ): Source[JournalEntry[Offset, E], NotUsed]
 }
