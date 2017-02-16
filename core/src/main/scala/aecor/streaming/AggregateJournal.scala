@@ -21,7 +21,17 @@ object JournalEntry {
 }
 
 trait AggregateJournal[Offset] {
-  def committableEventsByTag[E: PersistentDecoder](
+  def eventsByTag[E: PersistentDecoder](
+    tag: EventTag[E],
+    offset: Option[Offset]
+  ): Source[JournalEntry[Offset, E], NotUsed]
+
+  def currentEventsByTag[E: PersistentDecoder](
+    tag: EventTag[E],
+    offset: Option[Offset]
+  ): Source[JournalEntry[Offset, E], NotUsed]
+
+  final def committableEventsByTag[E: PersistentDecoder](
     offsetStore: OffsetStore[Offset],
     tag: EventTag[E],
     consumerId: ConsumerId
@@ -36,13 +46,18 @@ trait AggregateJournal[Offset] {
           .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
       }
 
-  def eventsByTag[E: PersistentDecoder](
+  final def committableCurrentEventsByTag[E: PersistentDecoder](
+    offsetStore: OffsetStore[Offset],
     tag: EventTag[E],
-    offset: Option[Offset]
-  ): Source[JournalEntry[Offset, E], NotUsed]
-
-  def currentEventsByTag[E: PersistentDecoder](
-    tag: EventTag[E],
-    offset: Option[Offset]
-  ): Source[JournalEntry[Offset, E], NotUsed]
+    consumerId: ConsumerId
+  ): Source[Committable[JournalEntry[Offset, E]], NotUsed] =
+    Source
+      .single(NotUsed)
+      .mapAsync(1) { _ =>
+        offsetStore.getOffset(tag.value, consumerId)
+      }
+      .flatMapConcat { storedOffset =>
+        currentEventsByTag(tag, storedOffset)
+          .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
+      }
 }

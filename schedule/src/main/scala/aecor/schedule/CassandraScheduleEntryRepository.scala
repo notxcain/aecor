@@ -12,6 +12,7 @@ import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.stream.scaladsl.Source
 import com.datastax.driver.core.utils.UUIDs
 import com.datastax.driver.core.{ Row, Session }
+import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -22,6 +23,7 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
   val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository])
   private val preparedInsertEntry = cassandraSession.prepare(queries.insertEntry)
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
+  private val preparedSelectEntry = cassandraSession.prepare(queries.selectEntry)
 
   override def insertScheduleEntry(scheduleName: String,
                                    scheduleBucket: String,
@@ -34,12 +36,40 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
           .setString("schedule_bucket", scheduleBucket)
           .setString("entry_id", entryId)
           .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
-          .setTimestamp("due_date", {
-            Date.from(dueDate.atOffset(ZoneOffset.UTC).toInstant)
-          })
+          .set("due_date", dueDate.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
+          .setBool("fired", false)
       )
       .flatMap(cassandraSession.executeWrite)
       .map(_ => ())
+
+  override def markScheduleEntryAsFired(scheduleName: String,
+                                        scheduleBucket: String,
+                                        entryId: String): Future[Unit] =
+    preparedSelectEntry
+      .map(
+        _.bind()
+          .setString("schedule_name", scheduleName)
+          .setString("schedule_bucket", scheduleBucket)
+          .setString("entry_id", entryId)
+      )
+      .flatMap(cassandraSession.selectOne)
+      .flatMap {
+        case Some(row) =>
+          preparedInsertEntry
+            .map(
+              _.bind()
+                .setString("schedule_name", scheduleName)
+                .setString("schedule_bucket", scheduleBucket)
+                .setString("entry_id", entryId)
+                .setString("time_bucket", row.getString("time_bucket"))
+                .setTimestamp("due_date", row.getTimestamp("due_date"))
+                .setBool("fired", true)
+            )
+            .flatMap(cassandraSession.executeWrite)
+            .map(_ => ())
+        case None =>
+          Future.successful(())
+      }
 
   def getBucket(timeBucket: TimeBucket,
                 from: LocalDateTime,
@@ -69,7 +99,6 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
           Source.lazily { () =>
             val nextBucket = bucket.next
             if (nextBucket.day.isAfter(to.toLocalDate)) {
-              log.debug("Skipping next bucket")
               Source.empty
             } else {
               rec(nextBucket)
@@ -85,8 +114,9 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
       row.getString("schedule_name"),
       row.getString("schedule_bucket"),
       row.getString("entry_id"),
-      LocalDateTime.ofInstant(row.getTimestamp("due_date").toInstant, ZoneOffset.UTC),
-      row.getString("time_bucket")
+      LocalDateTime.ofInstant(row.get("due_date", classOf[Instant]), ZoneOffset.UTC),
+      row.getString("time_bucket"),
+      row.getBool("fired")
     )
 }
 
@@ -141,13 +171,14 @@ object CassandraScheduleEntryRepository {
            entry_id text,
            time_bucket text,
            due_date timestamp,
-           PRIMARY KEY ((schedule_name, schedule_bucket, entry_id), due_date, time_bucket)
+           fired boolean,
+           PRIMARY KEY ((schedule_name, schedule_bucket), entry_id, time_bucket, due_date)
          )
        """
     val createMaterializedView: String =
       s"""
          CREATE MATERIALIZED VIEW IF NOT EXISTS $keyspace.$materializedViewName
-         AS SELECT * FROM schedule_entries
+         AS SELECT time_bucket, schedule_name, schedule_bucket, entry_id, due_date, fired FROM schedule_entries
          WHERE
            time_bucket IS NOT NULL
            AND due_date IS NOT NULL
@@ -155,13 +186,13 @@ object CassandraScheduleEntryRepository {
            AND schedule_bucket IS NOT NULL
            AND entry_id IS NOT NULL
          PRIMARY KEY (time_bucket, due_date, schedule_name, schedule_bucket, entry_id)
-         WITH CLUSTERING ORDER BY (due_date ASC, timestamp ASC);
+         WITH CLUSTERING ORDER BY (due_date ASC);
        """
 
     def insertEntry: String =
       s"""
-         INSERT INTO $keyspace.$tableName (schedule_name, schedule_bucket, entry_id, time_bucket, due_date)
-         VALUES (:schedule_name, :schedule_bucket, :entry_id, :time_bucket, :due_date);
+         INSERT INTO $keyspace.$tableName (schedule_name, schedule_bucket, entry_id, time_bucket, due_date, fired)
+         VALUES (:schedule_name, :schedule_bucket, :entry_id, :time_bucket, :due_date, :fired);
        """
 
     def selectEntry: String =
@@ -188,6 +219,7 @@ object CassandraScheduleEntryRepository {
     for {
       _ <- session.executeAsync(queries.createTable).asScala
       _ <- session.executeAsync(queries.createMaterializedView).asScala
+      _ = session.getCluster.getConfiguration.getCodecRegistry.register(InstantCodec.instance)
     } yield ()
   }
 }

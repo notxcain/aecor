@@ -7,7 +7,7 @@ import aecor.data.EventTag
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.{ EventEnvelope2, PersistenceQuery, TimeBasedUUID }
+import akka.persistence.query.{ EventEnvelope2, NoOffset, PersistenceQuery, TimeBasedUUID }
 import akka.stream.scaladsl.Source
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -57,7 +57,7 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
   ): Source[JournalEntry[UUID, E], NotUsed] =
     createSource(
       readJournal
-        .eventsByTag(tag.value, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
+        .eventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
     )
 
   override def currentEventsByTag[E: PersistentDecoder](
@@ -66,7 +66,7 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
   ): Source[JournalEntry[UUID, E], NotUsed] =
     createSource(
       readJournal
-        .currentEventsByTag(tag.value, TimeBasedUUID(offset.getOrElse(readJournal.firstOffset)))
+        .currentEventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
     )
 
 }

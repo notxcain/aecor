@@ -1,6 +1,6 @@
 package aecor.schedule.protobuf
 
-import java.time.{ Instant, ZoneOffset }
+import java.time.{ Instant, LocalDateTime, ZoneOffset }
 
 import aecor.aggregate.serialization.Codec
 import aecor.schedule.ScheduleEvent
@@ -25,31 +25,60 @@ object ScheduleEventCodec extends Codec[ScheduleEvent] {
             scheduleBucket,
             entryId,
             correlationId,
-            dueToInEpochMillisUTC
+            dueToInEpochMillisUTC,
+            timestamp
             ) =>
           val dateTime =
-            Instant.ofEpochMilli(dueToInEpochMillisUTC).atOffset(ZoneOffset.UTC).toLocalDateTime
+            LocalDateTime.ofInstant(Instant.ofEpochMilli(dueToInEpochMillisUTC), ZoneOffset.UTC)
           ScheduleEvent
-            .ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, correlationId, dateTime)
+            .ScheduleEntryAdded(
+              scheduleName,
+              scheduleBucket,
+              entryId,
+              correlationId,
+              dateTime,
+              Instant.ofEpochMilli(timestamp)
+            )
       }
     case ScheduleEntryFiredManifest =>
       ScheduleEntryFired.validate(bytes).map {
-        case ScheduleEntryFired(scheduleName, entryId, correlationId) =>
-          ScheduleEvent.ScheduleEntryFired(scheduleName, entryId, correlationId)
+        case ScheduleEntryFired(scheduleName, scheduleBucket, entryId, correlationId, timestamp) =>
+          ScheduleEvent.ScheduleEntryFired(
+            scheduleName,
+            scheduleBucket,
+            entryId,
+            correlationId,
+            Instant.ofEpochMilli(timestamp)
+          )
       }
   }
 
   override def encode(o: ScheduleEvent): Array[Byte] = o match {
     case ScheduleEvent
-          .ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, correlationId, dueDate) =>
+          .ScheduleEntryAdded(
+          scheduleName,
+          scheduleBucket,
+          entryId,
+          correlationId,
+          dueDate,
+          timestamp
+          ) =>
       ScheduleEntryAdded(
         scheduleName,
         scheduleBucket,
         entryId,
         correlationId,
-        dueDate.toInstant(ZoneOffset.UTC).toEpochMilli
+        dueDate.toInstant(ZoneOffset.UTC).toEpochMilli,
+        timestamp.toEpochMilli
       ).toByteArray
-    case ScheduleEvent.ScheduleEntryFired(scheduleName, entryId, correlationId) =>
-      ScheduleEntryFired(scheduleName, entryId, correlationId).toByteArray
+    case ScheduleEvent
+          .ScheduleEntryFired(scheduleName, scheduleBucket, entryId, correlationId, timestamp) =>
+      ScheduleEntryFired(
+        scheduleName,
+        scheduleBucket,
+        entryId,
+        correlationId,
+        timestamp.toEpochMilli
+      ).toByteArray
   }
 }
