@@ -12,12 +12,12 @@ import akka.stream.scaladsl.Source
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-class DefaultSchedule(clock: Clock,
-                      bucketLength: FiniteDuration,
-                      aggregate: ScheduleAggregate[Future],
-                      aggregateJournal: AggregateJournal[UUID],
-                      offsetStore: OffsetStore[UUID],
-                      eventTag: EventTag[ScheduleEvent])
+private[schedule] class DefaultSchedule(clock: Clock,
+                                        bucketLength: FiniteDuration,
+                                        aggregate: ScheduleAggregate[Future],
+                                        aggregateJournal: AggregateJournal[UUID],
+                                        offsetStore: OffsetStore[UUID],
+                                        eventTag: EventTag[ScheduleEvent])
     extends Schedule {
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,

@@ -44,7 +44,7 @@ trait ScheduleEventInstances {
     PersistentDecoder.fromCodec(ScheduleEventCodec)
 }
 
-sealed abstract class ScheduleCommand[A]
+sealed abstract class ScheduleCommand[A] extends Product with Serializable
 object ScheduleCommand {
   final case class AddScheduleEntry(scheduleName: String,
                                     scheduleBucket: String,
@@ -105,7 +105,7 @@ private[schedule] trait ScheduleAggregate[F[_]] {
     }
 }
 
-object ScheduleAggregate {
+private[schedule] object ScheduleAggregate {
   def fromFunctionK[F[_]](f: ScheduleCommand ~> F): ScheduleAggregate[F] =
     new ScheduleAggregate[F] {
       override def addScheduleEntry(scheduleName: String,
