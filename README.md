@@ -40,7 +40,7 @@ object SubscriptionOp {
 }
 ```
 
-Entity events:
+Entity events with persistent encoder and decoder:
 
 ```scala
 import aecor.data.Folded.syntax._
@@ -52,11 +52,14 @@ object SubscriptionEvent {
   case class SubscriptionPaused(subscriptionId: String) extends SubscriptionEvent
   case class SubscriptionResumed(subscriptionId: String) extends SubscriptionEvent
   case class SubscriptionCancelled(subscriptionId: String) extends SubscriptionEvent
+
+  implicit val persistentEncoder: PersistentEncoder[SubscriptionEvent] = `define it as you wish`
+  implicit val persistentDecoder: PersistentDecoder[SubscriptionEvent] = `and this one too`
 }
 ```
 
-`Folder[F, E, S]` instance represents the ability to fold `E`s into `S`, with effect `F` on each step
-Aecor runtime uses `Folded[A]` datatype, with two possible states
+`Folder[F, E, S]` instance represents the ability to fold `E`s into `S`, with effect `F` on each step.
+Aecor runtime uses `Folded[A]` data type, with two possible states:
 `Next(a)` - says that a should be used as a state for next folding step
 `Impossible` - says that folding should be aborted (underlying runtime actor throws `IllegalStateException`)
 
@@ -114,22 +117,43 @@ val behavior = Lambda[SubscriptionOp ~> Handler[Option[Subscription], Subscripti
     case Some(subscription) if subscription.status == Active =>
       Seq(SubscriptionPaused(subscriptionId)) -> ()
     case _ =>
-      Seq() -> ()
+      Seq.empty -> ()
   }
   case ResumeSubscription(subscriptionId) => {
     case Some(subscription) if subscription.status == Paused =>
       Seq(SubscriptionResumed(subscriptionId)) -> ()
     case _ =>
-      Seq() -> ()
+      Seq.empty -> ()
   }
   case CancelSubscription(subscriptionId) => {
     case Some(subscription) =>
       Seq(SubscriptionCancelled(subscriptionId)) -> ()
     case _ =>
-      Seq() -> ()
+      Seq.empty -> ()
   }
 }
 ```
 
+Then you define a correlation function, entity name and a value provided by correlation function form unique primary key for aggregate
+It should not be changed in the future, at least without prior event migration.
 
+```scala
+def correlation: Correlation[SubscriptionOp] = {
+  def mk[A](op: SubscriptionOp[A]): CorrelationF[A] = op.subscriptionId
+  FunctionK.lift(mk _)
+}
+```
 
+After that we are ready to launch.
+
+```scala
+implicit val system = ActorSystem("foo")
+
+val subscriptions: SubscriptionOp ~> Future =
+  AkkaRuntime(system).start(
+    entityName = "Subscription",
+    behavior,
+    correlation,
+    Tagging(EventTag("Payment")
+  )
+```
