@@ -13,8 +13,8 @@ import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule(clock: Clock,
-                                        bucketLength: FiniteDuration,
                                         aggregate: ScheduleAggregate[Future],
+                                        bucketLength: FiniteDuration,
                                         aggregateJournal: AggregateJournal[UUID],
                                         offsetStore: OffsetStore[UUID],
                                         eventTag: EventTag[ScheduleEvent])

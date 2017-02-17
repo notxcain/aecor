@@ -44,7 +44,7 @@ private[schedule] class ConfiguredSchedule(
 
   private val eventTag = EventTag[ScheduleEvent](entityName)
 
-  private val runAggregate = Reader { _: Unit =>
+  private val startAggregate = Reader { _: Unit =>
     ScheduleAggregate.fromFunctionK(
       runtime.start(
         entityName,
@@ -55,7 +55,7 @@ private[schedule] class ConfiguredSchedule(
     )
   }
 
-  private def runProcess(aggregate: ScheduleAggregate[Future]) =
+  private def startProcess(aggregate: ScheduleAggregate[Future]) =
     ScheduleProcess(
       clock = clock,
       entityName = entityName,
@@ -72,12 +72,12 @@ private[schedule] class ConfiguredSchedule(
     ).run(system)
 
   private def createSchedule(aggregate: ScheduleAggregate[Future]): Schedule =
-    new DefaultSchedule(clock, bucketLength, aggregate, aggregateJournal, offsetStore, eventTag)
+    new DefaultSchedule(clock, aggregate, bucketLength, aggregateJournal, offsetStore, eventTag)
 
   def start: Reader[Unit, Schedule] =
     for {
-      aggregate <- runAggregate
-      _ <- runProcess(aggregate)
+      aggregate <- startAggregate
+      _ <- startProcess(aggregate)
       schedule = createSchedule(aggregate)
     } yield schedule
 }
