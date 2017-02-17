@@ -57,7 +57,6 @@ private[schedule] class ConfiguredSchedule(
 
   private def runProcess(aggregate: ScheduleAggregate[Future]) =
     ScheduleProcess(
-      system = system,
       clock = clock,
       entityName = entityName,
       consumerId = consumerId,
@@ -70,7 +69,7 @@ private[schedule] class ConfiguredSchedule(
       scheduleAggregate = aggregate,
       aggregateJournal = aggregateJournal,
       eventTag = eventTag
-    ).run
+    ).run(system)
 
   private def createSchedule(aggregate: ScheduleAggregate[Future]): Schedule =
     new DefaultSchedule(clock, bucketLength, aggregate, aggregateJournal, offsetStore, eventTag)

@@ -11,7 +11,6 @@ import aecor.streaming.StreamSupervisor.StreamKillSwitch
 import aecor.streaming._
 import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.event.Logging
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
 import cats.data.Reader
@@ -20,9 +19,9 @@ import com.datastax.driver.core.utils.UUIDs
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import cats.instances.future._
+import org.slf4j.LoggerFactory
 
 private[schedule] class ScheduleProcess(
-  system: ActorSystem,
   clock: Clock,
   entityName: String,
   consumerId: ConsumerId,
@@ -39,9 +38,9 @@ private[schedule] class ScheduleProcess(
 
   import materializer.executionContext
 
-  val log = Logging(system, classOf[ScheduleProcess])
+  private val log = LoggerFactory.getLogger(classOf[ScheduleProcess])
 
-  val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
+  private val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
 
   private def updateRepository: Future[Int] =
     aggregateJournal
@@ -104,7 +103,7 @@ private[schedule] class ScheduleProcess(
     })
     .mapAsync(1)(_.commit())
 
-  def run: Reader[Unit, StreamKillSwitch] = Reader { _ =>
+  def run(system: ActorSystem): Reader[Unit, StreamKillSwitch] = Reader { _ =>
     StreamSupervisor(system)
       .startClusterSingleton(s"$entityName-Process", source, fireDueEntries)
   }
@@ -112,7 +111,6 @@ private[schedule] class ScheduleProcess(
 
 object ScheduleProcess {
   def apply(
-    system: ActorSystem,
     clock: Clock,
     entityName: String,
     consumerId: ConsumerId,
@@ -127,7 +125,6 @@ object ScheduleProcess {
     eventTag: EventTag[ScheduleEvent]
   )(implicit materializer: Materializer): ScheduleProcess =
     new ScheduleProcess(
-      system,
       clock,
       entityName,
       consumerId,

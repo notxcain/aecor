@@ -12,7 +12,7 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
+class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String, parallelism: Int)(
   implicit executionContext: ExecutionContext
 ) extends AggregateJournal[UUID] {
 
@@ -22,7 +22,7 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
   private def createSource[E: PersistentDecoder](
     inner: Source[EventEnvelope2, NotUsed]
   ): Source[JournalEntry[UUID, E], NotUsed] =
-    inner.mapAsync(8) {
+    inner.mapAsync(parallelism) {
       case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
         Future(eventOffset).flatMap {
           case TimeBasedUUID(offsetValue) =>
@@ -72,8 +72,10 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String)(
 }
 
 object CassandraAggregateJournal {
-  def apply(system: ActorSystem, journalIdentifier: String = CassandraReadJournal.Identifier)(
-    implicit executionContext: ExecutionContext
-  ): AggregateJournal[UUID] =
-    new CassandraAggregateJournal(system, journalIdentifier)
+  def apply(
+    system: ActorSystem,
+    journalIdentifier: String = CassandraReadJournal.Identifier,
+    parallelism: Int = 8
+  )(implicit executionContext: ExecutionContext): AggregateJournal[UUID] =
+    new CassandraAggregateJournal(system, journalIdentifier, parallelism)
 }

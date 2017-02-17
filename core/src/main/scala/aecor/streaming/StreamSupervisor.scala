@@ -8,9 +8,8 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Source }
 import akka.util.Timeout
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.Future
 import scala.concurrent.duration.{ FiniteDuration, _ }
-import cats.implicits._
 
 class StreamSupervisor(system: ActorSystem) {
   def startClusterSingleton[A, SM, FM](

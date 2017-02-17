@@ -3,7 +3,6 @@ package aecor.example
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.schedule.ScheduleEvent.ScheduleEntryAdded
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
 import akka.Done
@@ -41,24 +40,6 @@ object ScheduleApp extends App {
   val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
   val scheduleEntryRepository =
     CassandraScheduleEntryRepository(cassandraSession, scheduleEntryRepositoryQueries)
-
-  case class Counter(state: Map[(String, String, String), Int]) {
-    def inc(e: ScheduleEntryAdded): Counter = {
-      val key = (e.scheduleName, e.scheduleBucket, e.entryId)
-      copy(state = state.updated(key, state.getOrElse(key, 0) + 1))
-    }
-    def duplicated: Set[(String, String, String)] =
-      state.collect {
-        case (x, v) if v > 1 => x
-      }.toSet
-  }
-
-  def runRepositoryScanStream: Reader[Unit, Future[Done]] =
-    Reader { _ =>
-      scheduleEntryRepository
-        .getEntries(LocalDate.of(2017, 1, 1).atStartOfDay(), LocalDateTime.now(clock))
-        .runForeach(x => system.log.debug(s"[$x]"))
-    }
 
   def runSchedule: Reader[Unit, Schedule] =
     Schedule.start(
