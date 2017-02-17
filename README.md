@@ -134,7 +134,7 @@ val behavior = Lambda[SubscriptionOp ~> Handler[Option[Subscription], Subscripti
 }
 ```
 
-Then you define a correlation function, entity name and a value provided by correlation function form unique primary key for aggregate
+Then you define a correlation function, entity name and a value provided by correlation function form unique primary key for aggregate.
 It should not be changed in the future, at least without prior event migration.
 
 ```scala
