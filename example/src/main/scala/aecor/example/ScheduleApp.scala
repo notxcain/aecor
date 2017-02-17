@@ -67,6 +67,7 @@ object ScheduleApp extends App {
       dayZero = LocalDate.of(2016, 5, 10),
       bucketLength = 1.day,
       refreshInterval = 1.second,
+      eventualConsistencyDelay = 5.seconds,
       repository = scheduleEntryRepository,
       aggregateJournal = CassandraAggregateJournal(system),
       offsetStore = offsetStore
@@ -102,7 +103,7 @@ object ScheduleApp extends App {
   val app: Reader[Unit, Unit] =
     for {
       schedule <- runSchedule
-      _ <- runAdder(schedule)
+//      _ <- runAdder(schedule)
 //      _ <- runRepositoryScanStream
       _ <- runEventWatch(schedule)
     } yield ()

@@ -42,10 +42,7 @@ class StreamSupervisor(system: ActorSystem) {
 
 object StreamSupervisor {
   def apply(system: ActorSystem): StreamSupervisor = new StreamSupervisor(system)
-  final case class StreamKillSwitch(trigger: Timeout => Future[Unit]) {
-    def and(other: StreamKillSwitch)(implicit ec: ExecutionContext): StreamKillSwitch =
-      StreamKillSwitch(trigger.flatMap(_ => other.trigger))
-  }
+  final case class StreamKillSwitch(trigger: Timeout => Future[Unit])
 }
 
 final case class StreamSupervisorSettings(

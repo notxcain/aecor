@@ -1,6 +1,7 @@
 package aecor.schedule
 
 import java.time._
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 import aecor.data.EventTag
@@ -27,6 +28,7 @@ private[schedule] class ScheduleProcess(
   consumerId: ConsumerId,
   dayZero: LocalDate,
   refreshInterval: FiniteDuration,
+  eventualConsistencyDelay: FiniteDuration,
   parallelism: Int,
   offsetStore: OffsetStore[UUID],
   repository: ScheduleEntryRepository,
@@ -39,7 +41,7 @@ private[schedule] class ScheduleProcess(
 
   val log = Logging(system, classOf[ScheduleProcess])
 
-  val schduleEntriesTag = "io.aecor.ScheduleDueEntries"
+  val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
 
   private def updateRepository: Future[Int] =
     aggregateJournal
@@ -59,7 +61,7 @@ private[schedule] class ScheduleProcess(
   private def source =
     Source
       .single(())
-      .mapAsync(1)(_ => offsetStore.getOffset(schduleEntriesTag, consumerId))
+      .mapAsync(1)(_ => offsetStore.getOffset(scheduleEntriesTag, consumerId))
       .map {
         case Some(offset) =>
           LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(offset)), clock.getZone)
@@ -81,14 +83,14 @@ private[schedule] class ScheduleProcess(
           .getEntries(from, now)
           .map { entry =>
             val offset = UUIDs.startOf(entry.dueDate.atZone(clock.getZone).toInstant.toEpochMilli)
-            Committable(() => offsetStore.setOffset(schduleEntriesTag, consumerId, offset), entry)
+            Committable(() => offsetStore.setOffset(scheduleEntriesTag, consumerId, offset), entry)
           }
           .concat(
             Source
               .tick(refreshInterval, refreshInterval, ())
               .take(1)
               .flatMapConcat { _ =>
-                entriesFrom(now)
+                entriesFrom(now.minus(eventualConsistencyDelay.toMillis, ChronoUnit.MILLIS))
               }
           )
       }
@@ -116,6 +118,7 @@ object ScheduleProcess {
     consumerId: ConsumerId,
     dayZero: LocalDate,
     refreshInterval: FiniteDuration,
+    eventualConsistencyDelay: FiniteDuration,
     parallelism: Int,
     offsetStore: OffsetStore[UUID],
     repository: ScheduleEntryRepository,
@@ -130,6 +133,7 @@ object ScheduleProcess {
       consumerId,
       dayZero,
       refreshInterval,
+      eventualConsistencyDelay,
       parallelism,
       offsetStore,
       repository,

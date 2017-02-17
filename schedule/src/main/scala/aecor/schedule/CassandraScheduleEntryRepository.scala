@@ -2,7 +2,6 @@ package aecor.schedule
 
 import java.time._
 import java.time.format.DateTimeFormatter
-import java.util.{ Date, UUID }
 
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
@@ -10,7 +9,6 @@ import akka.NotUsed
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.stream.scaladsl.Source
-import com.datastax.driver.core.utils.UUIDs
 import com.datastax.driver.core.{ Row, Session }
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
@@ -20,7 +18,7 @@ import scala.concurrent.{ ExecutionContext, Future }
 class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queries: Queries)(
   implicit executionContext: ExecutionContext
 ) extends ScheduleEntryRepository {
-  val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository])
+  private val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository])
   private val preparedInsertEntry = cassandraSession.prepare(queries.insertEntry)
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
   private val preparedSelectEntry = cassandraSession.prepare(queries.selectEntry)
@@ -71,16 +69,16 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
           Future.successful(())
       }
 
-  def getBucket(timeBucket: TimeBucket,
-                from: LocalDateTime,
-                to: LocalDateTime): Source[ScheduleEntry, NotUsed] =
+  private def getBucket(timeBucket: TimeBucket,
+                        from: LocalDateTime,
+                        to: LocalDateTime): Source[ScheduleEntry, NotUsed] =
     Source
       .fromFuture(
         preparedSelectEntries.map(
           _.bind()
             .setString("time_bucket", timeBucket.key)
-            .setTimestamp("from_due_date", Date.from(from.atOffset(ZoneOffset.UTC).toInstant))
-            .setTimestamp("to_due_date", Date.from(to.atOffset(ZoneOffset.UTC).toInstant))
+            .set("from_due_date", from.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
+            .set("to_due_date", to.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
         )
       )
       .flatMapConcat(cassandraSession.select)
@@ -98,7 +96,7 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
         getBucket(bucket, from, to).concat {
           Source.lazily { () =>
             val nextBucket = bucket.next
-            if (nextBucket.day.isAfter(to.toLocalDate)) {
+            if (nextBucket.isAfter(to.toLocalDate)) {
               Source.empty
             } else {
               rec(nextBucket)
@@ -131,23 +129,17 @@ object CassandraScheduleEntryRepository {
     def next: TimeBucket =
       TimeBucket(day.plusDays(1))
 
+    def isAfter(other: LocalDate): Boolean =
+      day.isAfter(other)
+
     def isBefore(other: LocalDate): Boolean =
       day.isBefore(other)
-
-    def startTimestamp: Long =
-      day.atStartOfDay.toInstant(ZoneOffset.UTC).toEpochMilli
 
     override def toString: String = key
   }
 
   object TimeBucket {
     private val timeBucketFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMdd")
-
-    def apply(key: String): TimeBucket =
-      apply(LocalDate.parse(key, timeBucketFormatter), key)
-
-    def apply(timeuuid: UUID): TimeBucket =
-      apply(UUIDs.unixTimestamp(timeuuid))
 
     def apply(epochTimestamp: Long): TimeBucket = {
       val time = LocalDateTime.ofInstant(Instant.ofEpochMilli(epochTimestamp), ZoneOffset.UTC)
