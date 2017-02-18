@@ -3,6 +3,10 @@ package aecor.data
 import aecor.data.Folded.{ Impossible, Next }
 
 sealed abstract class Folded[+A] {
+  def isNext: Boolean = this match {
+    case Next(_) => true
+    case Impossible => false
+  }
   def fold[B](impossible: => B, next: A => B): B = this match {
     case Impossible => impossible
     case Next(a) => next(a)
@@ -25,6 +29,9 @@ object Folded {
   private final case class Next[+A](a: A) extends Folded[A]
   def impossible[A]: Folded[A] = Impossible
   def next[A](a: A): Folded[A] = Next(a)
+  def collectNext[A]: PartialFunction[Folded[A], Next[A]] = {
+    case next @ Next(_) => next
+  }
   object syntax {
     implicit class FoldedIdOps[A](val a: A) extends AnyVal {
       def next: Folded[A] = Folded.next(a)
