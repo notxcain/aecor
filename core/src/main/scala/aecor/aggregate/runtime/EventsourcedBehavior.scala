@@ -2,7 +2,7 @@ package aecor.aggregate.runtime
 
 import EventJournal.EventEnvelope
 import aecor.aggregate.runtime.RuntimeActor.InstanceIdentity
-import aecor.aggregate.runtime.behavior.{ Behavior, Tuple2T }
+import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
 import aecor.aggregate.{ Folder, SnapshotStore, Tagging }
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
@@ -38,7 +38,7 @@ object EventsourcedBehavior {
           .flatMap {
             case Next(recoveredState) =>
               def withState(state: InternalState[S]): Behavior[Op, F] = {
-                def mk[A](op: Op[A]): Tuple2T[F, Behavior[Op, F], A] = {
+                def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] = {
                   val (events, reply) = opHandler(op).run(state.entityState)
                   val envelopes = events.zipWithIndex.map {
                     case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
