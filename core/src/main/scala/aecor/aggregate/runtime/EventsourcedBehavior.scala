@@ -1,6 +1,6 @@
 package aecor.aggregate.runtime
 
-import EventJournal.EventEnvelope
+import aecor.aggregate.runtime.EventJournal.EventEnvelope
 import aecor.aggregate.runtime.RuntimeActor.InstanceIdentity
 import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
 import aecor.aggregate.{ Folder, SnapshotStore, Tagging }
@@ -9,14 +9,14 @@ import aecor.data.{ Folded, Handler }
 import cats.arrow.FunctionK
 import cats.data.NonEmptyVector
 import cats.implicits._
-import cats.{ Applicative, Functor, MonadError, ~> }
+import cats.{ Applicative, MonadError, ~> }
 
 import scala.collection.immutable.Seq
 
 object EventsourcedBehavior {
   final case class InternalState[S](entityState: S, version: Long) {
-    def step[F[_]: Functor, E](e: E)(implicit S: Folder[F, E, S]): F[InternalState[S]] =
-      S.step(entityState, e).map(next => copy(entityState = next, version + 1))
+    def step[E](e: E)(implicit S: Folder[Folded, E, S]): Folded[InternalState[S]] =
+      S.step(entityState, e).map(InternalState(_, version + 1))
 
     def stepWhilePossible[F[_]: Applicative, E](as: Seq[E])(
       rec: (Folded[InternalState[S]], InternalState[S] => F[InternalState[S]]) => F[
@@ -26,7 +26,7 @@ object EventsourcedBehavior {
       if (as.isEmpty) {
         this.pure[F]
       } else {
-        rec(step[Folded, E](as.head), _.stepWhilePossible(as.tail)(rec))
+        rec(step(as.head), _.stepWhilePossible(as.tail)(rec))
       }
   }
   object InternalState {
@@ -46,13 +46,12 @@ object EventsourcedBehavior {
             instanceIdentity.entityId,
             snapshot.map(_.version).getOrElse(0L),
             snapshot.getOrElse(InternalState.zero),
-            _.step[Folded, E](_)
+            (_: InternalState[S]).step(_)
           )
           .flatMap {
             case Next(recoveredState) =>
               def withState(state: InternalState[S]): Behavior[Op, F] = {
                 def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] = {
-                  println(s"currentState = $state")
                   val (events, reply) = opHandler(op).run(state.entityState)
                   val envelopes = events.zipWithIndex.map {
                     case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
@@ -79,7 +78,6 @@ object EventsourcedBehavior {
 
                                  }
                     } yield {
-                      println(s"newState = $newState")
                       (withState(newState), reply)
                     }
                   }
