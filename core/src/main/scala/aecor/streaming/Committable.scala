@@ -1,13 +1,13 @@
 package aecor.streaming
 
-import cats.{ Applicative, Eval, Monad, Traverse }
+import cats.{ Applicative, Eval, Functor, Monad, Traverse }
 
 import scala.concurrent.Future
 import scala.util.{ Left, Right }
 
 final case class Committable[+A](commit: () => Future[Unit], value: A) {
   def map[B](f: A => B): Committable[B] = copy(value = f(value))
-  def traverse[G[_], B](f: A => G[B])(implicit G: Applicative[G]): G[Committable[B]] =
+  def traverse[G[_], B](f: A => G[B])(implicit G: Functor[G]): G[Committable[B]] =
     G.map(f(value))(b => copy(value = b))
   def foldLeft[B](b: B)(f: (B, A) => B): B = f(b, value)
 }

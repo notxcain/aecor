@@ -1,78 +1,111 @@
 package aecor.schedule
 
-import java.time.LocalDateTime
+import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.CorrelationId
+import aecor.aggregate.{ AkkaRuntime, CorrelationId, Tagging }
 import aecor.data.EventTag
 import aecor.streaming._
+import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
-import akka.pattern.ask
+import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import akka.util.Timeout
-import akka.{ Done, NotUsed }
+import cats.data.Reader
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.concurrent.{ ExecutionContext, Future }
+
 trait Schedule {
   def addScheduleEntry(scheduleName: String,
                        entryId: String,
                        correlationId: CorrelationId,
-                       dueDate: LocalDateTime): Future[Done]
+                       dueDate: LocalDateTime): Future[Unit]
   def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
   ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed]
 }
 
-object Schedule {
-  def apply(
-    system: ActorSystem,
-    entityName: String,
-    bucketLength: FiniteDuration,
-    tickInterval: FiniteDuration,
-    offsetStore: OffsetStore[UUID]
-  )(implicit executionContext: ExecutionContext): Schedule =
-    new ShardedSchedule(system, entityName, bucketLength, tickInterval, offsetStore)
+private[schedule] class ConfiguredSchedule(
+  system: ActorSystem,
+  entityName: String,
+  clock: Clock,
+  dayZero: LocalDate,
+  bucketLength: FiniteDuration,
+  tickInterval: FiniteDuration,
+  eventualConsistencyDelay: FiniteDuration,
+  repository: ScheduleEntryRepository,
+  aggregateJournal: AggregateJournal[UUID],
+  offsetStore: OffsetStore[UUID],
+  consumerId: ConsumerId
+)(implicit materializer: Materializer) {
+
+  private val runtime = AkkaRuntime(system)
+
+  private val eventTag = EventTag[ScheduleEvent](entityName)
+
+  private val startAggregate = Reader { _: Unit =>
+    ScheduleAggregate.fromFunctionK(
+      runtime.start(
+        entityName,
+        DefaultScheduleAggregate(clock).asFunctionK,
+        DefaultScheduleAggregate.correlation,
+        Tagging(eventTag)
+      )
+    )
+  }
+
+  private def startProcess(aggregate: ScheduleAggregate[Future]) =
+    ScheduleProcess(
+      clock = clock,
+      entityName = entityName,
+      consumerId = consumerId,
+      dayZero = dayZero,
+      refreshInterval = 1.second,
+      eventualConsistencyDelay = eventualConsistencyDelay,
+      parallelism = 8,
+      offsetStore = offsetStore,
+      repository = repository,
+      scheduleAggregate = aggregate,
+      aggregateJournal = aggregateJournal,
+      eventTag = eventTag
+    ).run(system)
+
+  private def createSchedule(aggregate: ScheduleAggregate[Future]): Schedule =
+    new DefaultSchedule(clock, aggregate, bucketLength, aggregateJournal, offsetStore, eventTag)
+
+  def start: Reader[Unit, Schedule] =
+    for {
+      aggregate <- startAggregate
+      _ <- startProcess(aggregate)
+      schedule = createSchedule(aggregate)
+    } yield schedule
 }
 
-class ShardedSchedule(system: ActorSystem,
-                      entityName: String,
-                      bucketLength: FiniteDuration,
-                      tickInterval: FiniteDuration,
-                      offsetStore: OffsetStore[UUID])(implicit executionContext: ExecutionContext)
-    extends Schedule {
-
-  private val scheduleRegion = ClusterSharding(system).start(
-    typeName = entityName,
-    entityProps = ScheduleActorSupervisor.props(entityName, tickInterval),
-    settings = ClusterShardingSettings(system).withRememberEntities(true),
-    extractEntityId = ScheduleActorSupervisor.extractEntityId(bucketLength),
-    extractShardId = ScheduleActorSupervisor.extractShardId(10, bucketLength)
-  )
-
-  private implicit val askTimeout: Timeout = Timeout(30.seconds)
-
-  private val aggregateJournal = CassandraAggregateJournal(system)
-
-  override def addScheduleEntry(scheduleName: String,
-                                entryId: String,
-                                correlationId: CorrelationId,
-                                dueDate: LocalDateTime): Future[Done] =
-    (scheduleRegion ? AddScheduleEntry(scheduleName, entryId, correlationId, dueDate)).mapTo[Done]
-
-  override def committableScheduleEvents(
-    scheduleName: String,
-    consumerId: ConsumerId
-  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed] =
-    aggregateJournal
-      .committableEventsByTag[ScheduleEvent](
-        offsetStore,
-        EventTag(entityName),
-        ConsumerId(scheduleName + consumerId.value)
-      )
-      .collect {
-        case m if m.value.event.scheduleName == scheduleName => m
-      }
+object Schedule {
+  def start(
+    entityName: String,
+    clock: Clock,
+    dayZero: LocalDate,
+    bucketLength: FiniteDuration,
+    refreshInterval: FiniteDuration,
+    eventualConsistencyDelay: FiniteDuration,
+    repository: ScheduleEntryRepository,
+    aggregateJournal: AggregateJournal[UUID],
+    offsetStore: OffsetStore[UUID],
+    consumerId: ConsumerId = ConsumerId("io.aecor.schedule.ScheduleProcess")
+  )(implicit system: ActorSystem, materializer: Materializer): Reader[Unit, Schedule] =
+    new ConfiguredSchedule(
+      system,
+      entityName,
+      clock,
+      dayZero,
+      bucketLength,
+      refreshInterval,
+      eventualConsistencyDelay,
+      repository,
+      aggregateJournal,
+      offsetStore,
+      consumerId
+    ).start
 }

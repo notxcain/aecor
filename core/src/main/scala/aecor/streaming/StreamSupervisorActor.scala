@@ -1,5 +1,6 @@
 package aecor.streaming
 
+import akka.Done
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.stream.scaladsl.{ Flow, Keep, Sink, Source }
 import akka.stream.{ KillSwitches, Materializer }
@@ -43,7 +44,7 @@ private[aecor] class StreamSupervisorActor[A, SM, FM](
       context stop self
       context become Actor.ignoringBehavior
 
-    case Unit =>
+    case Done =>
       throw new IllegalStateException("Stream terminated when it shouldn't")
 
   }

@@ -8,9 +8,11 @@ lazy val buildSettings = Seq(
 )
 
 lazy val akkaVersion = "2.4.16"
-lazy val akkaPersistenceCassandra = "0.22"
+lazy val akkaPersistenceCassandra = "0.23"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
+lazy val cassandraDriverExtrasVersion = "3.1.0"
+lazy val jsr305Version = "3.0.1"
 
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
@@ -75,7 +77,12 @@ lazy val coreSettings = Seq(
   )
 )
 
-lazy val scheduleSettings = commonProtobufSettings
+lazy val scheduleSettings = commonProtobufSettings ++ Seq(
+    libraryDependencies ++= Seq(
+      "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
+      "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
+    )
+  )
 
 lazy val exampleSettings = {
   val circeVersion = "0.6.1"

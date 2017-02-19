@@ -20,7 +20,7 @@ object EventsourcedBehavior {
     implicit def folder[F[_]: Functor, S, E](
       implicit S: Folder[F, E, S]
     ): Folder[F, E, InternalState[S]] =
-      Folder.instance[E, InternalState[S]](InternalState(S.zero, 0)) { next => e =>
+      Folder.instance[F, E, InternalState[S]](InternalState(S.zero, 0)) { next => e =>
         S.step(next.entityState, e).map { n =>
           next.copy(entityState = n, next.version + 1)
         }

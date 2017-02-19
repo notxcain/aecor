@@ -10,14 +10,16 @@
         <appender-ref ref="STDOUT" />
     </root>
     <logger name="org.apache.kafka.clients.consumer.KafkaConsumer" level="WARN" />
+    <logger name="org.apache.kafka.clients.consumer.internals.AbstractCoordinator" level="WARN" />
     <logger name="akka.kafka.internal.CommittableConsumerStage" level="WARN" />
     <logger name="akka.kafka.internal.PlainConsumerStage" level="WARN" />
     <logger name="akka.cluster.sharding.PersistentShardCoordinator" level="WARN" />
     <logger name="akka.cluster.sharding.ShardRegion" level="WARN" />
     <logger name="akka.cluster.sharding.PersistentShard" level="WARN" />
-    <logger name="org.apache.kafka.clients.consumer.internals.AbstractCoordinator" level="WARN" />
+    <logger name="akka.persistence.cassandra.query.EventsByTagPublisher" level="OFF" />
+    <logger name="akka.actor.LocalActorRefProvider(akka://aecor-example)" level="OFF" />
+    <logger name="aecor.aggregate.AggregateActor" level="OFF" />
     <logger name="com.datastax.driver.core.Connection" level="WARN" />
-    <logger name="com.websudos.phantom" level="WARN" />
-    <logger name="akka.persistence.cassandra.query.EventsByTagPublisher" level="INFO" />
-    <logger name="aecor.core.schedule.ScheduleActor" level="INFO" />
+    <logger name="aecor.schedule.CassandraScheduleEntryRepository" level="WARN" />
+    <!--<logger name="aecor.schedule.ScheduleProcess" level="WARN" />-->
 </configuration>

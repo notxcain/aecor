@@ -3,10 +3,9 @@ package aecor.example
 import java.time.Clock
 
 import aecor.aggregate._
-import aecor.streaming._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
-import aecor.schedule._
+import aecor.streaming._
 import akka.NotUsed
 import akka.actor.{ Actor, ActorLogging, ActorSystem, Props }
 import akka.event.Logging
@@ -14,13 +13,12 @@ import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ ActorMaterializer, Materializer }
 import akka.stream.scaladsl.{ Flow, Sink }
+import akka.stream.{ ActorMaterializer, Materializer }
 import cats.~>
 import com.typesafe.config.Config
 
 import scala.concurrent.Future
-import scala.concurrent.duration._
 
 object AppActor {
   def props: Props = Props(new AppActor)
@@ -67,9 +65,6 @@ class AppActor extends Actor with ActorLogging {
     )
 
   val scheduleEntityName = "Schedule3"
-
-  val schedule: Schedule =
-    Schedule(system, scheduleEntityName, 1.day, 10.seconds, offsetStore)
 
   val cardAuthorizationEventStream =
     new DefaultEventStream(
