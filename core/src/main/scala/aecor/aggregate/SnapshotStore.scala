@@ -2,7 +2,7 @@ package aecor.aggregate
 
 import aecor.aggregate.runtime.EventsourcedBehavior.InternalState
 
-trait SnapshotStore[A, S, F[_]] {
-  def saveSnapshot(a: A)(id: String, state: InternalState[S]): F[Unit]
-  def loadSnapshot(a: A)(id: String): F[Option[InternalState[S]]]
+trait SnapshotStore[S, F[_]] {
+  def saveSnapshot(id: String, state: InternalState[S]): F[Unit]
+  def loadSnapshot(id: String): F[Option[InternalState[S]]]
 }

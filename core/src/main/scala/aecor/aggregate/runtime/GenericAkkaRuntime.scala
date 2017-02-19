@@ -19,41 +19,40 @@ object GenericAkkaRuntime {
 
 class GenericAkkaRuntime(system: ActorSystem) {
   def start[Op[_], F[_]: Async: Functor](entityName: String,
-                                         loadBehavior: InstanceIdentity => F[Behavior[Op, F]],
                                          correlation: Correlation[Op],
+                                         loadBehavior: InstanceIdentity => F[Behavior[Op, F]],
                                          settings: AkkaRuntimeSettings =
-                                           AkkaRuntimeSettings.default(system)): F[Op ~> F] =
-    Async[F].capture {
-      Future.successful {
-        val props = RuntimeActor.props(entityName, loadBehavior, settings.idleTimeout)
+                                           AkkaRuntimeSettings.default(system)): Op ~> F = {
+    {
+      val props = RuntimeActor.props(entityName, loadBehavior, settings.idleTimeout)
 
-        def extractEntityId: ShardRegion.ExtractEntityId = {
-          case HandleCommand(entityId, c) =>
-            (entityId, c)
-        }
+      def extractEntityId: ShardRegion.ExtractEntityId = {
+        case HandleCommand(entityId, c) =>
+          (entityId, c)
+      }
 
-        val numberOfShards = settings.numberOfShards
+      val numberOfShards = settings.numberOfShards
 
-        def extractShardId: ShardRegion.ExtractShardId = {
-          case HandleCommand(entityId, _) =>
-            (scala.math.abs(entityId.hashCode) % numberOfShards).toString
-        }
+      def extractShardId: ShardRegion.ExtractShardId = {
+        case HandleCommand(entityId, _) =>
+          (scala.math.abs(entityId.hashCode) % numberOfShards).toString
+      }
 
-        val shardRegionRef = ClusterSharding(system).start(
-          typeName = entityName,
-          entityProps = props,
-          settings = settings.clusterShardingSettings,
-          extractEntityId = extractEntityId,
-          extractShardId = extractShardId
-        )
+      val shardRegionRef = ClusterSharding(system).start(
+        typeName = entityName,
+        entityProps = props,
+        settings = settings.clusterShardingSettings,
+        extractEntityId = extractEntityId,
+        extractShardId = extractShardId
+      )
 
-        new (Op ~> F) {
-          implicit private val timeout = Timeout(settings.askTimeout)
-          override def apply[A](fa: Op[A]): F[A] =
-            Async[F].capture(
-              (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
-            )
-        }
+      new (Op ~> F) {
+        implicit private val timeout = Timeout(settings.askTimeout)
+        override def apply[A](fa: Op[A]): F[A] =
+          Async[F].capture(
+            (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
+          )
       }
     }
+  }
 }

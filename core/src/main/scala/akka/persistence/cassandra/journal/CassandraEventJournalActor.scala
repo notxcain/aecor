@@ -4,7 +4,7 @@ import java.lang.{ Long => JLong }
 import java.nio.ByteBuffer
 import java.util.UUID
 
-import aecor.aggregate.EventJournal.EventEnvelope
+import aecor.aggregate.runtime.EventJournal.EventEnvelope
 import aecor.aggregate.serialization.PersistentEncoder
 import akka.Done
 import akka.actor.{ Actor, ActorLogging, NoSerializationVerificationNeeded }
@@ -31,7 +31,7 @@ class CassandraEventJournalActor[E: PersistentEncoder: ClassTag](cfg: Config)
     extends Actor
     with ActorLogging
     with CassandraStatements {
-  val config = new CassandraJournalConfig(context.system, cfg)
+  val config = new CassandraJournalConfig(context.system, cfg.getConfig("cassandra-journal"))
   val serialization = SerializationExtension(context.system)
 
   import config._

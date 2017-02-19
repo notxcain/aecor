@@ -21,7 +21,7 @@ trait Async[F[_]] {
   def capture[A](future: => Future[A]): F[A]
 }
 
-object Async {
+object Async extends AsyncInstances {
   def apply[F[_]](implicit instance: Async[F]): Async[F] = instance
   object ops {
     implicit class AsyncOps[F[_], A](val self: F[A]) extends AnyVal {

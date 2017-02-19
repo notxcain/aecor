@@ -1,14 +1,13 @@
 package aecor.aggregate.runtime
 
-import aecor.aggregate.EventJournal.EventEnvelope
-import aecor.aggregate.EventJournal.ops._
+import EventJournal.EventEnvelope
 import aecor.aggregate.runtime.RuntimeActor.InstanceIdentity
 import aecor.aggregate.runtime.behavior.{ Behavior, Tuple2T }
-import aecor.aggregate.{ EventJournal, Folder, SnapshotStore, Tagging }
+import aecor.aggregate.{ Folder, SnapshotStore, Tagging }
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
 import cats.arrow.FunctionK
-import cats.data.OneAnd
+import cats.data.NonEmptyVector
 import cats.implicits._
 import cats.{ Functor, MonadError, ~> }
 
@@ -27,16 +26,13 @@ object EventsourcedBehavior {
       }
   }
   def apply[J, Snap, Op[_], S, E, F[_]: MonadError[?[_], String]](
-    entityName: String,
-    journal: J,
-    snapshotStore: Snap,
+    journal: EventJournal[E, F],
+    snapshotStore: SnapshotStore[S, F],
     opHandler: Op ~> Handler[S, E, ?],
     tagging: Tagging[E]
-  )(implicit J: EventJournal[J, E, F],
-    S: Folder[Folded, E, S],
-    Snap: SnapshotStore[Snap, S, F]): InstanceIdentity => F[Behavior[Op, F]] = {
+  )(implicit S: Folder[Folded, E, S]): InstanceIdentity => F[Behavior[Op, F]] = {
     instanceIdentity =>
-      Snap.loadSnapshot(snapshotStore)(instanceIdentity.entityId).flatMap { snapshot =>
+      snapshotStore.loadSnapshot(instanceIdentity.entityId).flatMap { snapshot =>
         journal
           .fold(instanceIdentity.entityId, snapshot.map(_.version).getOrElse(0L), snapshot)
           .flatMap {
@@ -54,7 +50,7 @@ object EventsourcedBehavior {
                       .append(
                         instanceIdentity.entityId,
                         instanceIdentity.instanceId,
-                        OneAnd(envelopes.head, envelopes.tail)
+                        NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
                       )
                       .flatMap { _ =>
                         def foldUntilImpossible(as: Seq[E],
@@ -64,8 +60,8 @@ object EventsourcedBehavior {
                           } else {
                             Folder[Folded, E, InternalState[S]].step(zero, as.head) match {
                               case Next(s) =>
-                                Snap
-                                  .saveSnapshot(snapshotStore)(instanceIdentity.entityId, s)
+                                snapshotStore
+                                  .saveSnapshot(instanceIdentity.entityId, s)
                                   .flatMap(_ => foldUntilImpossible(as.tail, s))
                               case Impossible =>
                                 s"Illegal fold for [${instanceIdentity.entityId}]"

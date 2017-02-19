@@ -58,7 +58,6 @@ object ScheduleApp extends App {
     Reader { _ =>
       Source
         .tick(0.seconds, 2.seconds, ())
-        .take(1)
         .mapAsync(1) { _ =>
           schedule.addScheduleEntry(
             "Test",
@@ -84,7 +83,7 @@ object ScheduleApp extends App {
   val app: Reader[Unit, Unit] =
     for {
       schedule <- runSchedule
-//      _ <- runAdder(schedule)
+      _ <- runAdder(schedule)
 //      _ <- runRepositoryScanStream
       _ <- runEventWatch(schedule)
     } yield ()
