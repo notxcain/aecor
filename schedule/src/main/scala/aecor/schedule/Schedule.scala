@@ -3,16 +3,21 @@ package aecor.schedule
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.{ AkkaRuntime, CorrelationId, Tagging }
+import aecor.aggregate.runtime.RuntimeActor.InstanceIdentity
+import aecor.aggregate.runtime.behavior.Behavior
+import aecor.aggregate.runtime.{ EventsourcedBehavior, GenericAkkaRuntime, NoopSnapshotStore }
+import aecor.aggregate.{ CorrelationId, Tagging }
 import aecor.data.EventTag
 import aecor.streaming._
 import akka.NotUsed
 import akka.actor.ActorSystem
+import akka.persistence.cassandra.journal.CassandraEventJournal
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
+import cats.MonadError
 import cats.data.Reader
 
-import scala.concurrent.Future
+import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration._
 
 trait Schedule {
@@ -40,18 +45,41 @@ private[schedule] class ConfiguredSchedule(
   consumerId: ConsumerId
 )(implicit materializer: Materializer) {
 
-  private val runtime = AkkaRuntime(system)
+  import materializer.executionContext
+
+  private val runtime = new GenericAkkaRuntime(system)
 
   private val eventTag = EventTag[ScheduleEvent](entityName)
 
+  implicit def futureMonadError(implicit ec: ExecutionContext): MonadError[Future, String] =
+    new MonadError[Future, String] {
+      override def raiseError[A](e: String): Future[A] = Future.failed(new RuntimeException(e))
+
+      override def handleErrorWith[A](fa: Future[A])(f: (String) => Future[A]): Future[A] =
+        cats.instances.future.catsStdInstancesForFuture.handleErrorWith(fa) { e =>
+          f(e.getMessage)
+        }
+
+      override def flatMap[A, B](fa: Future[A])(f: (A) => Future[B]): Future[B] =
+        fa.flatMap(f)
+
+      override def tailRecM[A, B](a: A)(f: (A) => Future[Either[A, B]]): Future[B] =
+        cats.instances.future.catsStdInstancesForFuture.tailRecM(a)(f)
+
+      override def pure[A](x: A): Future[A] =
+        Future.successful(x)
+    }
+
   private val startAggregate = Reader { _: Unit =>
-    ScheduleAggregate.fromFunctionK(
-      runtime.start(
-        entityName,
+    val behavior: InstanceIdentity => Future[Behavior[ScheduleCommand, Future]] =
+      EventsourcedBehavior(
+        CassandraEventJournal[ScheduleEvent, Future](system, 8),
+        NoopSnapshotStore[ScheduleState, Future],
         DefaultScheduleAggregate(clock).asFunctionK,
-        DefaultScheduleAggregate.correlation,
         Tagging(eventTag)
       )
+    ScheduleAggregate.fromFunctionK(
+      runtime.start(entityName, DefaultScheduleAggregate.correlation, behavior)
     )
   }
 
