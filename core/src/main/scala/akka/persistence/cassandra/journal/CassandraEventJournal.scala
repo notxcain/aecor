@@ -40,10 +40,24 @@ class CassandraEventJournal[E: PersistentEncoder: PersistentDecoder, F[_]: Async
       (actor ? CassandraEventJournalActor.WriteMessages(id, events, instanceId)).mapTo[Unit]
     }
 
-  override def fold[S](id: String, offset: Long, zero: S)(f: (S, E) => Folded[S]): F[Folded[S]] =
+  override def fold[S](id: String,
+                       offset: Long,
+                       zero: S,
+                       step: (S, E) => Folded[S]): F[Folded[S]] =
     Async[F].capture {
       readJournal
         .currentEventsByPersistenceId(id, offset, Long.MaxValue)
+        .scan((0, Option.empty[akka.persistence.query.EventEnvelope])) {
+          case ((idx, _), e) =>
+            if (e.sequenceNr == idx + 1) {
+              (idx + 1, Some(e))
+            } else {
+              (idx, None)
+            }
+        }
+        .collect {
+          case (_, Some(x)) => x
+        }
         .mapAsync(decodingParallelism) {
           case akka.persistence.query.EventEnvelope(_, _, _, event: PersistentRepr) =>
             PersistentDecoder[E].decode(event).fold(Future.failed, Future.successful)
@@ -51,7 +65,7 @@ class CassandraEventJournal[E: PersistentEncoder: PersistentDecoder, F[_]: Async
             Future.failed(DecodingFailure(s"Unexpected underlying type ${other.event}"))
         }
         .runFold(Folded.next(zero)) { (s, e) =>
-          s.flatMap(f(_, e))
+          s.flatMap(step(_, e))
         }
     }
 
