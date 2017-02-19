@@ -22,7 +22,7 @@ private[aecor] class StreamSupervisorActor[A, SM, FM](
   import akka.pattern.pipe
   import context.dispatcher
 
-  val (shutDown, streamUnit) =
+  val (killSwitch, streamUnit) =
     source
       .viaMat(KillSwitches.single)(Keep.right)
       .via(flow)
@@ -32,7 +32,7 @@ private[aecor] class StreamSupervisorActor[A, SM, FM](
   streamUnit pipeTo self
 
   override def postStop: Unit =
-    shutDown.shutdown()
+    killSwitch.shutdown()
 
   def receive: Receive = {
     case Status.Failure(e) =>

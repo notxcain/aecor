@@ -28,14 +28,8 @@ class AkkaRuntime(system: ActorSystem) {
     settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
   )(implicit folder: Folder[Folded, Event, State]): Command ~> Future = {
 
-    val props = AggregateActor.props(
-      entityName,
-      behavior,
-      Identity.FromPathName,
-      snapshotPolicy,
-      tagging,
-      settings.idleTimeout
-    )
+    val props =
+      AggregateActor.props(entityName, behavior, snapshotPolicy, tagging, settings.idleTimeout)
 
     def extractEntityId: ShardRegion.ExtractEntityId = {
       case HandleCommand(entityId, c) =>

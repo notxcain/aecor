@@ -38,23 +38,16 @@ object SnapshotPolicy {
 
 }
 
-sealed trait Identity
-object Identity {
-  case class Provided(value: String) extends Identity
-  case object FromPathName extends Identity
-}
-
 object AggregateActor {
 
   def props[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
     behavior: Command ~> Handler[State, Event, ?],
-    identity: Identity,
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
     idleTimeout: FiniteDuration
   )(implicit folder: Folder[Folded, Event, State]): Props =
-    Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagging, idleTimeout))
+    Props(new AggregateActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout))
 
   case object Stop
 }
@@ -65,14 +58,12 @@ object AggregateActor {
   *
   * @param entityName entity name used as persistence prefix and as a tag for all events
   * @param behavior entity behavior
-  * @param identity describes how to extract entity identifier
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
 class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
   behavior: Command ~> Handler[State, Event, ?],
-  identity: Identity,
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
   idleTimeout: FiniteDuration
@@ -81,11 +72,8 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
     with Stash
     with ActorLogging {
 
-  final private val entityId: String = identity match {
-    case Identity.Provided(value) => value
-    case Identity.FromPathName =>
-      URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
-  }
+  final private val entityId: String =
+    URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
 
   final override val persistenceId: String = s"$entityName-$entityId"
 
@@ -168,7 +156,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   private def applyEvent(event: Event): Unit = {
     state = folder
-      .fold(state, event)
+      .step(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state while applying [$event] to [$state]")
         log.error(error, error.getMessage)

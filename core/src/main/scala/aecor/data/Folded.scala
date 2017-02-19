@@ -1,6 +1,7 @@
 package aecor.data
 
 import aecor.data.Folded.{ Impossible, Next }
+import cats.Monad
 
 sealed abstract class Folded[+A] {
   def isNext: Boolean = this match {
@@ -24,9 +25,9 @@ sealed abstract class Folded[+A] {
     case Next(a) => a
   }
 }
-object Folded {
-  private final case object Impossible extends Folded[Nothing]
-  private final case class Next[+A](a: A) extends Folded[A]
+object Folded extends FoldedInstances {
+  final case object Impossible extends Folded[Nothing]
+  final case class Next[+A](a: A) extends Folded[A]
   def impossible[A]: Folded[A] = Impossible
   def next[A](a: A): Folded[A] = Next(a)
   def collectNext[A]: PartialFunction[Folded[A], Next[A]] = {
@@ -37,5 +38,22 @@ object Folded {
       def next: Folded[A] = Folded.next(a)
     }
     def impossible[A]: Folded[A] = Folded.impossible
+  }
+}
+
+trait FoldedInstances {
+  implicit val foldedMonad: Monad[Folded] = new Monad[Folded] {
+    override def map[A, B](fa: Folded[A])(f: (A) => B): Folded[B] = fa.map(f)
+
+    override def tailRecM[A, B](a: A)(f: (A) => Folded[Either[A, B]]): Folded[B] =
+      f(a).flatMap {
+        case Left(aa) => tailRecM(aa)(f)
+        case Right(b) => pure(b)
+      }
+
+    override def flatMap[A, B](fa: Folded[A])(f: (A) => Folded[B]): Folded[B] =
+      fa.flatMap(f)
+
+    override def pure[A](x: A): Folded[A] = Next(x)
   }
 }
