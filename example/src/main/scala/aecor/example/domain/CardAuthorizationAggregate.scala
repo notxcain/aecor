@@ -61,7 +61,7 @@ object CardAuthorizationAggregate {
     case class Accepted(id: CardAuthorizationId) extends State
     case class Declined(id: CardAuthorizationId) extends State
     implicit val folder: Folder[Folded, CardAuthorizationAggregateEvent, State] =
-      Folder.instanceFor[CardAuthorizationAggregateEvent](Initial: State)(_.applyEvent)
+      Folder.instance(Initial: State)(_.applyEvent)
 
   }
 

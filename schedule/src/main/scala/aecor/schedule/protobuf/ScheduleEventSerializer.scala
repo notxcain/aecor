@@ -1,4 +1,4 @@
-package aecor.schedule.serialization
+package aecor.schedule.protobuf
 
 import aecor.aggregate.serialization.PersistentReprSerializer
 import akka.actor.ExtendedActorSystem

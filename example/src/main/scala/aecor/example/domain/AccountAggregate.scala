@@ -69,7 +69,7 @@ object AccountAggregate {
 
   object Account {
     implicit val folder: Folder[Folded, AccountAggregateEvent, Option[Account]] =
-      Folder.instanceFor[AccountAggregateEvent](Option.empty[Account])(applyEvent)
+      Folder.instance(Option.empty[Account])(applyEvent)
   }
 
   val entityName: String = "Account"
