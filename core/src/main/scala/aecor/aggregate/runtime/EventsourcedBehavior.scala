@@ -14,16 +14,12 @@ import cats.{ Functor, MonadError, ~> }
 import scala.collection.immutable.Seq
 
 object EventsourcedBehavior {
-  final case class InternalState[S](entityState: S, version: Long)
+  final case class InternalState[S](entityState: S, version: Long) {
+    def step[F[_]: Functor, E](e: E)(implicit S: Folder[F, E, S]): F[InternalState[S]] =
+      S.step(entityState, e).map(next => copy(entityState = next, version + 1))
+  }
   object InternalState {
-    implicit def folder[F[_]: Functor, S, E](
-      implicit S: Folder[F, E, S]
-    ): Folder[F, E, InternalState[S]] =
-      Folder.instance[F, E, InternalState[S]](InternalState(S.zero, 0)) { next => e =>
-        S.step(next.entityState, e).map { n =>
-          next.copy(entityState = n, next.version + 1)
-        }
-      }
+    def zero[F[_], S](implicit S: Folder[F, _, S]): InternalState[S] = InternalState(S.zero, 0)
   }
   def apply[J, Snap, Op[_], S, E, F[_]: MonadError[?[_], String]](
     journal: EventJournal[E, F],
@@ -34,7 +30,11 @@ object EventsourcedBehavior {
     instanceIdentity =>
       snapshotStore.loadSnapshot(instanceIdentity.entityId).flatMap { snapshot =>
         journal
-          .fold(instanceIdentity.entityId, snapshot.map(_.version).getOrElse(0L), snapshot)
+          .fold(
+            instanceIdentity.entityId,
+            snapshot.map(_.version).getOrElse(0L),
+            snapshot.getOrElse(InternalState.zero)
+          )(_.step[Folded, E](_))
           .flatMap {
             case Next(recoveredState) =>
               def withState(state: InternalState[S]): Behavior[Op, F] = {

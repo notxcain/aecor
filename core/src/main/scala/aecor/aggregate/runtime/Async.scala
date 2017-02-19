@@ -2,6 +2,9 @@ package aecor.aggregate.runtime
 
 import scala.concurrent.{ ExecutionContext, Future }
 
+/**
+  * The type class for types that can be run in async manner
+  */
 trait Async[F[_]] {
   def run[A](fa: F[A])(executionContext: ExecutionContext): Future[A]
   def capture[A](future: => Future[A]): F[A]

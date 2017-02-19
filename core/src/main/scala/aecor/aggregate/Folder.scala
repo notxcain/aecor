@@ -1,6 +1,6 @@
 package aecor.aggregate
 
-trait Folder[F[_], A, B] {
+trait Folder[F[_], A, B] { o =>
   def zero: B
   def step(b: B, a: A): F[B]
 }

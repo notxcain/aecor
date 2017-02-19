@@ -24,13 +24,13 @@ import com.typesafe.config.Config
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
 import scala.concurrent.duration.{ FiniteDuration, MILLISECONDS, _ }
-import scala.reflect.ClassTag
 import scala.util.Try
 
-class CassandraEventJournalActor[E: PersistentEncoder: ClassTag](cfg: Config)
+class CassandraEventJournalActor[E: PersistentEncoder](cfg: Config)
     extends Actor
     with ActorLogging
     with CassandraStatements {
+
   val config = new CassandraJournalConfig(context.system, cfg.getConfig("cassandra-journal"))
   val serialization = SerializationExtension(context.system)
 
