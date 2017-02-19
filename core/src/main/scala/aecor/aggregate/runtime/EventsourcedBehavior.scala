@@ -6,7 +6,6 @@ import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
 import aecor.aggregate.{ Folder, SnapshotStore, Tagging }
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
-import cats.arrow.FunctionK
 import cats.data.NonEmptyVector
 import cats.implicits._
 import cats.{ Applicative, MonadError, ~> }
@@ -50,40 +49,41 @@ object EventsourcedBehavior {
           )
           .flatMap {
             case Next(recoveredState) =>
-              def withState(state: InternalState[S]): Behavior[Op, F] = {
-                def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] = {
-                  val (events, reply) = opHandler(op).run(state.entityState)
-                  val envelopes = events.zipWithIndex.map {
-                    case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
-                  }
-                  println(envelopes)
-                  if (envelopes.isEmpty) {
-                    (withState(state), reply).pure[F]
-                  } else {
-                    for {
-                      _ <- journal
-                            .append(
-                              instanceIdentity.entityId,
-                              instanceIdentity.instanceId,
-                              NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
-                            )
-                      newState <- state.stepWhilePossible[F, E](events) {
-                                   case (Next(next), continue) =>
-                                     snapshotStore
-                                       .saveSnapshot(instanceIdentity.entityId, next)
-                                       .flatMap(_ => continue(next))
-                                   case _ =>
-                                     s"Illegal fold for [$instanceIdentity]"
-                                       .raiseError[F, InternalState[S]]
+              def withState(state: InternalState[S]): Behavior[Op, F] =
+                Behavior {
+                  Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
+                    val (events, reply) = opHandler(op).run(state.entityState)
+                    val nextBehavior =
+                      if (events.isEmpty) {
+                        withState(state).pure[F]
+                      } else {
+                        val envelopes = events.zipWithIndex.map {
+                          case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
+                        }
+                        for {
+                          _ <- journal
+                                .append(
+                                  instanceIdentity.entityId,
+                                  instanceIdentity.instanceId,
+                                  NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
+                                )
+                          newState <- state.stepWhilePossible[F, E](events) {
+                                       case (Next(next), continue) =>
+                                         snapshotStore
+                                           .saveSnapshot(instanceIdentity.entityId, next)
+                                           .flatMap(_ => continue(next))
+                                       case _ =>
+                                         s"Illegal fold for [$instanceIdentity]"
+                                           .raiseError[F, InternalState[S]]
 
-                                 }
-                    } yield {
-                      (withState(newState), reply)
-                    }
+                                     }
+                        } yield {
+                          withState(newState)
+                        }
+                      }
+                    nextBehavior.map((_, reply))
                   }
                 }
-                Behavior(FunctionK.lift(mk _))
-              }
               withState(recoveredState).pure[F]
             case Impossible =>
               s"Illegal fold for [$instanceIdentity]".raiseError[F, Behavior[Op, F]]
