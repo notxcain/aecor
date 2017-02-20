@@ -34,8 +34,6 @@ object EventsourcedBehavior {
       }
   }
 
-  final case class InstanceIdentity(entityId: String, instanceId: UUID)
-
   def apply[Op[_], S, E, F[_]: MonadError[?[_], String]](
     entityName: String,
     correlation: Correlation[Op],
@@ -48,12 +46,11 @@ object EventsourcedBehavior {
       Behavior {
         new (Op ~> PairT[F, Behavior[Op, F], ?]) {
           override def apply[A](firstOp: Op[A]): PairT[F, Behavior[Op, F], A] = {
-            val instanceIdentity =
-              InstanceIdentity(s"$entityName-${correlation(firstOp)}", instanceId)
-            snapshotStore.loadSnapshot(instanceIdentity.entityId).flatMap { snapshot =>
+            val entityId = s"$entityName-${correlation(firstOp)}"
+            snapshotStore.loadSnapshot(entityId).flatMap { snapshot =>
               journal
                 .fold(
-                  instanceIdentity.entityId,
+                  entityId,
                   snapshot.map(_.version).getOrElse(0L),
                   snapshot.getOrElse(InternalState.zero),
                   (_: InternalState[S]).step(_)
@@ -74,14 +71,14 @@ object EventsourcedBehavior {
                               for {
                                 _ <- journal
                                       .append(
-                                        instanceIdentity.entityId,
-                                        instanceIdentity.instanceId,
+                                        entityId,
+                                        instanceId,
                                         NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
                                       )
                                 newState <- events.foldRec[InternalState[S], F](state, _.step(_)) {
                                              case (Next(next), continue) =>
                                                snapshotStore
-                                                 .saveSnapshot(instanceIdentity.entityId, next)
+                                                 .saveSnapshot(entityId, next)
                                                  .flatMap(_ => continue(next))
                                              case _ =>
                                                s"Illegal fold for [$instanceIdentity]"
