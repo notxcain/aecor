@@ -3,7 +3,6 @@ package aecor.schedule
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.runtime.RuntimeActor.InstanceIdentity
 import aecor.aggregate.runtime.behavior.Behavior
 import aecor.aggregate.runtime.{ EventsourcedBehavior, GenericAkkaRuntime, NoopSnapshotStore }
 import aecor.aggregate.{ CorrelationId, Tagging }
@@ -71,7 +70,7 @@ private[schedule] class ConfiguredSchedule(
     }
 
   private val startAggregate = Reader { _: Unit =>
-    val behavior: UUID => Future[Behavior[ScheduleCommand, Future]] =
+    val behavior: UUID => Behavior[ScheduleCommand, Future] =
       EventsourcedBehavior(
         entityName,
         DefaultScheduleAggregate.correlation,

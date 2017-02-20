@@ -3,7 +3,6 @@ package aecor.aggregate.runtime
 import java.util.UUID
 
 import aecor.aggregate.runtime.EventJournal.EventEnvelope
-import aecor.aggregate.runtime.RuntimeActor.InstanceIdentity
 import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
 import aecor.aggregate.{ Correlation, Folder, SnapshotStore, Tagging }
 import aecor.data.Folded.{ Impossible, Next }
@@ -81,7 +80,7 @@ object EventsourcedBehavior {
                                                  .saveSnapshot(entityId, next)
                                                  .flatMap(_ => continue(next))
                                              case _ =>
-                                               s"Illegal fold for [$instanceIdentity]"
+                                               s"Illegal fold for [$entityId]"
                                                  .raiseError[F, InternalState[S]]
 
                                            }
@@ -94,7 +93,7 @@ object EventsourcedBehavior {
                       }
                     withState(recoveredState).pure[F]
                   case Impossible =>
-                    s"Illegal fold for [$instanceIdentity]".raiseError[F, Behavior[Op, F]]
+                    s"Illegal fold for [$entityId]".raiseError[F, Behavior[Op, F]]
                 }
                 .flatMap { behavior =>
                   behavior.run(firstOp)

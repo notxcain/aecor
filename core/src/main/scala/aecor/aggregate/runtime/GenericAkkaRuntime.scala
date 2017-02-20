@@ -21,7 +21,7 @@ object GenericAkkaRuntime {
 class GenericAkkaRuntime(system: ActorSystem) {
   def start[Op[_], F[_]: Async: Functor](entityName: String,
                                          correlation: Correlation[Op],
-                                         loadBehavior: UUID => F[Behavior[Op, F]],
+                                         loadBehavior: UUID => Behavior[Op, F],
                                          settings: AkkaRuntimeSettings =
                                            AkkaRuntimeSettings.default(system)): Op ~> F = {
     val props = RuntimeActor.props(loadBehavior, settings.idleTimeout)
