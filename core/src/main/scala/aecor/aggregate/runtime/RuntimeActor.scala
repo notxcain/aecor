@@ -3,6 +3,7 @@ package aecor.aggregate.runtime
 import java.util.UUID
 
 import aecor.aggregate.runtime.Async.ops._
+import aecor.aggregate.runtime.RuntimeActor.PerformOp
 import aecor.aggregate.runtime.behavior.Behavior
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
@@ -13,17 +14,17 @@ import cats.implicits._
 import scala.concurrent.duration.FiniteDuration
 
 object RuntimeActor {
-  def props[F[_]: Async: Functor, Op[_]](behaviorForInstanceId: UUID => Behavior[Op, F],
+  def props[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
                                          idleTimeout: FiniteDuration): Props =
-    Props(new RuntimeActor(behaviorForInstanceId, idleTimeout))
+    Props(new RuntimeActor(behavior, idleTimeout))
 
+  final case class PerformOp[Op[_], A](op: Op[A])
   case object Stop
 }
 
-final class RuntimeActor[Op[_], F[_]: Async: Functor](
-  behaviorForInstanceId: UUID => Behavior[Op, F],
-  idleTimeout: FiniteDuration
-) extends Actor
+final class RuntimeActor[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
+                                                      idleTimeout: FiniteDuration)
+    extends Actor
     with Stash
     with ActorLogging {
 
@@ -35,19 +36,19 @@ final class RuntimeActor[Op[_], F[_]: Async: Functor](
 
   setIdleTimeout()
 
-  override def receive: Receive = active(behaviorForInstanceId(instanceId))
+  override def receive: Receive = withBehavior(behavior)
 
-  private def active(behavior: Behavior[Op, F]): Receive = receivePassivationMessages.orElse {
-    case op =>
+  private def withBehavior(behavior: Behavior[Op, F]): Receive = {
+    case PerformOp(op) =>
       behavior
         .run(op.asInstanceOf[Op[Any]])
         .map(x => Result(x._1, x._2))
-        .run
+        .unsafeRun
         .pipeTo(self)(sender)
       become {
         case Result(newBehavior, reply) =>
           sender() ! reply
-          become(active(newBehavior))
+          become(withBehavior(newBehavior))
           unstashAll()
         case failure @ Status.Failure(cause) =>
           sender() ! failure
@@ -55,6 +56,10 @@ final class RuntimeActor[Op[_], F[_]: Async: Functor](
         case _ =>
           stash()
       }
+    case ReceiveTimeout =>
+      passivate()
+    case RuntimeActor.Stop =>
+      context.stop(self)
   }
 
   private def receivePassivationMessages: Receive = {

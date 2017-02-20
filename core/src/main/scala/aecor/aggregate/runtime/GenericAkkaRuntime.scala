@@ -1,7 +1,5 @@
 package aecor.aggregate.runtime
 
-import java.util.UUID
-
 import aecor.aggregate._
 import aecor.aggregate.runtime.GenericAkkaRuntime.HandleCommand
 import aecor.aggregate.runtime.behavior.Behavior
@@ -21,10 +19,10 @@ object GenericAkkaRuntime {
 class GenericAkkaRuntime(system: ActorSystem) {
   def start[Op[_], F[_]: Async: Functor](entityName: String,
                                          correlation: Correlation[Op],
-                                         loadBehavior: UUID => Behavior[Op, F],
+                                         behavior: Behavior[Op, F],
                                          settings: AkkaRuntimeSettings =
                                            AkkaRuntimeSettings.default(system)): Op ~> F = {
-    val props = RuntimeActor.props(loadBehavior, settings.idleTimeout)
+    val props = RuntimeActor.props(behavior, settings.idleTimeout)
 
     def extractEntityId: ShardRegion.ExtractEntityId = {
       case HandleCommand(entityId, c) =>

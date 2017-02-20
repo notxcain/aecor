@@ -22,14 +22,14 @@ object EventsourcedBehavior {
     def zero[F[_], S](implicit S: Folder[F, _, S]): InternalState[S] = InternalState(S.zero, 0)
   }
 
-  implicit class FoldOps[E](as: Seq[E]) {
+  implicit class FoldOps[E](val self: Seq[E]) extends AnyVal {
     def foldRec[S, F[_]: Applicative](zero: S, step: (S, E) => Folded[S])(
       rec: (Folded[S], S => F[S]) => F[S]
     ): F[S] =
-      if (as.isEmpty) {
+      if (self.isEmpty) {
         zero.pure[F]
       } else {
-        rec(step(zero, as.head), x => as.tail.foldRec(x, step)(rec))
+        rec(step(zero, self.head), x => self.tail.foldRec(x, step)(rec))
       }
   }
 
@@ -39,66 +39,65 @@ object EventsourcedBehavior {
     opHandler: Op ~> Handler[S, E, ?],
     tagging: Tagging[E],
     journal: EventJournal[E, F],
-    snapshotStore: SnapshotStore[S, F]
-  )(implicit S: Folder[Folded, E, S]): UUID => Behavior[Op, F] =
-    instanceId =>
-      Behavior {
-        λ[Op ~> PairT[F, Behavior[Op, F], ?]] { firstOp =>
-          for {
-            entityId <- s"$entityName-${correlation(firstOp)}".pure[F]
-            snapshot <- snapshotStore.loadSnapshot(entityId)
-            recoveredState <- journal
-                               .fold(
-                                 entityId,
-                                 snapshot.map(_.version).getOrElse(0L),
-                                 snapshot.getOrElse(InternalState.zero),
-                                 (_: InternalState[S]).step(_)
-                               )
-                               .flatMap {
-                                 case Next(x) => x.pure[F]
-                                 case Impossible =>
-                                   s"Illegal fold for [$entityId]".raiseError[F, InternalState[S]]
-                               }
-            behavior = {
-              def mkBehavior(state: InternalState[S]): Behavior[Op, F] =
-                Behavior {
-                  λ[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
-                    val (events, reply) = opHandler(op).run(state.entityState)
-                    val nextBehavior =
-                      if (events.isEmpty) {
-                        mkBehavior(state).pure[F]
-                      } else {
-                        val envelopes = events.zipWithIndex.map {
-                          case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
-                        }
-                        for {
-                          _ <- journal
-                                .append(
-                                  entityId,
-                                  instanceId,
-                                  NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
-                                )
-                          newState <- events.foldRec[InternalState[S], F](state, _.step(_)) {
-                                       case (Next(next), continue) =>
-                                         snapshotStore
-                                           .saveSnapshot(entityId, next)
-                                           .flatMap(_ => continue(next))
-                                       case _ =>
-                                         s"Illegal fold for [$entityId]"
-                                           .raiseError[F, InternalState[S]]
+    snapshotStore: SnapshotStore[S, F],
+    generateInstanceId: () => F[UUID]
+  )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] =
+    Behavior {
+      λ[Op ~> PairT[F, Behavior[Op, F], ?]] { firstOp =>
+        for {
+          instanceId <- generateInstanceId()
+          entityId <- s"$entityName-${correlation(firstOp)}".pure[F]
+          snapshot <- snapshotStore.loadSnapshot(entityId)
+          recoveredState <- journal
+                             .fold(
+                               entityId,
+                               snapshot.map(_.version).getOrElse(0L),
+                               snapshot.getOrElse(InternalState.zero),
+                               (_: InternalState[S]).step(_)
+                             )
+                             .flatMap {
+                               case Next(x) => x.pure[F]
+                               case Impossible =>
+                                 s"Illegal fold for [$entityId]".raiseError[F, InternalState[S]]
+                             }
+          behavior = {
+            def mkBehavior(state: InternalState[S]): Behavior[Op, F] =
+              Behavior {
+                λ[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
+                  val (events, reply) = opHandler(op).run(state.entityState)
+                  if (events.isEmpty) {
+                    (mkBehavior(state), reply).pure[F]
+                  } else {
+                    val envelopes = events.zipWithIndex.map {
+                      case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
+                    }
+                    for {
+                      _ <- journal
+                            .append(
+                              entityId,
+                              instanceId,
+                              NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
+                            )
+                      newState <- events.foldRec[InternalState[S], F](state, _.step(_)) {
+                                   case (Next(next), continue) =>
+                                     snapshotStore
+                                       .saveSnapshot(entityId, next)
+                                       .flatMap(_ => continue(next))
+                                   case _ =>
+                                     s"Illegal fold for [$entityId]"
+                                       .raiseError[F, InternalState[S]]
 
-                                     }
-                        } yield {
-                          mkBehavior(newState)
-                        }
-                      }
-                    nextBehavior.map((_, reply))
+                                 }
+                    } yield {
+                      (mkBehavior(newState), reply)
+                    }
                   }
                 }
-              mkBehavior(recoveredState)
-            }
-            result <- behavior.run(firstOp)
-          } yield result
-        }
+              }
+            mkBehavior(recoveredState)
+          }
+          result <- behavior.run(firstOp)
+        } yield result
+      }
     }
 }

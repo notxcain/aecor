@@ -70,14 +70,15 @@ private[schedule] class ConfiguredSchedule(
     }
 
   private val startAggregate = Reader { _: Unit =>
-    val behavior: UUID => Behavior[ScheduleCommand, Future] =
+    val behavior: Behavior[ScheduleCommand, Future] =
       EventsourcedBehavior(
         entityName,
         DefaultScheduleAggregate.correlation,
         DefaultScheduleAggregate(clock).asFunctionK,
         Tagging(eventTag),
         CassandraEventJournal[ScheduleEvent, Future](system, 8),
-        NoopSnapshotStore[ScheduleState, Future]
+        NoopSnapshotStore[ScheduleState, Future],
+        () => Future.successful(UUID.randomUUID())
       )
     ScheduleAggregate.fromFunctionK(
       runtime.start(entityName, DefaultScheduleAggregate.correlation, behavior)

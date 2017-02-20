@@ -18,6 +18,7 @@ import akka.persistence.query.PersistenceQuery
 import akka.stream.Materializer
 import akka.util.Timeout
 import cats.data.NonEmptyVector
+import Async.ops._
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -36,38 +37,35 @@ class CassandraEventJournal[E: PersistentEncoder: PersistentDecoder, F[_]: Async
   override def append(id: String,
                       instanceId: UUID,
                       events: NonEmptyVector[EventEnvelope[E]]): F[Unit] =
-    Async[F].capture {
-      (actor ? CassandraEventJournalActor.WriteMessages(id, events, instanceId)).mapTo[Unit]
-    }
+    (actor ? CassandraEventJournalActor.WriteMessages(id, events, instanceId)).mapTo[Unit].capture
 
   override def fold[S](id: String,
                        offset: Long,
                        zero: S,
                        step: (S, E) => Folded[S]): F[Folded[S]] =
-    Async[F].capture {
-      readJournal
-        .currentEventsByPersistenceId(id, offset, Long.MaxValue)
-        .scan((0, Option.empty[akka.persistence.query.EventEnvelope])) {
-          case ((idx, _), e) =>
-            if (e.sequenceNr == idx + 1) {
-              (idx + 1, Some(e))
-            } else {
-              (idx, None)
-            }
-        }
-        .collect {
-          case (_, Some(x)) => x
-        }
-        .mapAsync(decodingParallelism) {
-          case akka.persistence.query.EventEnvelope(_, _, _, event: PersistentRepr) =>
-            PersistentDecoder[E].decode(event).fold(Future.failed, Future.successful)
-          case other =>
-            Future.failed(DecodingFailure(s"Unexpected underlying type ${other.event}"))
-        }
-        .runFold(Folded.next(zero)) { (s, e) =>
-          s.flatMap(step(_, e))
-        }
-    }
+    readJournal
+      .currentEventsByPersistenceId(id, offset, Long.MaxValue)
+      .scan((0, Option.empty[akka.persistence.query.EventEnvelope])) {
+        case ((idx, _), e) =>
+          if (e.sequenceNr == idx + 1) {
+            (idx + 1, Some(e))
+          } else {
+            (idx, None)
+          }
+      }
+      .collect {
+        case (_, Some(x)) => x
+      }
+      .mapAsync(decodingParallelism) {
+        case akka.persistence.query.EventEnvelope(_, _, _, event: PersistentRepr) =>
+          PersistentDecoder[E].decode(event).fold(Future.failed, Future.successful)
+        case other =>
+          Future.failed(DecodingFailure(s"Unexpected underlying type ${other.event}"))
+      }
+      .runFold(Folded.next(zero)) { (s, e) =>
+        s.flatMap(step(_, e))
+      }
+      .capture
 
 }
 
