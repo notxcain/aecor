@@ -78,7 +78,7 @@ object EventsourcedBehavior {
                               instanceId,
                               NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
                             )
-                      newState <- events.foldRec[InternalState[S], F](state, _.step(_)) {
+                      newState <- events.foldRec[InternalState[S], F](state, _ step _) {
                                    case (Next(next), continue) =>
                                      snapshotStore
                                        .saveSnapshot(entityId, next)

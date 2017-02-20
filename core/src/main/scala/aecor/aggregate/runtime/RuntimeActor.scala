@@ -32,8 +32,6 @@ final class RuntimeActor[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
 
   private final case class Result(behavior: Behavior[Op, F], reply: Any)
 
-  private val instanceId = UUID.randomUUID
-
   setIdleTimeout()
 
   override def receive: Receive = withBehavior(behavior)
@@ -56,13 +54,6 @@ final class RuntimeActor[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
         case _ =>
           stash()
       }
-    case ReceiveTimeout =>
-      passivate()
-    case RuntimeActor.Stop =>
-      context.stop(self)
-  }
-
-  private def receivePassivationMessages: Receive = {
     case ReceiveTimeout =>
       passivate()
     case RuntimeActor.Stop =>

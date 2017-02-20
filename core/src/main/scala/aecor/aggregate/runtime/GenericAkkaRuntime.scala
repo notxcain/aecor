@@ -8,6 +8,7 @@ import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
 import cats.{ Functor, ~> }
+import Async.ops._
 
 import scala.concurrent.Future
 
@@ -26,7 +27,7 @@ class GenericAkkaRuntime(system: ActorSystem) {
 
     def extractEntityId: ShardRegion.ExtractEntityId = {
       case HandleCommand(entityId, c) =>
-        (entityId, c)
+        (entityId, RuntimeActor.PerformOp(c.asInstanceOf[Op[_]]))
     }
 
     val numberOfShards = settings.numberOfShards
@@ -47,9 +48,8 @@ class GenericAkkaRuntime(system: ActorSystem) {
     new (Op ~> F) {
       implicit private val timeout = Timeout(settings.askTimeout)
       override def apply[A](fa: Op[A]): F[A] =
-        Async[F].capture(
-          (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
-        )
+        (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]].capture
+
     }
   }
 }
