@@ -62,7 +62,7 @@ object EventsourcedBehavior {
             behavior = {
               def mkBehavior(state: InternalState[S]): Behavior[Op, F] =
                 Behavior {
-                  Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
+                  λ[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
                     val (events, reply) = opHandler(op).run(state.entityState)
                     val nextBehavior =
                       if (events.isEmpty) {
