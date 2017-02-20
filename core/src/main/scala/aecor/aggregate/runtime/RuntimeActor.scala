@@ -1,7 +1,5 @@
 package aecor.aggregate.runtime
 
-import java.util.UUID
-
 import aecor.aggregate.runtime.Async.ops._
 import aecor.aggregate.runtime.RuntimeActor.PerformOp
 import aecor.aggregate.runtime.behavior.Behavior
