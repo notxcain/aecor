@@ -6,12 +6,12 @@ import java.util.UUID
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
 import akka.Done
-import akka.actor.ActorSystem
+import akka.actor.{ ActorSystem }
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
-import akka.stream.ActorMaterializer
+import akka.stream.{ ActorMaterializer }
 import akka.stream.scaladsl.{ Sink, Source }
 import cats.data.Reader
 
@@ -47,7 +47,7 @@ object ScheduleApp extends App {
       clock = clock,
       dayZero = LocalDate.of(2016, 5, 10),
       bucketLength = 1.day,
-      refreshInterval = 1.second,
+      refreshInterval = 100.millis,
       eventualConsistencyDelay = 5.seconds,
       repository = scheduleEntryRepository,
       aggregateJournal = CassandraAggregateJournal(system),
@@ -57,8 +57,7 @@ object ScheduleApp extends App {
   def runAdder(schedule: Schedule): Reader[Unit, Any] =
     Reader { _ =>
       Source
-        .tick(0.seconds, 2.seconds, ())
-        .take(1)
+        .tick(0.seconds, 200.millis, ())
         .mapAsync(1) { _ =>
           schedule.addScheduleEntry(
             "Test",
@@ -84,9 +83,9 @@ object ScheduleApp extends App {
   val app: Reader[Unit, Unit] =
     for {
       schedule <- runSchedule
-//      _ <- runAdder(schedule)
+      _ <- runAdder(schedule)
 //      _ <- runRepositoryScanStream
-      _ <- runEventWatch(schedule)
+//      _ <- runEventWatch(schedule)
     } yield ()
 
   app.run(())
