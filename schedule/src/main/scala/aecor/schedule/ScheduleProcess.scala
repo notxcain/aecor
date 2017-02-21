@@ -5,17 +5,14 @@ import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 import aecor.data.EventTag
-import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.streaming.StreamSupervisor.StreamKillSwitch
 import aecor.streaming._
-import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
 import cats.data.Reader
 import com.datastax.driver.core.utils.UUIDs
-
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import cats.instances.future._
@@ -42,6 +39,29 @@ private[schedule] class ScheduleProcess(
 
   private val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
 
+  private def source =
+    Source
+      .single(())
+      .mapAsync(1)(_ => offsetStore.getOffset(scheduleEntriesTag, consumerId))
+      .map {
+        case Some(offset) =>
+          LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(offset)), clock.getZone)
+        case None =>
+          dayZero.atStartOfDay()
+      }
+      .mapAsync(1)(runProcessCycle)
+
+  private def runProcessCycle(from: LocalDateTime): Future[Unit] =
+    for {
+      updatedCounter <- updateRepository
+      _ = log.debug(s"Schedule entries view updated, new entries = [$updatedCounter]")
+      now = LocalDateTime.now(clock)
+      _ <- fireEntries(from, now)
+      _ <- afterRefreshInterval {
+            runProcessCycle(now.minus(eventualConsistencyDelay.toMillis, ChronoUnit.MILLIS))
+          }
+    } yield ()
+
   private def updateRepository: Future[Int] =
     aggregateJournal
       .committableCurrentEventsByTag(offsetStore, eventTag, consumerId)
@@ -54,58 +74,38 @@ private[schedule] class ScheduleProcess(
         case ScheduleEntryFired(scheduleName, scheduleBucket, entryId, _, _) =>
           repository.markScheduleEntryAsFired(scheduleName, scheduleBucket, entryId).map(_ => 0)
       })
+      .fold(Committable.pure(0)) { (acc, x) =>
+        x.copy(value = acc.value + x.value)
+      }
       .mapAsync(1)(x => x.commit().map(_ => x.value))
-      .runWith(Sink.fold(0)(_ + _))
+      .runWith(Sink.head)
 
-  private def source =
+  private def fireEntries(from: LocalDateTime, to: LocalDateTime) =
+    repository
+      .getEntries(from, to)
+      .map { entry =>
+        val offset = UUIDs.startOf(entry.dueDate.atZone(clock.getZone).toInstant.toEpochMilli)
+        Committable(() => offsetStore.setOffset(scheduleEntriesTag, consumerId, offset), entry)
+      }
+      .mapAsync(parallelism)(_.traverse { entry =>
+        if (entry.fired)
+          Future.successful(())
+        else
+          scheduleAggregate.fireEntry(entry.scheduleName, entry.scheduleBucket, entry.entryId)
+      })
+      .mapAsync(1)(_.commit())
+      .runWith(Sink.ignore)
+
+  private def afterRefreshInterval[A](f: => Future[A]): Future[A] =
     Source
-      .single(())
-      .mapAsync(1)(_ => offsetStore.getOffset(scheduleEntriesTag, consumerId))
-      .map {
-        case Some(offset) =>
-          LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(offset)), clock.getZone)
-        case None =>
-          dayZero.atStartOfDay()
-      }
-      .flatMapConcat(entriesFrom)
-
-  private def entriesFrom(from: LocalDateTime): Source[Committable[ScheduleEntry], NotUsed] =
-    Source
-      .single(())
-      .mapAsync(1) { _ =>
-        updateRepository
-      }
-      .flatMapConcat { updatedCounter =>
-        log.debug(s"Schedule entries view updated, new entries = [$updatedCounter]")
-        val now = LocalDateTime.now(clock)
-        repository
-          .getEntries(from, now)
-          .map { entry =>
-            val offset = UUIDs.startOf(entry.dueDate.atZone(clock.getZone).toInstant.toEpochMilli)
-            Committable(() => offsetStore.setOffset(scheduleEntriesTag, consumerId, offset), entry)
-          }
-          .concat(
-            Source
-              .tick(refreshInterval, refreshInterval, ())
-              .take(1)
-              .flatMapConcat { _ =>
-                entriesFrom(now.minus(eventualConsistencyDelay.toMillis, ChronoUnit.MILLIS))
-              }
-          )
-      }
-
-  private val fireDueEntries = Flow[Committable[ScheduleEntry]]
-    .mapAsync(parallelism)(_.traverse { entry =>
-      if (entry.fired)
-        Future.successful(())
-      else
-        scheduleAggregate.fireEntry(entry.scheduleName, entry.scheduleBucket, entry.entryId)
-    })
-    .mapAsync(1)(_.commit())
+      .tick(refreshInterval, refreshInterval, ())
+      .take(1)
+      .mapAsync(1)(_ => f)
+      .runWith(Sink.head)
 
   def run(system: ActorSystem): Reader[Unit, StreamKillSwitch] = Reader { _ =>
     StreamSupervisor(system)
-      .startClusterSingleton(s"$entityName-Process", source, fireDueEntries)
+      .startClusterSingleton(s"$entityName-Process", source, Flow[Unit])
   }
 }
 

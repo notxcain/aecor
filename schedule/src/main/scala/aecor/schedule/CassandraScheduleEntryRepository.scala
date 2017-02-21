@@ -83,6 +83,7 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
       )
       .flatMapConcat(cassandraSession.select)
       .map(fromRow)
+      .named(s"getBucket($timeBucket, $from, $to)")
 
   override def getEntries(
     from: LocalDateTime,
@@ -104,7 +105,7 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
           }
         }
       }
-      rec(TimeBucket(from.toLocalDate))
+      rec(TimeBucket(from.toLocalDate)).named(s"getEntries($from, $to)")
     }
 
   private def fromRow(row: Row): ScheduleEntry =
