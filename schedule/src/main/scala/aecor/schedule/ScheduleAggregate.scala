@@ -79,7 +79,9 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[S
   }
 }
 
-private[schedule] object ScheduleState {
+private[aecor] object ScheduleState {
+
+  def initial: ScheduleState = ScheduleState(List.empty, Set.empty)
 
   case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
 
@@ -122,7 +124,7 @@ private[schedule] object ScheduleAggregate {
     }
 }
 
-private[schedule] object DefaultScheduleAggregate {
+private[aecor] object DefaultScheduleAggregate {
 
   def apply(clock: Clock): ScheduleAggregate[Handler[ScheduleState, ScheduleEvent, ?]] =
     new DefaultScheduleAggregate(clock)
