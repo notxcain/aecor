@@ -7,9 +7,11 @@ import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
 import aecor.aggregate.{ Correlation, Folder, SnapshotStore, Tagging }
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
-import cats.data.NonEmptyVector
+import akka.cluster.sharding.ShardRegion.EntityId
+import cats.arrow.FunctionK
+import cats.data.{ EitherT, NonEmptyVector }
 import cats.implicits._
-import cats.{ Applicative, MonadError, ~> }
+import cats.{ Applicative, Functor, MonadError, ~> }
 
 import scala.collection.immutable.Seq
 
@@ -41,12 +43,51 @@ object EventsourcedBehavior {
     journal: EventJournal[E, F],
     snapshotStore: SnapshotStore[S, F],
     generateInstanceId: () => F[UUID]
-  )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] =
+  )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] = {
+    def mkBehavior(entityId: EntityId,
+                   instanceId: UUID,
+                   stateZero: InternalState[S]): Behavior[Op, F] = {
+      def rec(state: InternalState[S]): Behavior[Op, F] =
+        Behavior {
+          def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] = {
+            val (events, reply) = opHandler(op).run(state.entityState)
+            if (events.isEmpty) {
+              (rec(state), reply).pure[F]
+            } else {
+              val envelopes = events.zipWithIndex.map {
+                case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
+              }
+              for {
+                _ <- journal
+                      .append(
+                        entityId,
+                        instanceId,
+                        NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
+                      )
+                newState <- events.foldRec[InternalState[S], F](state, _ step _) {
+                             case (Next(next), continue) =>
+                               snapshotStore
+                                 .saveSnapshot(entityId, next)
+                                 .flatMap(_ => continue(next))
+                             case _ =>
+                               s"Illegal fold for [$entityId]"
+                                 .raiseError[F, InternalState[S]]
+
+                           }
+              } yield {
+                (rec(newState), reply)
+              }
+            }
+          }
+          FunctionK.lift(mk _)
+        }
+      rec(stateZero)
+    }
     Behavior {
-      λ[Op ~> PairT[F, Behavior[Op, F], ?]] { firstOp =>
+      def mk[A](firstOp: Op[A]): PairT[F, Behavior[Op, F], A] =
         for {
           instanceId <- generateInstanceId()
-          entityId <- s"$entityName-${correlation(firstOp)}".pure[F]
+          entityId = s"$entityName-${correlation(firstOp)}"
           snapshot <- snapshotStore.loadSnapshot(entityId)
           recoveredState <- journal
                              .fold(
@@ -60,44 +101,10 @@ object EventsourcedBehavior {
                                case Impossible =>
                                  s"Illegal fold for [$entityId]".raiseError[F, InternalState[S]]
                              }
-          behavior = {
-            def mkBehavior(state: InternalState[S]): Behavior[Op, F] =
-              Behavior {
-                λ[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
-                  val (events, reply) = opHandler(op).run(state.entityState)
-                  if (events.isEmpty) {
-                    (mkBehavior(state), reply).pure[F]
-                  } else {
-                    val envelopes = events.zipWithIndex.map {
-                      case (e, idx) => EventEnvelope(state.version + idx, e, tagging(e))
-                    }
-                    for {
-                      _ <- journal
-                            .append(
-                              entityId,
-                              instanceId,
-                              NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
-                            )
-                      newState <- events.foldRec[InternalState[S], F](state, _ step _) {
-                                   case (Next(next), continue) =>
-                                     snapshotStore
-                                       .saveSnapshot(entityId, next)
-                                       .flatMap(_ => continue(next))
-                                   case _ =>
-                                     s"Illegal fold for [$entityId]"
-                                       .raiseError[F, InternalState[S]]
-
-                                 }
-                    } yield {
-                      (mkBehavior(newState), reply)
-                    }
-                  }
-                }
-              }
-            mkBehavior(recoveredState)
-          }
+          behavior = mkBehavior(entityId, instanceId, recoveredState)
           result <- behavior.run(firstOp)
         } yield result
-      }
+      FunctionK.lift[Op, PairT[F, Behavior[Op, F], ?]](mk _)
     }
+  }
 }

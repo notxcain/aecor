@@ -24,7 +24,7 @@ import com.typesafe.config.Config
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
 import scala.concurrent.duration.{ FiniteDuration, MILLISECONDS, _ }
-import scala.util.Try
+import scala.util.{ Success, Try }
 
 class CassandraEventJournalActor[E: PersistentEncoder](cfg: Config)
     extends Actor
@@ -135,21 +135,20 @@ class CassandraEventJournalActor[E: PersistentEncoder](cfg: Config)
         }
       )
 
-    def publishTagNotification(serialized: SerializedAtomicWrite, result: Future[_]): Unit =
+    def publishTagNotification(serialized: SerializedAtomicWrite): Unit =
       if (pubsub.isDefined) {
-        result.foreach { _ =>
-          for {
-            p <- pubsub
-            tag: String <- serialized.payload.map(_.tags).flatten.toSet
-          } {
-            p ! DistributedPubSubMediator.Publish("akka.persistence.cassandra.journal.tag", tag)
-          }
+        for {
+          p <- pubsub
+          tag: String <- serialized.payload.map(_.tags).flatten.toSet
+        } {
+          p ! DistributedPubSubMediator.Publish("akka.persistence.cassandra.journal.tag", tag)
         }
       }
 
-    val result = writeMessages(serialized)
-    publishTagNotification(serialized, result)
-    result
+    writeMessages(serialized).andThen {
+      case Success(_) =>
+        publishTagNotification(serialized)
+    }
   }
 
   private def writeMessages(atomicWrites: SerializedAtomicWrite): Future[Unit] = {
