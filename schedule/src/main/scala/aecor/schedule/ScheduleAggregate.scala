@@ -143,7 +143,6 @@ private[schedule] object DefaultScheduleAggregate {
 private[schedule] class DefaultScheduleAggregate(clock: Clock)
     extends ScheduleAggregate[Handler[ScheduleState, ScheduleEvent, ?]] {
 
-  private val now = LocalDateTime.now(clock)
   private def timestamp = clock.instant()
 
   override def addScheduleEntry(
@@ -157,6 +156,7 @@ private[schedule] class DefaultScheduleAggregate(clock: Clock)
       if (state.ids.contains(entryId)) {
         Vector.empty -> (())
       } else {
+        val now = LocalDateTime.now(clock)
         val fired = if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
           Vector(
             ScheduleEntryFired(scheduleName, scheduleBucket, entryId, correlationId, timestamp)
