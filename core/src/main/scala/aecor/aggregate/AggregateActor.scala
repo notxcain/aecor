@@ -8,7 +8,7 @@ import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
 import aecor.data.{ Folded, Handler }
-import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
+import akka.actor.{ ActorLogging, Props, ReceiveTimeout }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
