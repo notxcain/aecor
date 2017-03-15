@@ -2,7 +2,7 @@ package aecor.data
 
 import aecor.data.Folded.{ Impossible, Next }
 
-sealed abstract class Folded[+A] {
+sealed abstract class Folded[+A] extends Product with Serializable {
   def fold[B](impossible: => B, next: A => B): B = this match {
     case Impossible => impossible
     case Next(a) => next(a)

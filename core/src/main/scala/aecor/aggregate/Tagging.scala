@@ -2,7 +2,7 @@ package aecor.aggregate
 
 import aecor.data.EventTag
 
-sealed trait Tagging[A] {
+sealed abstract class Tagging[A] extends Product with Serializable {
   def apply(e: A): Set[String]
 }
 
