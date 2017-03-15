@@ -8,7 +8,6 @@ import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
 import aecor.data.{ Folded, Handler }
-import akka.NotUsed
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
@@ -87,6 +86,9 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   }
 
+  private val eventEncoder = PersistentEncoder[Event]
+  private val eventDecoder = PersistentDecoder[Event]
+
   final override val persistenceId: String = s"$entityName-$entityId"
 
   private val recoveryStartTimestamp: Instant = Instant.now()
@@ -99,7 +101,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   final override def receiveRecover: Receive = {
     case repr: PersistentRepr =>
-      PersistentDecoder[Event].decode(repr) match {
+      eventDecoder.decode(repr) match {
         case Left(cause) =>
           onRecoveryFailure(cause, Some(repr))
         case Right(event) =>
@@ -145,18 +147,18 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       reply,
       events
     )
+
     val envelopes =
-      events.map(e => Tagged(PersistentEncoder[Event].encode(e), tagger(e)))
+      events.map(e => Tagged(eventEncoder.encode(e), tagger(e)))
 
-    persistAll(envelopes)(_ => ())
-
-    deferAsync(NotUsed) { _ =>
-      events.foreach { event =>
-        applyEvent(event)
-        snapshotIfNeeded()
-      }
-      sender() ! reply
+    var unpersistedEvents = events
+    persistAll(envelopes) { _ =>
+      val event = unpersistedEvents.head
+      applyEvent(event)
+      snapshotIfNeeded()
+      unpersistedEvents = unpersistedEvents.tail
     }
+    deferAsync(())(_ => sender() ! reply)
   }
 
   private def snapshotIfNeeded(): Unit =
@@ -176,7 +178,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       }
     eventCount += 1
     if (recoveryFinished)
-      log.debug("[{}] State [{}]", persistenceId, state)
+      log.debug("[{}] Current state [{}]", persistenceId, state)
   }
 
   private def receivePassivationMessages: Receive = {
