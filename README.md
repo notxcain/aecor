@@ -20,7 +20,7 @@ To start using Aecor Runtime add the following to your `build.sbt` file:
 
 ```scala
 scalaOrganization := "org.typelevel"
-libraryDependencies += "io.aecor" %% "aecor-core" % "0.14.3"
+libraryDependencies += "io.aecor" %% "aecor-core" % "0.14.4"
 scalacOptions += "-Ypartial-unification"
 ```
 

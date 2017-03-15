@@ -1,4 +1,5 @@
 import ReleaseTransformations._
+import sbtrelease.Version.Bump
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
@@ -149,6 +150,7 @@ lazy val noPublishSettings = Seq(publish := (), publishLocal := (), publishArtif
 
 lazy val publishSettings = Seq(
   releaseCrossBuild := true,
+  releaseVersionBump := Bump.Major,
   releaseCommitMessage := s"Set version to ${if (releaseUseGlobalVersion.value) (version in ThisBuild).value
   else version.value}",
   releaseIgnoreUntrackedFiles := true,
