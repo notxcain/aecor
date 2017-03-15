@@ -148,6 +148,7 @@ lazy val warnUnusedImport = Seq(scalacOptions in (Compile, console) ~= {
 lazy val noPublishSettings = Seq(publish := (), publishLocal := (), publishArtifact := false)
 
 lazy val publishSettings = Seq(
+  releaseCrossBuild := true,
   releaseCommitMessage := s"Set version to ${if (releaseUseGlobalVersion.value) (version in ThisBuild).value
   else version.value}",
   releaseIgnoreUntrackedFiles := true,
