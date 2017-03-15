@@ -4,12 +4,12 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
+import aecor.aggregate.AggregateActor.HandleCommand
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
 import aecor.data.{ Folded, Handler }
-import akka.NotUsed
-import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash }
+import akka.actor.{ ActorLogging, Props, ReceiveTimeout }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
@@ -56,6 +56,7 @@ object AggregateActor {
   )(implicit folder: Folder[Folded, Event, State]): Props =
     Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagging, idleTimeout))
 
+  case class HandleCommand[C[_], A](command: C[A])
   case object Stop
 }
 
@@ -78,7 +79,6 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   idleTimeout: FiniteDuration
 )(implicit folder: Folder[Folded, Event, State])
     extends PersistentActor
-    with Stash
     with ActorLogging {
 
   final private val entityId: String = identity match {
@@ -86,6 +86,9 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
     case Identity.FromPathName =>
       URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
   }
+
+  private val eventEncoder = PersistentEncoder[Event]
+  private val eventDecoder = PersistentDecoder[Event]
 
   final override val persistenceId: String = s"$entityName-$entityId"
 
@@ -96,14 +99,16 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   protected var state: State = folder.zero
 
   private var eventCount = 0L
+  private var snapshotPending = false
 
   final override def receiveRecover: Receive = {
     case repr: PersistentRepr =>
-      PersistentDecoder[Event].decode(repr) match {
+      eventDecoder.decode(repr) match {
         case Left(cause) =>
           onRecoveryFailure(cause, Some(repr))
         case Right(event) =>
           applyEvent(event)
+          eventCount += 1
       }
 
     case SnapshotOffer(_, snapshotRepr: PersistentRepr) =>
@@ -128,12 +133,13 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       setIdleTimeout()
   }
 
-  final override def receiveCommand: Receive =
-    receivePassivationMessages.orElse(receiveCommandMessage)
-
-  private def receiveCommandMessage: Receive = {
-    case command =>
+  final override def receiveCommand: Receive = {
+    case HandleCommand(command) =>
       handleCommand(command.asInstanceOf[Command[_]])
+    case ReceiveTimeout =>
+      passivate()
+    case AggregateActor.Stop =>
+      context.stop(self)
   }
 
   private def handleCommand(command: Command[_]): Unit = {
@@ -145,52 +151,62 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       reply,
       events
     )
-    val envelopes =
-      events.map(e => Tagged(PersistentEncoder[Event].encode(e), tagger(e)))
-
-    persistAll(envelopes)(_ => ())
-
-    deferAsync(NotUsed) { _ =>
-      events.foreach { event =>
-        applyEvent(event)
-        snapshotIfNeeded()
-      }
+    if (events.isEmpty) {
       sender() ! reply
+    } else {
+      val envelopes =
+        events.map(e => Tagged(eventEncoder.encode(e), tagger(e)))
+
+      events.foreach(applyEvent)
+
+      var unpersistedEventCount = events.size
+      if (unpersistedEventCount == 1) {
+        persist(envelopes.head) { _ =>
+          sender() ! reply
+          eventCount += 1
+          markSnapshotAsPendingIfNeeded()
+          snapshotIfPending()
+        }
+      } else {
+        persistAll(envelopes) { _ =>
+          unpersistedEventCount -= 1
+          eventCount += 1
+          markSnapshotAsPendingIfNeeded()
+          if (unpersistedEventCount == 0) {
+            sender() ! reply
+            snapshotIfPending()
+          }
+        }
+      }
     }
   }
-
-  private def snapshotIfNeeded(): Unit =
-    snapshotPolicy match {
-      case e @ EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
-        saveSnapshot(e.encode(state))
-      case _ => ()
-    }
 
   private def applyEvent(event: Event): Unit = {
     state = folder
       .fold(state, event)
       .getOrElse {
-        val error = new IllegalStateException(s"Illegal state while applying [$event] to [$state]")
+        val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
         log.error(error, error.getMessage)
         throw error
       }
-    eventCount += 1
     if (recoveryFinished)
-      log.debug("[{}] State [{}]", persistenceId, state)
+      log.debug("[{}] Current state [{}]", persistenceId, state)
   }
 
-  private def receivePassivationMessages: Receive = {
-    case ReceiveTimeout =>
-      if (shouldPassivate) {
-        passivate()
-      } else {
-        setIdleTimeout()
-      }
-    case AggregateActor.Stop =>
-      context.stop(self)
-  }
+  private def markSnapshotAsPendingIfNeeded(): Unit =
+    snapshotPolicy match {
+      case EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
+        snapshotPending = true
+      case _ => ()
+    }
 
-  protected def shouldPassivate: Boolean = true
+  private def snapshotIfPending(): Unit =
+    snapshotPolicy match {
+      case e @ EachNumberOfEvents(_) if snapshotPending =>
+        saveSnapshot(e.encode(state))
+        snapshotPending = false
+      case _ => ()
+    }
 
   private def passivate(): Unit = {
     log.debug("[{}] Passivating...", persistenceId)
