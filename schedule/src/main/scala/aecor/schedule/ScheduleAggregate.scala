@@ -57,19 +57,17 @@ object ScheduleCommand {
       extends ScheduleCommand[Unit]
 }
 
-private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[String]) {
+private[aecor] case class ScheduleState(entries: Map[String, ScheduleEntry]) {
   def addEntry(entryId: String,
                correlationId: CorrelationId,
                dueDate: LocalDateTime): ScheduleState =
-    copy(entries = ScheduleEntry(entryId, correlationId, dueDate) :: entries, ids = ids + entryId)
+    copy(entries = entries + (entryId -> ScheduleEntry(entryId, correlationId, dueDate)))
 
   def removeEntry(entryId: String): ScheduleState =
-    copy(entries = entries.filterNot(_.id == entryId))
+    copy(entries = entries - entryId)
 
   def findEntry(entryId: String): Option[ScheduleEntry] =
-    entries.collectFirst {
-      case x if x.id == entryId => x
-    }
+    entries.get(entryId)
 
   def update(event: ScheduleEvent): Folded[ScheduleState] = event match {
     case ScheduleEntryAdded(_, _, entryId, correlationId, dueDate, _) =>
@@ -81,12 +79,12 @@ private[aecor] case class ScheduleState(entries: List[ScheduleEntry], ids: Set[S
 
 private[aecor] object ScheduleState {
 
-  def initial: ScheduleState = ScheduleState(List.empty, Set.empty)
+  def initial: ScheduleState = ScheduleState(Map.empty)
 
   case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
 
   implicit val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
-    Folder.instance(ScheduleState(List.empty, Set.empty))(_.update)
+    Folder.instance(ScheduleState(Map.empty))(_.update)
 }
 
 private[schedule] trait ScheduleAggregate[F[_]] {
@@ -155,27 +153,27 @@ private[schedule] class DefaultScheduleAggregate(clock: Clock)
     dueDate: LocalDateTime
   ): Handler[ScheduleState, ScheduleEvent, Unit] =
     Handler { state =>
-      if (state.ids.contains(entryId)) {
+      if (state.entries.get(entryId).isDefined) {
         Vector.empty -> (())
       } else {
+        val scheduleEntryAdded = ScheduleEntryAdded(
+          scheduleName,
+          scheduleBucket,
+          entryId,
+          correlationId,
+          dueDate,
+          timestamp
+        )
         val now = LocalDateTime.now(clock)
-        val fired = if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
+        val firedEvent = if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
           Vector(
             ScheduleEntryFired(scheduleName, scheduleBucket, entryId, correlationId, timestamp)
           )
         } else {
           Vector.empty
         }
-        (Vector(
-          ScheduleEntryAdded(
-            scheduleName,
-            scheduleBucket,
-            entryId,
-            correlationId,
-            dueDate,
-            timestamp
-          )
-        ) ++ fired) -> (())
+
+        (scheduleEntryAdded +: firedEvent, ())
       }
     }
   override def fireEntry(scheduleName: String,
