@@ -151,20 +151,32 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       reply,
       events
     )
+    if (events.isEmpty) {
+      sender() ! reply
+    } else {
+      val envelopes =
+        events.map(e => Tagged(eventEncoder.encode(e), tagger(e)))
 
-    val envelopes =
-      events.map(e => Tagged(eventEncoder.encode(e), tagger(e)))
+      events.foreach(applyEvent)
 
-    events.foreach(applyEvent)
-
-    var unpersistedEventCount = events.size
-    persistAll(envelopes) { _ =>
-      unpersistedEventCount -= 1
-      eventCount += 1
-      markSnapshotAsPendingIfNeeded()
-      if (unpersistedEventCount == 0) {
-        sender() ! reply
-        snapshotIfPending()
+      var unpersistedEventCount = events.size
+      if (unpersistedEventCount == 1) {
+        persist(envelopes.head) { _ =>
+          sender() ! reply
+          eventCount += 1
+          markSnapshotAsPendingIfNeeded()
+          snapshotIfPending()
+        }
+      } else {
+        persistAll(envelopes) { _ =>
+          unpersistedEventCount -= 1
+          eventCount += 1
+          markSnapshotAsPendingIfNeeded()
+          if (unpersistedEventCount == 0) {
+            sender() ! reply
+            snapshotIfPending()
+          }
+        }
       }
     }
   }
@@ -183,7 +195,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   private def markSnapshotAsPendingIfNeeded(): Unit =
     snapshotPolicy match {
-      case e @ EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
+      case EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
         snapshotPending = true
       case _ => ()
     }
