@@ -4,6 +4,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 
+import aecor.aggregate.AggregateActor.HandleCommand
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
@@ -55,6 +56,7 @@ object AggregateActor {
   )(implicit folder: Folder[Folded, Event, State]): Props =
     Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagging, idleTimeout))
 
+  case class HandleCommand[C[_], A](command: C[A])
   case object Stop
 }
 
@@ -131,12 +133,13 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       setIdleTimeout()
   }
 
-  final override def receiveCommand: Receive =
-    receivePassivationMessages.orElse(receiveCommandMessage)
-
-  private def receiveCommandMessage: Receive = {
-    case command =>
+  final override def receiveCommand: Receive = {
+    case HandleCommand(command) =>
       handleCommand(command.asInstanceOf[Command[_]])
+    case ReceiveTimeout =>
+      passivate()
+    case AggregateActor.Stop =>
+      context.stop(self)
   }
 
   private def handleCommand(command: Command[_]): Unit = {
@@ -166,6 +169,18 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
     }
   }
 
+  private def applyEvent(event: Event): Unit = {
+    state = folder
+      .fold(state, event)
+      .getOrElse {
+        val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
+        log.error(error, error.getMessage)
+        throw error
+      }
+    if (recoveryFinished)
+      log.debug("[{}] Current state [{}]", persistenceId, state)
+  }
+
   private def markSnapshotAsPendingIfNeeded(): Unit =
     snapshotPolicy match {
       case e @ EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
@@ -180,27 +195,6 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
         snapshotPending = false
       case _ => ()
     }
-
-  private def applyEvent(event: Event): Unit = {
-    state = folder
-      .fold(state, event)
-      .getOrElse {
-        val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
-        log.error(error, error.getMessage)
-        throw error
-      }
-    if (recoveryFinished)
-      log.debug("[{}] Current state [{}]", persistenceId, state)
-  }
-
-  private def receivePassivationMessages: Receive = {
-    case ReceiveTimeout =>
-      passivate()
-      context.become {
-        case AggregateActor.Stop =>
-          context.stop(self)
-      }
-  }
 
   private def passivate(): Unit = {
     log.debug("[{}] Passivating...", persistenceId)
