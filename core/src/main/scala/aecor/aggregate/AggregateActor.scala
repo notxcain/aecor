@@ -18,7 +18,7 @@ import cats.~>
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
 
-sealed trait SnapshotPolicy[+E]
+sealed abstract class SnapshotPolicy[+E] extends Product with Serializable
 
 object SnapshotPolicy {
   def never[E]: SnapshotPolicy[E] = Never.asInstanceOf[SnapshotPolicy[E]]
@@ -29,18 +29,19 @@ object SnapshotPolicy {
 
   private[aggregate] case object Never extends SnapshotPolicy[Nothing]
 
-  private[aggregate] case class EachNumberOfEvents[State: PersistentEncoder: PersistentDecoder](
-    numberOfEvents: Int
-  ) extends SnapshotPolicy[State] {
+  private[aggregate] final case class EachNumberOfEvents[
+    State: PersistentEncoder: PersistentDecoder
+  ](numberOfEvents: Int)
+      extends SnapshotPolicy[State] {
     def encode(state: State): PersistentRepr = PersistentEncoder[State].encode(state)
     def decode(repr: PersistentRepr): Result[State] = PersistentDecoder[State].decode(repr)
   }
 
 }
 
-sealed trait Identity
+sealed abstract class Identity extends Product with Serializable
 object Identity {
-  case class Provided(value: String) extends Identity
+  final case class Provided(value: String) extends Identity
   case object FromPathName extends Identity
 }
 
@@ -56,7 +57,7 @@ object AggregateActor {
   )(implicit folder: Folder[Folded, Event, State]): Props =
     Props(new AggregateActor(entityName, behavior, identity, snapshotPolicy, tagging, idleTimeout))
 
-  case class HandleCommand[C[_], A](command: C[A])
+  final case class HandleCommand[C[_], A](command: C[A])
   case object Stop
 }
 
