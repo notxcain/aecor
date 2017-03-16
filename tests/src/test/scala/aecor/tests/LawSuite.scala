@@ -29,7 +29,7 @@ trait TestSettings extends Configuration with Matchers {
 
 /**
   * An opinionated stack of traits to improve consistency and reduce
-  * boilerplate in Cats tests.
+  * boilerplate. Copied from Cats library.
   */
 trait LawSuite
     extends FunSuite
