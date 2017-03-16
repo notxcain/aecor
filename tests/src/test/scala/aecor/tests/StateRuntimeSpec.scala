@@ -75,8 +75,8 @@ class StateRuntimeSpec extends FunSuite with Matchers {
     val (state, result) =
       program.run(Map.empty)
 
-    state("1") shouldBe Vector(CounterIncremented("1"), CounterDecremented("1"))
-    state("2") shouldBe Vector(CounterIncremented("2"))
+    state.get("1") shouldBe Some(Vector(CounterIncremented("1"), CounterDecremented("1")))
+    state.get("2") shouldBe Some(Vector(CounterIncremented("2")))
     result shouldBe 0L
   }
 }
