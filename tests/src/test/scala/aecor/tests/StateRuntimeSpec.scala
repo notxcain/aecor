@@ -60,7 +60,6 @@ class StateRuntimeSpec extends FunSuite with Matchers {
 
     val (events, result) = program.run(Vector.empty)
 
-    events should have size 3
     events shouldBe Vector(
       CounterIncremented("1"),
       CounterIncremented("2"),
