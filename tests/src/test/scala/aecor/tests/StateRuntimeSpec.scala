@@ -42,11 +42,11 @@ class StateRuntimeSpec extends FunSuite with Matchers {
         }
     }
 
-  val singletonRuntime =
-    StateRuntime.singleton[CounterOp, CounterState, CounterEvent, Id](behavior)
-
   val sharedRuntime =
-    StateRuntime.shared[CounterOp, CounterState, CounterEvent, Id](behavior, correlation)
+    StateRuntime.shared[CounterOp, CounterState, CounterEvent, Id](behavior)
+
+  val correlatedRuntime =
+    StateRuntime.correlated[CounterOp, CounterState, CounterEvent, Id](behavior, correlation)
 
   def mkProgram[F[_]: Monad](runtime: CounterOp ~> F): F[Long] =
     for {
@@ -55,12 +55,12 @@ class StateRuntimeSpec extends FunSuite with Matchers {
       x <- runtime(Decrement("1"))
     } yield x
 
-  test("singleton runtime should execute all commands against single sequence of events") {
-    val program = mkProgram(singletonRuntime)
+  test("Shared runtime should execute all commands against shared sequence of events") {
+    val program = mkProgram(sharedRuntime)
 
-    val (events, result) = program.run(Vector.empty)
+    val (state, result) = program.run(Vector.empty)
 
-    events shouldBe Vector(
+    state shouldBe Vector(
       CounterIncremented("1"),
       CounterIncremented("2"),
       CounterDecremented("1")
@@ -68,14 +68,18 @@ class StateRuntimeSpec extends FunSuite with Matchers {
     result shouldBe 1L
   }
 
-  test("shared runtime should execute commands against events identified by correlation function") {
-    val program = mkProgram(sharedRuntime)
+  test(
+    "Correlated runtime should execute commands against the events identified by a correlation function"
+  ) {
+    val program = mkProgram(correlatedRuntime)
 
-    val (state, result) =
-      program.run(Map.empty)
+    val (state, result) = program.run(Map.empty)
 
-    state.get("1") shouldBe Some(Vector(CounterIncremented("1"), CounterDecremented("1")))
-    state.get("2") shouldBe Some(Vector(CounterIncremented("2")))
+    state shouldBe Map(
+      "1" -> Vector(CounterIncremented("1"), CounterDecremented("1")),
+      "2" -> Vector(CounterIncremented("2"))
+    )
+
     result shouldBe 0L
   }
 }

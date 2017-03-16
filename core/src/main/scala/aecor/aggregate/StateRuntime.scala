@@ -14,7 +14,7 @@ object StateRuntime {
     * i.e. all operations are executed against common sequence of events
     *
     */
-  def singleton[Op[_], S, E, F[_]: Monad](
+  def shared[Op[_], S, E, F[_]: Monad](
     behavior: Op ~> Handler[S, E, ?]
   )(implicit folder: Folder[F, E, S]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
@@ -37,13 +37,13 @@ object StateRuntime {
     * sequence of events
     *
     */
-  def shared[O[_], S, E, F[_]: Monad](
+  def correlated[O[_], S, E, F[_]: Monad](
     behavior: O ~> Handler[S, E, ?],
     correlation: Correlation[O]
   )(implicit folder: Folder[F, E, S]): O ~> StateT[F, Map[String, Vector[E]], ?] =
     new (O ~> StateT[F, Map[String, Vector[E]], ?]) {
       override def apply[A](fa: O[A]): StateT[F, Map[String, Vector[E]], A] = {
-        val inner: O ~> StateT[F, Vector[E], ?] = singleton(behavior)
+        val inner: O ~> StateT[F, Vector[E], ?] = shared(behavior)
         val entityId = correlation(fa)
         inner(fa).transformS(_.getOrElse(entityId, Vector.empty[E]), _.updated(entityId, _))
       }
