@@ -2,8 +2,9 @@ package aecor.tests
 
 import aecor.aggregate.{ Correlation, CorrelationIdF, Folder, StateRuntime }
 import aecor.data.Handler
-import cats.{ Id, ~> }
+import cats.{ Id, Monad, ~> }
 import org.scalatest.{ FunSuite, Matchers }
+import cats.implicits._
 
 class StateRuntimeSpec extends FunSuite with Matchers {
   sealed trait CounterOp[A] {
@@ -47,34 +48,35 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   val sharedRuntime =
     StateRuntime.shared[CounterOp, CounterState, CounterEvent, Id](behavior, correlation)
 
-  test("singleton runtime should execute all commands against single sequence of events") {
-    val program = for {
-      _ <- singletonRuntime(Increment("1"))
-      _ <- singletonRuntime(Increment("2"))
-      x <- singletonRuntime(Decrement("3"))
+  def mkProgram[F[_]: Monad](runtime: CounterOp ~> F): F[Long] =
+    for {
+      _ <- runtime(Increment("1"))
+      _ <- runtime(Increment("2"))
+      x <- runtime(Decrement("1"))
     } yield x
+
+  test("singleton runtime should execute all commands against single sequence of events") {
+    val program = mkProgram(singletonRuntime)
 
     val (events, result) = program.run(Vector.empty)
 
     events should have size 3
-    events.head shouldBe CounterIncremented("1")
-    events.last shouldBe CounterDecremented("3")
+    events shouldBe Vector(
+      CounterIncremented("1"),
+      CounterIncremented("2"),
+      CounterDecremented("1")
+    )
     result shouldBe 1L
   }
 
   test("shared runtime should execute commands against events identified by correlation function") {
-    val program = for {
-      _ <- sharedRuntime(Increment("1"))
-      _2 <- sharedRuntime(Increment("2"))
-      _1 <- sharedRuntime(Decrement("1"))
-    } yield (_1, _2)
+    val program = mkProgram(sharedRuntime)
 
-    val (state, (_1, _2)) =
+    val (state, result) =
       program.run(Map.empty)
 
-    state("1") should have size 2
-    state("2") should have size 1
-    _1 shouldBe 0l
-    _2 shouldBe 1L
+    state("1") shouldBe Vector(CounterIncremented("1"), CounterDecremented("1"))
+    state("2") shouldBe Vector(CounterIncremented("2"))
+    result shouldBe 0L
   }
 }
