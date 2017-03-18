@@ -3,9 +3,9 @@ package aecor.example
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
+import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture, EventsourcedBehavior }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
-import akka.Done
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
@@ -13,7 +13,9 @@ import akka.persistence.cassandra.{
 }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Sink, Source }
-import cats.data.Reader
+import cats.implicits._
+import cats.{ Functor, MonadError }
+import cats.data.{ EitherT, Kleisli }
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -41,7 +43,10 @@ object ScheduleApp extends App {
   val scheduleEntryRepository =
     CassandraScheduleEntryRepository(cassandraSession, scheduleEntryRepositoryQueries)
 
-  def runSchedule: Reader[Unit, Schedule] =
+  def runSchedule[F[_]: Async: CaptureFuture: Capture: MonadError[
+    ?[_],
+    EventsourcedBehavior.BehaviorFailure
+  ]]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
       clock = clock,
@@ -54,23 +59,25 @@ object ScheduleApp extends App {
       offsetStore = offsetStore
     )
 
-  def runAdder(schedule: Schedule): Reader[Unit, Any] =
-    Reader { _ =>
+  def runAdder[F[_]: Async: Capture: Functor](schedule: Schedule[F]): F[Unit] =
+    Capture[F].capture {
       Source
         .tick(0.seconds, 2.seconds, ())
         .mapAsync(1) { _ =>
-          schedule.addScheduleEntry(
-            "Test",
-            UUID.randomUUID().toString,
-            "test",
-            LocalDateTime.now(clock).plusSeconds(20)
-          )
+          Async[F].unsafeRun {
+            schedule.addScheduleEntry(
+              "Test",
+              UUID.randomUUID().toString,
+              "test",
+              LocalDateTime.now(clock).plusSeconds(20)
+            )
+          }
         }
         .runWith(Sink.ignore)
-    }
+    }.void
 
-  def runEventWatch(schedule: Schedule): Reader[Unit, Future[Done]] =
-    Reader { _ =>
+  def runEventWatch[F[_]: Capture: Functor](schedule: Schedule[F]): F[Unit] =
+    Capture[F].capture {
       schedule
         .committableScheduleEvents("SubscriptionInvoicing", ConsumerId("println"))
         .mapAsync(1) { x =>
@@ -78,15 +85,17 @@ object ScheduleApp extends App {
           x.commit()
         }
         .runWith(Sink.ignore)
-    }
+    }.void
 
-  val app: Reader[Unit, Unit] =
+  def mkApp[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], String]]: F[Unit] =
     for {
-      schedule <- runSchedule
-      _ <- runAdder(schedule)
-//      _ <- runRepositoryScanStream
-      _ <- runEventWatch(schedule)
+      schedule <- runSchedule[F]
+      _ <- runAdder[F](schedule)
+      _ <- runEventWatch[F](schedule)
     } yield ()
 
-  app.run(())
+  val app: EitherT[Kleisli[Future, Unit, ?], String, Unit] =
+    mkApp[EitherT[Kleisli[Future, Unit, ?], String, ?]]
+
+  app.value.run(())
 }

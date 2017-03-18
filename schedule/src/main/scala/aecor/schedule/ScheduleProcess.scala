@@ -4,6 +4,7 @@ import java.time._
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
+import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture }
 import aecor.data.EventTag
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
@@ -13,7 +14,7 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
-import cats.data.Reader
+import cats.Functor
 import com.datastax.driver.core.utils.UUIDs
 
 import scala.concurrent.Future
@@ -21,7 +22,7 @@ import scala.concurrent.duration.FiniteDuration
 import cats.instances.future._
 import org.slf4j.LoggerFactory
 
-private[schedule] class ScheduleProcess(
+private[schedule] class ScheduleProcess[F[_]: Async: CaptureFuture: Capture: Functor](
   clock: Clock,
   entityName: String,
   consumerId: ConsumerId,
@@ -31,14 +32,14 @@ private[schedule] class ScheduleProcess(
   parallelism: Int,
   offsetStore: OffsetStore[UUID],
   repository: ScheduleEntryRepository,
-  scheduleAggregate: ScheduleAggregate[Future],
+  scheduleAggregate: ScheduleAggregate[F],
   aggregateJournal: AggregateJournal[UUID],
   eventTag: EventTag[ScheduleEvent]
 )(implicit materializer: Materializer) {
 
   import materializer.executionContext
 
-  private val log = LoggerFactory.getLogger(classOf[ScheduleProcess])
+  private val log = LoggerFactory.getLogger(classOf[ScheduleProcess[F]])
 
   private val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
 
@@ -99,18 +100,19 @@ private[schedule] class ScheduleProcess(
       if (entry.fired)
         Future.successful(())
       else
-        scheduleAggregate.fireEntry(entry.scheduleName, entry.scheduleBucket, entry.entryId)
+        Async[F].unsafeRun(
+          scheduleAggregate.fireEntry(entry.scheduleName, entry.scheduleBucket, entry.entryId)
+        )
     })
     .mapAsync(1)(_.commit())
 
-  def run(system: ActorSystem): Reader[Unit, StreamKillSwitch] = Reader { _ =>
+  def run(system: ActorSystem): F[StreamKillSwitch[F]] =
     StreamSupervisor(system)
       .startClusterSingleton(s"$entityName-Process", source, fireDueEntries)
-  }
 }
 
 object ScheduleProcess {
-  def apply(
+  def apply[F[_]: Async: CaptureFuture: Capture: Functor](
     clock: Clock,
     entityName: String,
     consumerId: ConsumerId,
@@ -120,10 +122,10 @@ object ScheduleProcess {
     parallelism: Int,
     offsetStore: OffsetStore[UUID],
     repository: ScheduleEntryRepository,
-    scheduleAggregate: ScheduleAggregate[Future],
+    scheduleAggregate: ScheduleAggregate[F],
     aggregateJournal: AggregateJournal[UUID],
     eventTag: EventTag[ScheduleEvent]
-  )(implicit materializer: Materializer): ScheduleProcess =
+  )(implicit materializer: Materializer): ScheduleProcess[F] =
     new ScheduleProcess(
       clock,
       entityName,

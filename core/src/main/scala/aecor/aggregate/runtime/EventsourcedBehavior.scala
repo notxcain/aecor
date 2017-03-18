@@ -9,9 +9,9 @@ import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
 import akka.cluster.sharding.ShardRegion.EntityId
 import cats.arrow.FunctionK
-import cats.data.{ EitherT, NonEmptyVector }
+import cats.data.NonEmptyVector
 import cats.implicits._
-import cats.{ Applicative, Functor, MonadError, ~> }
+import cats.{ Applicative, MonadError, ~> }
 
 import scala.collection.immutable.Seq
 
@@ -35,14 +35,19 @@ object EventsourcedBehavior {
       }
   }
 
-  def apply[Op[_], S, E, F[_]: MonadError[?[_], String]](
+  sealed abstract class BehaviorFailure extends Exception
+  object BehaviorFailure {
+    final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
+  }
+
+  def apply[Op[_], S, E, F[_]: MonadError[?[_], BehaviorFailure]](
     entityName: String,
     correlation: Correlation[Op],
     opHandler: Op ~> Handler[S, E, ?],
     tagging: Tagging[E],
-    journal: EventJournal[E, F],
+    journal: EventJournal[F, E],
     snapshotStore: SnapshotStore[S, F],
-    generateInstanceId: () => F[UUID]
+    generateInstanceId: F[UUID]
   )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] = {
     def mkBehavior(entityId: EntityId,
                    instanceId: UUID,
@@ -70,7 +75,8 @@ object EventsourcedBehavior {
                                  .saveSnapshot(entityId, next)
                                  .flatMap(_ => continue(next))
                              case _ =>
-                               s"Illegal fold for [$entityId]"
+                               BehaviorFailure
+                                 .IllegalFold(entityId)
                                  .raiseError[F, InternalState[S]]
 
                            }
@@ -86,7 +92,7 @@ object EventsourcedBehavior {
     Behavior {
       def mk[A](firstOp: Op[A]): PairT[F, Behavior[Op, F], A] =
         for {
-          instanceId <- generateInstanceId()
+          instanceId <- generateInstanceId
           entityId = s"$entityName-${correlation(firstOp)}"
           snapshot <- snapshotStore.loadSnapshot(entityId)
           recoveredState <- journal
@@ -99,7 +105,9 @@ object EventsourcedBehavior {
                              .flatMap {
                                case Next(x) => x.pure[F]
                                case Impossible =>
-                                 s"Illegal fold for [$entityId]".raiseError[F, InternalState[S]]
+                                 BehaviorFailure
+                                   .IllegalFold(entityId)
+                                   .raiseError[F, InternalState[S]]
                              }
           behavior = mkBehavior(entityId, instanceId, recoveredState)
           result <- behavior.run(firstOp)

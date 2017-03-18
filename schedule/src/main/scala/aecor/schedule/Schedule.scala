@@ -3,8 +3,7 @@ package aecor.schedule
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.runtime.behavior.Behavior
-import aecor.aggregate.runtime.{ EventsourcedBehavior, GenericAkkaRuntime, NoopSnapshotStore }
+import aecor.aggregate.runtime._
 import aecor.aggregate.{ CorrelationId, Tagging }
 import aecor.data.EventTag
 import aecor.streaming._
@@ -13,17 +12,16 @@ import akka.actor.ActorSystem
 import akka.persistence.cassandra.journal.CassandraEventJournal
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import cats.MonadError
-import cats.data.Reader
+import cats.implicits._
+import cats.{ Functor, Monad, MonadError }
 
-import scala.concurrent.{ ExecutionContext, Future }
 import scala.concurrent.duration._
 
-trait Schedule {
+trait Schedule[F[_]] {
   def addScheduleEntry(scheduleName: String,
                        entryId: String,
                        correlationId: CorrelationId,
-                       dueDate: LocalDateTime): Future[Unit]
+                       dueDate: LocalDateTime): F[Unit]
   def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
@@ -44,49 +42,32 @@ private[schedule] class ConfiguredSchedule(
   consumerId: ConsumerId
 )(implicit materializer: Materializer) {
 
-  import materializer.executionContext
-
   private val runtime = new GenericAkkaRuntime(system)
 
   private val eventTag = EventTag[ScheduleEvent](entityName)
 
-  implicit def futureMonadError(implicit ec: ExecutionContext): MonadError[Future, String] =
-    new MonadError[Future, String] {
-      override def raiseError[A](e: String): Future[A] = Future.failed(new RuntimeException(e))
-
-      override def handleErrorWith[A](fa: Future[A])(f: (String) => Future[A]): Future[A] =
-        cats.instances.future.catsStdInstancesForFuture.handleErrorWith(fa) { e =>
-          f(e.getMessage)
-        }
-
-      override def flatMap[A, B](fa: Future[A])(f: (A) => Future[B]): Future[B] =
-        fa.flatMap(f)
-
-      override def tailRecM[A, B](a: A)(f: (A) => Future[Either[A, B]]): Future[B] =
-        cats.instances.future.catsStdInstancesForFuture.tailRecM(a)(f)
-
-      override def pure[A](x: A): Future[A] =
-        Future.successful(x)
-    }
-
-  private val startAggregate = Reader { _: Unit =>
-    val behavior: Behavior[ScheduleCommand, Future] =
-      EventsourcedBehavior(
+  private def startAggregate[F[_]: Async: Monad: Capture: CaptureFuture: MonadError[?[_], String]]
+    : F[ScheduleAggregate[F]] =
+    for {
+      journal <- CassandraEventJournal[ScheduleEvent, F](system, 8)
+      behavior = EventsourcedBehavior(
         entityName,
         DefaultScheduleAggregate.correlation,
         DefaultScheduleAggregate(clock).asFunctionK,
         Tagging(eventTag),
-        CassandraEventJournal[ScheduleEvent, Future](system, 8),
-        NoopSnapshotStore[ScheduleState, Future],
-        () => Future.successful(UUID.randomUUID())
+        journal,
+        NoopSnapshotStore[ScheduleState, F],
+        Capture[F].capture(UUID.randomUUID())
       )
-    ScheduleAggregate.fromFunctionK(
-      runtime.start(entityName, DefaultScheduleAggregate.correlation, behavior)
-    )
-  }
+      f <- runtime
+            .start(entityName, DefaultScheduleAggregate.correlation, behavior)
 
-  private def startProcess(aggregate: ScheduleAggregate[Future]) =
-    ScheduleProcess(
+    } yield ScheduleAggregate.fromFunctionK(f)
+
+  private def startProcess[F[_]: Async: CaptureFuture: Capture: Functor](
+    aggregate: ScheduleAggregate[F]
+  ) =
+    ScheduleProcess[F](
       clock = clock,
       entityName = entityName,
       consumerId = consumerId,
@@ -101,19 +82,19 @@ private[schedule] class ConfiguredSchedule(
       eventTag = eventTag
     ).run(system)
 
-  private def createSchedule(aggregate: ScheduleAggregate[Future]): Schedule =
+  private def createSchedule[F[_]](aggregate: ScheduleAggregate[F]): Schedule[F] =
     new DefaultSchedule(clock, aggregate, bucketLength, aggregateJournal, offsetStore, eventTag)
 
-  def start: Reader[Unit, Schedule] =
+  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], String]]: F[Schedule[F]] =
     for {
-      aggregate <- startAggregate
-      _ <- startProcess(aggregate)
-      schedule = createSchedule(aggregate)
+      aggregate <- startAggregate[F]
+      _ <- startProcess[F](aggregate)
+      schedule = createSchedule[F](aggregate)
     } yield schedule
 }
 
 object Schedule {
-  def start(
+  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], String]](
     entityName: String,
     clock: Clock,
     dayZero: LocalDate,
@@ -124,7 +105,7 @@ object Schedule {
     aggregateJournal: AggregateJournal[UUID],
     offsetStore: OffsetStore[UUID],
     consumerId: ConsumerId = ConsumerId("io.aecor.schedule.ScheduleProcess")
-  )(implicit system: ActorSystem, materializer: Materializer): Reader[Unit, Schedule] =
+  )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] =
     new ConfiguredSchedule(
       system,
       entityName,
@@ -137,5 +118,5 @@ object Schedule {
       aggregateJournal,
       offsetStore,
       consumerId
-    ).start
+    ).start[F]
 }

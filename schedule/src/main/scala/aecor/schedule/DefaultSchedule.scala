@@ -9,20 +9,19 @@ import aecor.streaming._
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-private[schedule] class DefaultSchedule(clock: Clock,
-                                        aggregate: ScheduleAggregate[Future],
-                                        bucketLength: FiniteDuration,
-                                        aggregateJournal: AggregateJournal[UUID],
-                                        offsetStore: OffsetStore[UUID],
-                                        eventTag: EventTag[ScheduleEvent])
-    extends Schedule {
+private[schedule] class DefaultSchedule[F[_]](clock: Clock,
+                                              aggregate: ScheduleAggregate[F],
+                                              bucketLength: FiniteDuration,
+                                              aggregateJournal: AggregateJournal[UUID],
+                                              offsetStore: OffsetStore[UUID],
+                                              eventTag: EventTag[ScheduleEvent])
+    extends Schedule[F] {
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,
                                 correlationId: CorrelationId,
-                                dueDate: LocalDateTime): Future[Unit] = {
+                                dueDate: LocalDateTime): F[Unit] = {
     val scheduleBucket =
       dueDate.atZone(clock.getZone).toEpochSecond / bucketLength.toSeconds
     aggregate

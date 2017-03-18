@@ -8,8 +8,8 @@ import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
 import cats.{ Functor, ~> }
-import Async.ops._
 
+import cats.implicits._
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
@@ -18,38 +18,40 @@ object GenericAkkaRuntime {
 }
 
 class GenericAkkaRuntime(system: ActorSystem) {
-  def start[Op[_], F[_]: Async: Functor](entityName: String,
-                                         correlation: Correlation[Op],
-                                         behavior: Behavior[Op, F],
-                                         settings: AkkaRuntimeSettings =
-                                           AkkaRuntimeSettings.default(system)): Op ~> F = {
-    val props = RuntimeActor.props(behavior, settings.idleTimeout)
+  def start[Op[_], F[_]: Async: CaptureFuture: Functor: Capture](
+    entityName: String,
+    correlation: Correlation[Op],
+    behavior: Behavior[Op, F],
+    settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
+  ): F[Op ~> F] =
+    Capture[F]
+      .capture {
+        val numberOfShards = settings.numberOfShards
 
-    def extractEntityId: ShardRegion.ExtractEntityId = {
-      case HandleCommand(entityId, c) =>
-        (entityId, RuntimeActor.PerformOp(c.asInstanceOf[Op[_]]))
-    }
+        val extractEntityId: ShardRegion.ExtractEntityId = {
+          case HandleCommand(entityId, c) =>
+            (entityId, RuntimeActor.PerformOp(c.asInstanceOf[Op[_]]))
+        }
 
-    val numberOfShards = settings.numberOfShards
-
-    def extractShardId: ShardRegion.ExtractShardId = {
-      case HandleCommand(entityId, _) =>
-        (scala.math.abs(entityId.hashCode) % numberOfShards).toString
-    }
-
-    val shardRegionRef = ClusterSharding(system).start(
-      typeName = entityName,
-      entityProps = props,
-      settings = settings.clusterShardingSettings,
-      extractEntityId = extractEntityId,
-      extractShardId = extractShardId
-    )
-
-    new (Op ~> F) {
-      implicit private val timeout = Timeout(settings.askTimeout)
-      override def apply[A](fa: Op[A]): F[A] =
-        (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]].capture
-
-    }
-  }
+        val extractShardId: ShardRegion.ExtractShardId = {
+          case HandleCommand(entityId, _) =>
+            (scala.math.abs(entityId.hashCode) % numberOfShards).toString
+        }
+        val props = RuntimeActor.props(behavior, settings.idleTimeout)
+        ClusterSharding(system).start(
+          typeName = entityName,
+          entityProps = props,
+          settings = settings.clusterShardingSettings,
+          extractEntityId = extractEntityId,
+          extractShardId = extractShardId
+        )
+      }
+      .map { shardRegionRef =>
+        new (Op ~> F) {
+          implicit private val timeout = Timeout(settings.askTimeout)
+          override def apply[A](fa: Op[A]): F[A] = CaptureFuture[F].captureF {
+            (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
+          }
+        }
+      }
 }

@@ -8,12 +8,9 @@ import aecor.aggregate.runtime.behavior.Behavior
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
-import cats.Eval.{ Call, Compute }
-import cats.{ Always, Eval, Functor, Later, Now, ~> }
-import cats.implicits._
+import cats.Functor
 import fs2.util.NonFatal
 
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Failure, Success, Try }
 

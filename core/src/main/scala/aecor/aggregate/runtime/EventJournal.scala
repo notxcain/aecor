@@ -8,7 +8,7 @@ import cats.data.NonEmptyVector
 
 import scala.collection.immutable._
 
-trait EventJournal[E, F[_]] {
+trait EventJournal[F[_], E] {
   def append(id: String, instanceId: UUID, events: NonEmptyVector[EventEnvelope[E]]): F[Unit]
   def fold[S](id: String, offset: Long, zero: S, step: (S, E) => Folded[S]): F[Folded[S]]
 }
