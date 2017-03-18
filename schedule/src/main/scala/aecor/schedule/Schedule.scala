@@ -46,8 +46,10 @@ private[schedule] class ConfiguredSchedule(
 
   private val eventTag = EventTag[ScheduleEvent](entityName)
 
-  private def startAggregate[F[_]: Async: Monad: Capture: CaptureFuture: MonadError[?[_], String]]
-    : F[ScheduleAggregate[F]] =
+  private def startAggregate[F[_]: Async: Monad: Capture: CaptureFuture: MonadError[
+    ?[_],
+    EventsourcedBehavior.BehaviorFailure
+  ]]: F[ScheduleAggregate[F]] =
     for {
       journal <- CassandraEventJournal[ScheduleEvent, F](system, 8)
       behavior = EventsourcedBehavior(
@@ -85,7 +87,9 @@ private[schedule] class ConfiguredSchedule(
   private def createSchedule[F[_]](aggregate: ScheduleAggregate[F]): Schedule[F] =
     new DefaultSchedule(clock, aggregate, bucketLength, aggregateJournal, offsetStore, eventTag)
 
-  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], String]]: F[Schedule[F]] =
+  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
+                                                            EventsourcedBehavior.BehaviorFailure]]
+    : F[Schedule[F]] =
     for {
       aggregate <- startAggregate[F]
       _ <- startProcess[F](aggregate)
@@ -94,7 +98,8 @@ private[schedule] class ConfiguredSchedule(
 }
 
 object Schedule {
-  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], String]](
+  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
+                                                            EventsourcedBehavior.BehaviorFailure]](
     entityName: String,
     clock: Clock,
     dayZero: LocalDate,

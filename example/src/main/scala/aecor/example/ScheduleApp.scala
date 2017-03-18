@@ -6,18 +6,16 @@ import java.util.UUID
 import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture, EventsourcedBehavior }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
-
 import akka.actor.ActorSystem
-
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
-import akka.stream.{ ActorMaterializer }
+import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Sink, Source }
+import cats.data.{ EitherT, Kleisli }
 import cats.implicits._
 import cats.{ Functor, MonadError }
-import cats.data.{ EitherT, Kleisli }
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -89,15 +87,17 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def mkApp[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], String]]: F[Unit] =
+  def mkApp[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
+                                                            EventsourcedBehavior.BehaviorFailure]]
+    : F[Unit] =
     for {
       schedule <- runSchedule[F]
       _ <- runAdder[F](schedule)
       _ <- runEventWatch[F](schedule)
     } yield ()
 
-  val app: EitherT[Kleisli[Future, Unit, ?], String, Unit] =
-    mkApp[EitherT[Kleisli[Future, Unit, ?], String, ?]]
+  val app: EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, Unit] =
+    mkApp[EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, ?]]
 
   app.value.run(())
 }

@@ -4,7 +4,7 @@ import java.util.UUID
 
 import aecor.aggregate.runtime.EventJournal.EventEnvelope
 import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
-import aecor.aggregate.{ Correlation, Folder, SnapshotStore, Tagging }
+import aecor.aggregate._
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
 import akka.cluster.sharding.ShardRegion.EntityId
@@ -37,6 +37,7 @@ object EventsourcedBehavior {
 
   sealed abstract class BehaviorFailure extends Exception
   object BehaviorFailure {
+    def illegalFold(entityId: EntityId): BehaviorFailure = IllegalFold(entityId)
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
@@ -53,7 +54,7 @@ object EventsourcedBehavior {
                    instanceId: UUID,
                    stateZero: InternalState[S]): Behavior[Op, F] = {
       def rec(state: InternalState[S]): Behavior[Op, F] =
-        Behavior {
+        Behavior[Op, F] {
           def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] = {
             val (events, reply) = opHandler(op).run(state.entityState)
             if (events.isEmpty) {
@@ -76,7 +77,7 @@ object EventsourcedBehavior {
                                  .flatMap(_ => continue(next))
                              case _ =>
                                BehaviorFailure
-                                 .IllegalFold(entityId)
+                                 .illegalFold(entityId)
                                  .raiseError[F, InternalState[S]]
 
                            }
@@ -89,7 +90,7 @@ object EventsourcedBehavior {
         }
       rec(stateZero)
     }
-    Behavior {
+    Behavior[Op, F] {
       def mk[A](firstOp: Op[A]): PairT[F, Behavior[Op, F], A] =
         for {
           instanceId <- generateInstanceId
@@ -106,7 +107,7 @@ object EventsourcedBehavior {
                                case Next(x) => x.pure[F]
                                case Impossible =>
                                  BehaviorFailure
-                                   .IllegalFold(entityId)
+                                   .illegalFold(entityId)
                                    .raiseError[F, InternalState[S]]
                              }
           behavior = mkBehavior(entityId, instanceId, recoveredState)

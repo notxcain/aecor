@@ -1,9 +1,9 @@
 package aecor.aggregate.runtime
 
-import cats.Show
 import cats.data.{ EitherT, Kleisli }
 
 import scala.concurrent.{ ExecutionContext, Future }
+import Async.ops._
 
 /**
   * The type class for types that can be run in async manner
@@ -22,7 +22,7 @@ object Async extends AsyncInstances {
   }
 }
 sealed trait AsyncInstances {
-  implicit val futureAsyncInstance: Async[Kleisli[Future, Unit, ?]] =
+  implicit val kleisliAsyncInstance: Async[Kleisli[Future, Unit, ?]] =
     new Async[Kleisli[Future, Unit, ?]] {
       override def unsafeRun[A](fa: Kleisli[Future, Unit, A]): Future[A] = fa.run(())
     }
@@ -31,7 +31,7 @@ sealed trait AsyncInstances {
     implicit executionContext: ExecutionContext
   ): Async[EitherT[F, L, ?]] = new Async[EitherT[F, L, ?]] {
     override def unsafeRun[A](fa: EitherT[F, L, A]): Future[A] =
-      Async[F].unsafeRun(fa.value).flatMap {
+      fa.value.unsafeRun.flatMap {
         case Right(a) => Future.successful(a)
         case Left(a) => Future.failed(a)
       }

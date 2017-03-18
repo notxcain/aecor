@@ -1,7 +1,7 @@
 package aecor.aggregate.runtime
 
 import aecor.aggregate._
-import aecor.aggregate.runtime.GenericAkkaRuntime.HandleCommand
+import aecor.aggregate.runtime.GenericAkkaRuntime.CorrelatedCommand
 import aecor.aggregate.runtime.behavior.Behavior
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
@@ -14,7 +14,7 @@ import scala.concurrent.Future
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime = new GenericAkkaRuntime(system)
-  private final case class HandleCommand[A](entityId: String, command: A)
+  private final case class CorrelatedCommand[A](entityId: String, command: A)
 }
 
 class GenericAkkaRuntime(system: ActorSystem) {
@@ -29,12 +29,12 @@ class GenericAkkaRuntime(system: ActorSystem) {
         val numberOfShards = settings.numberOfShards
 
         val extractEntityId: ShardRegion.ExtractEntityId = {
-          case HandleCommand(entityId, c) =>
+          case CorrelatedCommand(entityId, c) =>
             (entityId, RuntimeActor.PerformOp(c.asInstanceOf[Op[_]]))
         }
 
         val extractShardId: ShardRegion.ExtractShardId = {
-          case HandleCommand(entityId, _) =>
+          case CorrelatedCommand(entityId, _) =>
             (scala.math.abs(entityId.hashCode) % numberOfShards).toString
         }
         val props = RuntimeActor.props(behavior, settings.idleTimeout)
@@ -50,7 +50,7 @@ class GenericAkkaRuntime(system: ActorSystem) {
         new (Op ~> F) {
           implicit private val timeout = Timeout(settings.askTimeout)
           override def apply[A](fa: Op[A]): F[A] = CaptureFuture[F].captureF {
-            (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
+            (shardRegionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
           }
         }
       }

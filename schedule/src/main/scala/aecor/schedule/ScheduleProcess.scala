@@ -16,7 +16,7 @@ import cats.Functor
 import com.datastax.driver.core.utils.UUIDs
 import org.slf4j.LoggerFactory
 import Async.ops._
-
+import cats.implicits._
 import scala.concurrent.{ Future, Promise }
 import scala.concurrent.duration.FiniteDuration
 
@@ -104,7 +104,10 @@ private[schedule] class ScheduleProcess[F[_]: Async: CaptureFuture: Capture: Fun
   private def afterRefreshInterval[A](f: => Future[A]): Future[A] = {
     val p = Promise[A]
     materializer.scheduleOnce(refreshInterval, new Runnable {
-      override def run(): Unit = p.completeWith(f)
+      override def run(): Unit = {
+        p.completeWith(f)
+        ()
+      }
     })
     p.future
   }
