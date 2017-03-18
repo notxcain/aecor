@@ -1,6 +1,6 @@
 package aecor.aggregate
 
-import aecor.aggregate.AkkaRuntime.HandleCommand
+import aecor.aggregate.AkkaRuntime.CorrelatedCommand
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.data.{ Folded, Handler }
 import akka.actor.ActorSystem
@@ -15,7 +15,7 @@ object AkkaRuntime {
   def apply(system: ActorSystem): AkkaRuntime =
     new AkkaRuntime(system)
 
-  private final case class HandleCommand[C[_], A](entityId: String, command: C[A])
+  private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
 }
 
 class AkkaRuntime(system: ActorSystem) {
@@ -32,14 +32,14 @@ class AkkaRuntime(system: ActorSystem) {
       AggregateActor.props(entityName, behavior, snapshotPolicy, tagging, settings.idleTimeout)
 
     def extractEntityId: ShardRegion.ExtractEntityId = {
-      case HandleCommand(entityId, c) =>
-        (entityId, c)
+      case CorrelatedCommand(entityId, c) =>
+        (entityId, AggregateActor.HandleCommand(c))
     }
 
     val numberOfShards = settings.numberOfShards
 
     def extractShardId: ShardRegion.ExtractShardId = {
-      case HandleCommand(entityId, _) =>
+      case CorrelatedCommand(entityId, _) =>
         (scala.math.abs(entityId.hashCode) % numberOfShards).toString
     }
 
@@ -54,7 +54,7 @@ class AkkaRuntime(system: ActorSystem) {
     new (Command ~> Future) {
       implicit private val timeout = Timeout(settings.askTimeout)
       override def apply[A](fa: Command[A]): Future[A] =
-        (shardRegionRef ? HandleCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
+        (shardRegionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
     }
   }
 }

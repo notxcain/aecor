@@ -1,8 +1,12 @@
 package aecor.aggregate
 
-trait Folder[F[_], A, B] { o =>
+import cats.implicits._
+import cats.{ Foldable, Monad }
+
+trait Folder[F[_], A, B] {
   def zero: B
   def step(b: B, a: A): F[B]
+  def consume[I[_]: Foldable](f: I[A])(implicit F: Monad[F]): F[B] = f.foldM(zero)(step)
 }
 
 object Folder {

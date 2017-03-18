@@ -1,4 +1,5 @@
 import ReleaseTransformations._
+import sbtrelease.Version.Bump
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
@@ -7,7 +8,7 @@ lazy val buildSettings = Seq(
   crossScalaVersions := Seq("2.11.8", "2.12.0")
 )
 
-lazy val akkaVersion = "2.4.16"
+lazy val akkaVersion = "2.4.17"
 lazy val akkaPersistenceCassandra = "0.23"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
@@ -22,15 +23,15 @@ lazy val kindProjectorVersion = "0.9.3"
 lazy val paradiseVersion = "2.1.0"
 
 lazy val commonSettings = Seq(
-    scalacOptions ++= commonScalacOptions,
-    libraryDependencies ++= Seq(
-      compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
-      compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
-    ),
-    parallelExecution in Test := false,
-    scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
-      .filter(_ != "-Xfatal-warnings")
-  ) ++ warnUnusedImport
+  scalacOptions ++= commonScalacOptions,
+  libraryDependencies ++= Seq(
+    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+    compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
+  ),
+  parallelExecution in Test := false,
+  scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
+    .filter(_ != "-Xfatal-warnings")
+) ++ warnUnusedImport
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
@@ -80,11 +81,11 @@ lazy val coreSettings = Seq(
 )
 
 lazy val scheduleSettings = commonProtobufSettings ++ Seq(
-    libraryDependencies ++= Seq(
-      "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
-      "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
-    )
+  libraryDependencies ++= Seq(
+    "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
+    "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
   )
+)
 
 lazy val exampleSettings = {
   val circeVersion = "0.6.1"
@@ -150,6 +151,8 @@ lazy val warnUnusedImport = Seq(scalacOptions in (Compile, console) ~= {
 lazy val noPublishSettings = Seq(publish := (), publishLocal := (), publishArtifact := false)
 
 lazy val publishSettings = Seq(
+  releaseCrossBuild := true,
+  releaseVersionBump := Bump.Minor,
   releaseCommitMessage := s"Set version to ${if (releaseUseGlobalVersion.value) (version in ThisBuild).value
   else version.value}",
   releaseIgnoreUntrackedFiles := true,

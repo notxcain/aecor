@@ -7,10 +7,10 @@ import akka.cluster.sharding.ClusterShardingSettings
 
 import scala.concurrent.duration._
 
-case class AkkaRuntimeSettings(numberOfShards: Int,
-                               idleTimeout: FiniteDuration,
-                               askTimeout: FiniteDuration,
-                               clusterShardingSettings: ClusterShardingSettings)
+final case class AkkaRuntimeSettings(numberOfShards: Int,
+                                     idleTimeout: FiniteDuration,
+                                     askTimeout: FiniteDuration,
+                                     clusterShardingSettings: ClusterShardingSettings)
 
 object AkkaRuntimeSettings {
 

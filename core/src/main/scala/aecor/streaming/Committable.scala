@@ -45,7 +45,7 @@ object Committable {
     new Commit[Committable[Offset]] {
       override def commit(a: Committable[Offset]): Future[Unit] = a.commit()
     }
-
+  def pure[A](a: A): Committable[A] = Committable(() => Future.successful(()), a)
   def collector[A, B](pf: PartialFunction[A, B]): PartialFunction[Committable[A], Committable[B]] = {
     case c if pf.isDefinedAt(c.value) => c.map(pf)
   }

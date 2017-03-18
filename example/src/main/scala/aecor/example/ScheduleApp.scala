@@ -6,12 +6,14 @@ import java.util.UUID
 import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture, EventsourcedBehavior }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
+
 import akka.actor.ActorSystem
+
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
-import akka.stream.ActorMaterializer
+import akka.stream.{ ActorMaterializer }
 import akka.stream.scaladsl.{ Sink, Source }
 import cats.implicits._
 import cats.{ Functor, MonadError }
@@ -52,7 +54,7 @@ object ScheduleApp extends App {
       clock = clock,
       dayZero = LocalDate.of(2016, 5, 10),
       bucketLength = 1.day,
-      refreshInterval = 1.second,
+      refreshInterval = 100.millis,
       eventualConsistencyDelay = 5.seconds,
       repository = scheduleEntryRepository,
       aggregateJournal = CassandraAggregateJournal(system),
