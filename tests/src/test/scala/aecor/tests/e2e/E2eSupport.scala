@@ -4,8 +4,8 @@ import java.util.UUID
 
 import aecor.aggregate.runtime.EventsourcedBehavior.BehaviorFailure
 import aecor.aggregate.runtime.{ EventsourcedBehavior, NoopSnapshotStore }
-import aecor.aggregate.{ Correlation, Tagging }
-import aecor.data.Handler
+import aecor.aggregate.{ Correlation, Folder, Tagging }
+import aecor.data.{ Folded, Handler }
 import aecor.streaming.Committable
 import aecor.tests.e2e.TestEventJournal.TestEventJournalState
 import cats.data.StateT
@@ -15,22 +15,22 @@ import cats.{ Monad, ~> }
 import scala.collection.immutable._
 
 trait E2eSupport {
-  type SpecF[A] = Either[BehaviorFailure, A]
+  final type SpecF[A] = Either[BehaviorFailure, A]
   type SpecState
-  def mkJournal[E](
+  final def mkJournal[E](
     extract: SpecState => TestEventJournalState[E],
     update: (SpecState, TestEventJournalState[E]) => SpecState
   ): TestEventJournal[SpecF, SpecState, E] =
-    TestEventJournal(extract, update)
+    TestEventJournal[SpecF, SpecState, E](extract, update)
 
-  def mkBehavior[Op[_], S, E](
+  final def mkBehavior[Op[_], S, E](
     name: String,
     correlation: Correlation[Op],
     opHandler: Op ~> Handler[S, Seq[E], ?],
     tagging: Tagging[E],
-    journal: TestEventJournal[SpecF, SpecState, CounterEvent]
-  ): Op ~> StateT[SpecF, SpecState, ?] =
-    new (Op ~> StateT[SpecF, S, ?]) {
+    journal: TestEventJournal[SpecF, SpecState, E]
+  )(implicit folder: Folder[Folded, E, S]): Op ~> StateT[SpecF, SpecState, ?] =
+    new (Op ~> StateT[SpecF, SpecState, ?]) {
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
         EventsourcedBehavior[Op, S, E, StateT[SpecF, SpecState, ?]](
           name,
@@ -40,7 +40,7 @@ trait E2eSupport {
           journal,
           Option.empty,
           NoopSnapshotStore.apply,
-          StateT.lift(Right(UUID.randomUUID()))
+          StateT.pure(UUID.randomUUID())
         ).run(fa)
           .map(_._2)
     }
@@ -62,7 +62,7 @@ trait E2eSupport {
     type In
     val process: In => F[Unit]
     val sources: Vector[FoldableSource[F, F, Committable[F, In]]]
-    final def run: F[Int] =
+    final def run(implicit F: Monad[F]): F[Unit] =
       for {
         processed <- sources
                       .fold(FoldableSource.empty[F, F, Committable[F, In]])(_ merge _)
@@ -77,18 +77,24 @@ trait E2eSupport {
         _ <- if (processed == 0)
               ().pure[F]
             else
-              runProcess[F](process, sources: _*)
+              run
       } yield ()
   }
 
   def processes: Vector[WiredProcess[StateT[SpecF, SpecState, ?]]]
 
-  final def wired[Op[_], S](behavior: Op ~> StateT[SpecF, S, ?]): Op ~> StateT[SpecF, S, ?] =
-    new (Op ~> StateT[SpecF, S, ?]) {
-      override def apply[A](fa: Op[A]): StateT[SpecF, S, A] =
+  final def wired[Op[_]](
+    behavior: Op ~> StateT[SpecF, SpecState, ?]
+  ): Op ~> StateT[SpecF, SpecState, ?] =
+    new (Op ~> StateT[SpecF, SpecState, ?]) {
+      override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
         for {
-          x <- behavior.run(fa)
-          _ <- processes.foldLeft(StateT.pure[SpecF, SpecState, Unit](()))(_ >> _)
+          x <- behavior(fa)
+          _ <- processes
+                .map(_.run)
+                .foldLeft(StateT.pure[SpecF, SpecState, Unit](())) { (l, r) =>
+                  l.map2(r)((_, _) => ())
+                }
         } yield x
     }
 
