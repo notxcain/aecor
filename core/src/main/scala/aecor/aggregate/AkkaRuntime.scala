@@ -9,6 +9,7 @@ import akka.pattern.ask
 import akka.util.Timeout
 import cats.~>
 
+import scala.collection.immutable.Seq
 import scala.concurrent.Future
 
 object AkkaRuntime {
@@ -21,7 +22,7 @@ object AkkaRuntime {
 class AkkaRuntime(system: ActorSystem) {
   def start[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Command ~> Handler[State, Event, ?],
+    behavior: Command ~> Handler[State, Seq[Event], ?],
     correlation: Correlation[Command],
     tagging: Tagging[Event],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,

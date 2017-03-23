@@ -1,7 +1,7 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.aggregate.{ Correlation, CorrelationIdF, Folder }
+import aecor.aggregate.{ Correlation, Folder }
 import aecor.data.Folded.syntax._
 import aecor.data.{ EventTag, Folded, Handler }
 import aecor.example.domain.CardAuthorizationAggregate.State.{
@@ -17,7 +17,6 @@ import aecor.example.domain.CardAuthorizationAggregateEvent.{
 }
 import aecor.example.domain.CardAuthorizationAggregateOp._
 import akka.Done
-import cats.arrow.FunctionK
 import cats.~>
 
 import scala.collection.immutable.Seq
@@ -65,18 +64,14 @@ object CardAuthorizationAggregate {
 
   }
 
-  def correlation: Correlation[CardAuthorizationAggregateOp] = {
-    def mk[A](fa: CardAuthorizationAggregateOp[A]): CorrelationIdF[A] =
-      fa.cardAuthorizationId.value
-    FunctionK.lift(mk _)
-  }
+  def correlation: Correlation[CardAuthorizationAggregateOp] = _.cardAuthorizationId.value
 
   val entityName: String = "CardAuthorization"
 
   val entityNameTag: EventTag[CardAuthorizationAggregateEvent] = EventTag(entityName)
 
   def commandHandler =
-    new (CardAuthorizationAggregateOp ~> Handler[State, CardAuthorizationAggregateEvent, ?]) {
+    new (CardAuthorizationAggregateOp ~> Handler[State, Seq[CardAuthorizationAggregateEvent], ?]) {
       def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
         (events.toVector, Right(Done))
 

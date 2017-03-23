@@ -15,6 +15,7 @@ import akka.stream.scaladsl.Source
 import cats.implicits._
 import cats.{ Functor, Monad, MonadError }
 
+import scala.concurrent.Future
 import scala.concurrent.duration._
 
 trait Schedule[F[_]] {
@@ -25,7 +26,7 @@ trait Schedule[F[_]] {
   def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
-  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed]
+  ): Source[Committable[Future, JournalEntry[UUID, ScheduleEvent]], NotUsed]
 }
 
 private[schedule] class ConfiguredSchedule(
@@ -58,6 +59,7 @@ private[schedule] class ConfiguredSchedule(
         DefaultScheduleAggregate(clock).asFunctionK,
         Tagging(eventTag),
         journal,
+        None,
         NoopSnapshotStore[ScheduleState, F],
         Capture[F].capture(UUID.randomUUID())
       )

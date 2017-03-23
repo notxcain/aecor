@@ -17,7 +17,7 @@ import cats.~>
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
-
+import scala.collection.immutable.Seq
 sealed abstract class SnapshotPolicy[+E] extends Product with Serializable
 
 object SnapshotPolicy {
@@ -43,7 +43,7 @@ object AggregateActor {
 
   def props[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Command ~> Handler[State, Event, ?],
+    behavior: Command ~> Handler[State, Seq[Event], ?],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
     idleTimeout: FiniteDuration
@@ -65,7 +65,7 @@ object AggregateActor {
   */
 class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
-  behavior: Command ~> Handler[State, Event, ?],
+  behavior: Command ~> Handler[State, Seq[Event], ?],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
   idleTimeout: FiniteDuration
@@ -144,7 +144,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
       sender() ! reply
     } else {
       val envelopes =
-        events.map(e => Tagged(eventEncoder.encode(e), tagger(e)))
+        events.map(e => Tagged(eventEncoder.encode(e), tagger(e).map(_.value)))
 
       events.foreach(applyEvent)
 

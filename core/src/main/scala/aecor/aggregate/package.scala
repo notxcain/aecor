@@ -1,11 +1,11 @@
 package aecor
 
-import cats.~>
-
 package object aggregate {
   type CorrelationId = String
-  type CorrelationIdF[A] = CorrelationId
-  type Correlation[C[_]] = (C ~> CorrelationIdF)
+  type Correlation[C[_]] = (C[_] => CorrelationId)
+  object Correlation {
+    def apply[C[_]](f: C[_] => CorrelationId): Correlation[C] = f
+  }
   object CorrelationId {
     def composite(sep: String, firstComponent: String, otherComponents: String*): CorrelationId = {
       val replacement = s"\\$sep"

@@ -76,7 +76,7 @@ private[schedule] class ScheduleProcess[F[_]: Async: CaptureFuture: Capture: Fun
         case ScheduleEntryFired(scheduleName, scheduleBucket, entryId, _, _) =>
           repository.markScheduleEntryAsFired(scheduleName, scheduleBucket, entryId).map(_ => 0)
       })
-      .fold(Committable.pure(0)) { (acc, x) =>
+      .fold(Committable.pure[Future, Int](0)) { (acc, x) =>
         x.copy(value = acc.value + x.value)
       }
       .mapAsync(1)(x => x.commit().map(_ => x.value))

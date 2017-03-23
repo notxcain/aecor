@@ -1,8 +1,9 @@
 package aecor.aggregate.runtime
 
 import cats.arrow.FunctionK
-import cats.{ Functor, ~> }
+import cats.data.StateT
 import cats.implicits._
+import cats.{ Applicative, Functor, ~> }
 
 object behavior {
 
@@ -16,7 +17,7 @@ object behavior {
     * producing a pair consisting of next `Behavior[Op, F]` and an `A`
     */
   final case class Behavior[Op[_], F[_]](run: Op ~> PairT[F, Behavior[Op, F], ?]) {
-    def mapK[G[_]: Functor](f: F ~> G): Behavior[Op, G] = Behavior {
+    def mapK[G[_]: Functor](f: F ~> G): Behavior[Op, G] = Behavior[Op, G] {
       def mk[A](op: Op[A]): PairT[G, Behavior[Op, G], A] =
         f(run(op)).map {
           case (b, a) =>
@@ -25,4 +26,11 @@ object behavior {
       FunctionK.lift(mk _)
     }
   }
+
+  def stateRuntime[Op[_], F[_]: Applicative](
+    behavior: Behavior[Op, F]
+  ): Op ~> StateT[F, Behavior[Op, F], ?] =
+    Lambda[Op ~> StateT[F, Behavior[Op, F], ?]] { op =>
+      StateT(_.run(op))
+    }
 }

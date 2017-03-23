@@ -2,13 +2,12 @@ package aecor.example.domain
 
 import java.time.Clock
 
-import aecor.aggregate.{ Correlation, CorrelationIdF, Folder }
+import aecor.aggregate.{ Correlation, Folder }
 import aecor.data.Folded.syntax._
 import aecor.data.{ EventTag, Folded, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
 import akka.Done
-import cats.arrow.FunctionK
 import cats.~>
 
 import scala.collection.immutable.Seq
@@ -17,11 +16,7 @@ case class AccountId(value: String) extends AnyVal
 
 object AccountAggregate {
 
-  def correlation: Correlation[AccountAggregateOp] = {
-    def mk[A](fa: AccountAggregateOp[A]): CorrelationIdF[A] =
-      fa.accountId.value
-    FunctionK.lift(mk _)
-  }
+  def correlation: Correlation[AccountAggregateOp] = _.accountId.value
 
   def applyEvent(state: Option[Account])(event: AccountAggregateEvent): Folded[Option[Account]] =
     state match {
@@ -77,7 +72,9 @@ object AccountAggregate {
   val entityNameTag: EventTag[AccountAggregateEvent] = EventTag(entityName)
 
   def commandHandler(clock: Clock) =
-    new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account], AccountAggregateEvent, ?]) {
+    new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account], Seq[
+      AccountAggregateEvent
+    ], ?]) {
       def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
         (events.toVector, Right(Done))
 

@@ -75,6 +75,8 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "co.fs2" %% "fs2-core" % "0.9.4",
     "io.monix" %% "monix-eval" % "2.2.1",
+    "io.monix" %% "monix-cats" % "2.2.1",
+    "com.slamdata" %% "matryoshka-core" % "0.18.3",
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion
   )

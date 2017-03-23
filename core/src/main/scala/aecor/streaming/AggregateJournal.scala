@@ -11,15 +11,6 @@ final case class JournalEntry[+O, +A](offset: O, persistenceId: String, sequence
   def mapOffset[I](f: O => I): JournalEntry[I, A] = copy(f(offset))
 }
 
-object JournalEntry {
-  implicit def committable[Offset, A](
-    implicit ev: Commit[Offset]
-  ): Commit[JournalEntry[Offset, A]] =
-    new Commit[JournalEntry[Offset, A]] {
-      override def commit(a: JournalEntry[Offset, A]): Future[Unit] = ev.commit(a.offset)
-    }
-}
-
 trait AggregateJournal[Offset] {
   def eventsByTag[E: PersistentDecoder](
     tag: EventTag[E],
@@ -35,7 +26,7 @@ trait AggregateJournal[Offset] {
     offsetStore: OffsetStore[Offset],
     tag: EventTag[E],
     consumerId: ConsumerId
-  ): Source[Committable[JournalEntry[Offset, E]], NotUsed] =
+  ): Source[Committable[Future, JournalEntry[Offset, E]], NotUsed] =
     Source
       .single(NotUsed)
       .mapAsync(1) { _ =>
@@ -50,7 +41,7 @@ trait AggregateJournal[Offset] {
     offsetStore: OffsetStore[Offset],
     tag: EventTag[E],
     consumerId: ConsumerId
-  ): Source[Committable[JournalEntry[Offset, E]], NotUsed] =
+  ): Source[Committable[Future, JournalEntry[Offset, E]], NotUsed] =
     Source
       .single(NotUsed)
       .mapAsync(1) { _ =>

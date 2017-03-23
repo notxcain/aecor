@@ -9,6 +9,7 @@ import aecor.streaming._
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
+import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule[F[_]](clock: Clock,
@@ -31,7 +32,7 @@ private[schedule] class DefaultSchedule[F[_]](clock: Clock,
   override def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
-  ): Source[Committable[JournalEntry[UUID, ScheduleEvent]], NotUsed] =
+  ): Source[Committable[Future, JournalEntry[UUID, ScheduleEvent]], NotUsed] =
     aggregateJournal
       .committableEventsByTag[ScheduleEvent](
         offsetStore,

@@ -10,7 +10,7 @@ import aecor.aggregate.serialization.{
   PersistentEncoder,
   PersistentRepr
 }
-import aecor.data.Folded
+
 import akka.actor.{ ActorSystem, Props }
 import akka.pattern._
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
@@ -18,7 +18,7 @@ import akka.persistence.query.PersistenceQuery
 import akka.stream.Materializer
 import akka.util.Timeout
 import cats.data.NonEmptyVector
-import cats.Functor
+import cats.{ Functor, Monad }
 import cats.implicits._
 
 import scala.concurrent.Future
@@ -44,10 +44,10 @@ object CassandraEventJournal {
           actor ? CassandraEventJournalActor.WriteMessages(id, events, instanceId)
         }.void
 
-      override def fold[S](id: String,
-                           offset: Long,
-                           zero: S,
-                           step: (S, E) => Folded[S]): F[Folded[S]] =
+      override def foldById[G[_]: Monad, S](id: String,
+                                            offset: Long,
+                                            zero: S,
+                                            step: (S, E) => G[S]): F[G[S]] =
         CaptureFuture[F].captureF {
           readJournal
             .currentEventsByPersistenceId(id, offset, Long.MaxValue)
@@ -68,7 +68,7 @@ object CassandraEventJournal {
               case other =>
                 Future.failed(DecodingFailure(s"Unexpected underlying type ${other.event}"))
             }
-            .runFold(Folded.next(zero)) { (s, e) =>
+            .runFold(zero.pure[G]) { (s, e) =>
               s.flatMap(step(_, e))
             }
         }

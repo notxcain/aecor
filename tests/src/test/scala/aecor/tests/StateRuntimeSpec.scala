@@ -1,10 +1,12 @@
 package aecor.tests
 
-import aecor.aggregate.{ Correlation, CorrelationIdF, Folder, StateRuntime }
+import aecor.aggregate.{ Correlation, Folder, StateRuntime }
 import aecor.data.Handler
+import cats.implicits._
 import cats.{ Id, Monad, ~> }
 import org.scalatest.{ FunSuite, Matchers }
-import cats.implicits._
+
+import scala.collection.immutable.Seq
 
 class StateRuntimeSpec extends FunSuite with Matchers {
   sealed trait CounterOp[A] {
@@ -13,9 +15,7 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   case class Increment(id: String) extends CounterOp[Long]
   case class Decrement(id: String) extends CounterOp[Long]
 
-  val correlation = new (Correlation[CounterOp]) {
-    override def apply[A](fa: CounterOp[A]): CorrelationIdF[A] = fa.id
-  }
+  val correlation = Correlation[CounterOp](_.id)
 
   sealed trait CounterEvent
   case class CounterIncremented(id: String) extends CounterEvent
@@ -30,8 +30,8 @@ class StateRuntimeSpec extends FunSuite with Matchers {
         }
       }
   }
-  val behavior: CounterOp ~> Handler[CounterState, CounterEvent, ?] =
-    Lambda[CounterOp ~> Handler[CounterState, CounterEvent, ?]] {
+  val behavior: CounterOp ~> Handler[CounterState, Seq[CounterEvent], ?] =
+    Lambda[CounterOp ~> Handler[CounterState, Seq[CounterEvent], ?]] {
       case Increment(id) =>
         Handler { x =>
           Vector(CounterIncremented(id)) -> (x.value + 1)

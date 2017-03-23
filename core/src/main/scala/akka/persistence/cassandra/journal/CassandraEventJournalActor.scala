@@ -126,7 +126,7 @@ class CassandraEventJournalActor[E: PersistentEncoder](cfg: Config)
             aw.persistenceId,
             pr.sequenceNr,
             serEvent,
-            pr.tags,
+            pr.tags.map(_.value),
             "",
             serManifest,
             100,
