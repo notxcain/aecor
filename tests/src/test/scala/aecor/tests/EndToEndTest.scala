@@ -8,9 +8,9 @@ import aecor.tests.e2e.TestEventJournal.TestEventJournalState
 import aecor.tests.e2e._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp, NotificationOpHandler }
 import cats.data.StateT
-import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
 import shapeless.Coproduct
+import cats.implicits._
 
 class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
@@ -59,18 +59,15 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
         counterBehavior
       ),
       counterEventJournal
-        .foldByTag[StateT[SpecF, SpecState, ?]](CounterEvent.tag, counterViewProcessConsumerId)
+        .eventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
     ),
     wireProcess(
       NotificationProcess(counterBehavior, notificationBehavior),
       counterEventJournal
-        .foldByTag[StateT[SpecF, SpecState, ?]](CounterEvent.tag, notificationProcessConsumerId)
+        .eventsByTag(CounterEvent.tag, notificationProcessConsumerId)
         .map(_.map(Coproduct[NotificationProcess.Input](_))),
       notificationEventJournal
-        .foldByTag[StateT[SpecF, SpecState, ?]](
-          NotificationEvent.tag,
-          notificationProcessConsumerId
-        )
+        .eventsByTag(NotificationEvent.tag, notificationProcessConsumerId)
         .map(_.map(Coproduct[NotificationProcess.Input](_)))
     )
   )
@@ -96,8 +93,6 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       )
       .right
       .get
-
-    println(state)
     state.counterViewState.value shouldBe Map("1" -> 1L, "2" -> 2L)
     state.notificationJournalState.eventsById
       .getOrElse("Notification-1-2", Vector.empty) should have size (2)

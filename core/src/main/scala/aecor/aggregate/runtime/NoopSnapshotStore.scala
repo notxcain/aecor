@@ -1,10 +1,9 @@
 package aecor.aggregate.runtime
 
-import aecor.aggregate.SnapshotStore
 import cats.Applicative
 import cats.implicits._
 
-sealed class NoopSnapshotStore[S, F[_]: Applicative] extends SnapshotStore[S, F] {
+sealed class NoopSnapshotStore[F[_]: Applicative, S] extends SnapshotStore[F, S] {
   override def saveSnapshot(id: String, state: EventsourcedBehavior.InternalState[S]): F[Unit] =
     ().pure[F]
 
@@ -13,5 +12,5 @@ sealed class NoopSnapshotStore[S, F[_]: Applicative] extends SnapshotStore[S, F]
 }
 
 object NoopSnapshotStore {
-  def apply[S, F[_]: Applicative]: NoopSnapshotStore[S, F] = new NoopSnapshotStore[S, F]
+  def apply[F[_]: Applicative, S]: NoopSnapshotStore[F, S] = new NoopSnapshotStore[F, S]
 }

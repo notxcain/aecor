@@ -76,14 +76,14 @@ class TestEventJournal[F[_]: Monad, A, E](extract: A => TestEventJournalState[E]
       )
       .transformS(extract, update)
 
-  def foldByTag[G[_]: Monad](
+  def eventsByTag(
     tag: EventTag[E],
     consumerId: ConsumerId
-  ): FoldableSource[StateT[F, A, ?], G, Committable[StateT[F, A, ?], E]] =
-    new FoldableSource[StateT[F, A, ?], G, Committable[StateT[F, A, ?], E]] {
-      override def foldM[S](
-        zero: S
-      )(step: (S, Committable[StateT[F, A, ?], E]) => G[S]): StateT[F, A, G[S]] =
+  ): FoldableSource[StateT[F, A, ?], StateT[F, A, ?], Committable[StateT[F, A, ?], E]] =
+    new FoldableSource[StateT[F, A, ?], StateT[F, A, ?], Committable[StateT[F, A, ?], E]] {
+      override def foldM[S](zero: S)(
+        step: (S, Committable[StateT[F, A, ?], E]) => StateT[F, A, S]
+      ): StateT[F, A, StateT[F, A, S]] =
         for {
           offset0 <- StateT
                       .inspect[F, TestEventJournalState[E], Int](
@@ -91,7 +91,7 @@ class TestEventJournal[F[_]: Monad, A, E](extract: A => TestEventJournalState[E]
                       )
                       .transformS(extract, update)
           result <- StateT
-                     .inspect[F, TestEventJournalState[E], G[S]] {
+                     .inspect[F, TestEventJournalState[E], StateT[F, A, S]] {
                        _.eventsByTag
                          .getOrElse(tag, Vector.empty)
                          .zipWithIndex

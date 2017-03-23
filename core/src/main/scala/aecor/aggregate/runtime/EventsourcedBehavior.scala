@@ -37,7 +37,7 @@ object EventsourcedBehavior {
     tagging: Tagging[E],
     journal: EventJournal[F, E],
     snapshotEach: Option[Long],
-    snapshotStore: SnapshotStore[S, F],
+    snapshotStore: SnapshotStore[F, S],
     generateInstanceId: F[UUID]
   )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] =
     VanillaBehavior.correlated[F, Op, InternalState[S], Seq[E]](
@@ -58,7 +58,7 @@ object EventsourcedBehavior {
 
   def repository[F[_]: MonadError[?[_], BehaviorFailure], S, E](journal: EventJournal[F, E],
                                                                 snapshotEach: Option[Long],
-                                                                snapshotStore: SnapshotStore[S, F],
+                                                                snapshotStore: SnapshotStore[F, S],
                                                                 tagging: Tagging[E])(
     implicit S: Folder[Folded, E, S]
   ): CorrelationId => EntityRepository[F, InternalState[S], Seq[E]] = { entityId =>

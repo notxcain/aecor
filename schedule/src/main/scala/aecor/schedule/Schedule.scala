@@ -60,7 +60,7 @@ private[schedule] class ConfiguredSchedule(
         Tagging(eventTag),
         journal,
         None,
-        NoopSnapshotStore[ScheduleState, F],
+        NoopSnapshotStore[F, ScheduleState],
         Capture[F].capture(UUID.randomUUID())
       )
       f <- runtime
