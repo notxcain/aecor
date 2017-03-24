@@ -3,22 +3,27 @@ package aecor.schedule
 import java.time._
 import java.time.format.DateTimeFormatter
 
+import aecor.aggregate.runtime.{ Async, CaptureFuture }
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import akka.NotUsed
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
-import akka.stream.scaladsl.Source
+import akka.stream.Materializer
+import akka.stream.scaladsl.{ Sink, Source }
 import com.datastax.driver.core.{ Row, Session }
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
-
+import Async.ops._
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queries: Queries)(
-  implicit executionContext: ExecutionContext
-) extends ScheduleEntryRepository {
-  private val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository])
+class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
+  cassandraSession: CassandraSession,
+  queries: Queries
+)(implicit materializer: Materializer)
+    extends ScheduleEntryRepository[F] {
+  import materializer.executionContext
+  private val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository[F]])
   private val preparedInsertEntry = cassandraSession.prepare(queries.insertEntry)
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
   private val preparedSelectEntry = cassandraSession.prepare(queries.selectEntry)
@@ -26,48 +31,52 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
   override def insertScheduleEntry(scheduleName: String,
                                    scheduleBucket: String,
                                    entryId: String,
-                                   dueDate: LocalDateTime): Future[Unit] =
-    preparedInsertEntry
-      .map(
-        _.bind()
-          .setString("schedule_name", scheduleName)
-          .setString("schedule_bucket", scheduleBucket)
-          .setString("entry_id", entryId)
-          .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
-          .set("due_date", dueDate.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
-          .setBool("fired", false)
-      )
-      .flatMap(cassandraSession.executeWrite)
-      .map(_ => ())
+                                   dueDate: LocalDateTime): F[Unit] =
+    CaptureFuture[F].captureF {
+      preparedInsertEntry
+        .map(
+          _.bind()
+            .setString("schedule_name", scheduleName)
+            .setString("schedule_bucket", scheduleBucket)
+            .setString("entry_id", entryId)
+            .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
+            .set("due_date", dueDate.toInstant(ZoneOffset.UTC), classOf[Instant])
+            .setBool("fired", false)
+        )
+        .flatMap(cassandraSession.executeWrite)
+        .map(_ => ())
+    }
 
   override def markScheduleEntryAsFired(scheduleName: String,
                                         scheduleBucket: String,
-                                        entryId: String): Future[Unit] =
-    preparedSelectEntry
-      .map(
-        _.bind()
-          .setString("schedule_name", scheduleName)
-          .setString("schedule_bucket", scheduleBucket)
-          .setString("entry_id", entryId)
-      )
-      .flatMap(cassandraSession.selectOne)
-      .flatMap {
-        case Some(row) =>
-          preparedInsertEntry
-            .map(
-              _.bind()
-                .setString("schedule_name", scheduleName)
-                .setString("schedule_bucket", scheduleBucket)
-                .setString("entry_id", entryId)
-                .setString("time_bucket", row.getString("time_bucket"))
-                .setTimestamp("due_date", row.getTimestamp("due_date"))
-                .setBool("fired", true)
-            )
-            .flatMap(cassandraSession.executeWrite)
-            .map(_ => ())
-        case None =>
-          Future.successful(())
-      }
+                                        entryId: String): F[Unit] =
+    CaptureFuture[F].captureF {
+      preparedSelectEntry
+        .map(
+          _.bind()
+            .setString("schedule_name", scheduleName)
+            .setString("schedule_bucket", scheduleBucket)
+            .setString("entry_id", entryId)
+        )
+        .flatMap(cassandraSession.selectOne)
+        .flatMap {
+          case Some(row) =>
+            preparedInsertEntry
+              .map(
+                _.bind()
+                  .setString("schedule_name", scheduleName)
+                  .setString("schedule_bucket", scheduleBucket)
+                  .setString("entry_id", entryId)
+                  .setString("time_bucket", row.getString("time_bucket"))
+                  .setTimestamp("due_date", row.getTimestamp("due_date"))
+                  .setBool("fired", true)
+              )
+              .flatMap(cassandraSession.executeWrite)
+              .map(_ => ())
+          case None =>
+            Future.successful(())
+        }
+    }
 
   private def getBucket(timeBucket: TimeBucket,
                         from: LocalDateTime,
@@ -85,7 +94,7 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
       .map(fromRow)
       .named(s"getBucket($timeBucket, $from, $to)")
 
-  override def getEntries(
+  private def getEntries(
     from: LocalDateTime,
     to: LocalDateTime
   ): Source[ScheduleEntryRepository.ScheduleEntry, NotUsed] =
@@ -108,6 +117,15 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
       rec(TimeBucket(from.toLocalDate)).named(s"getEntries($from, $to)")
     }
 
+  override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
+    f: (ScheduleEntry) => F[Unit]
+  ): F[Option[ScheduleEntry]] =
+    CaptureFuture[F].captureF {
+      getEntries(from, to)
+        .mapAsync(parallelism)(x => f(x).unsafeRun.map(_ => x))
+        .runWith(Sink.lastOption)
+    }
+
   private def fromRow(row: Row): ScheduleEntry =
     ScheduleEntry(
       row.getString("schedule_name"),
@@ -121,9 +139,9 @@ class CassandraScheduleEntryRepository(cassandraSession: CassandraSession, queri
 
 object CassandraScheduleEntryRepository {
 
-  def apply(cassandraSession: CassandraSession, queries: Queries)(
-    implicit executionContext: ExecutionContext
-  ): CassandraScheduleEntryRepository =
+  def apply[F[_]: Async: CaptureFuture](cassandraSession: CassandraSession, queries: Queries)(
+    implicit materializer: Materializer
+  ): CassandraScheduleEntryRepository[F] =
     new CassandraScheduleEntryRepository(cassandraSession, queries)
 
   final case class TimeBucket(day: LocalDate, key: String) {

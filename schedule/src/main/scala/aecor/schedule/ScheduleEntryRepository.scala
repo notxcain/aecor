@@ -3,20 +3,18 @@ package aecor.schedule
 import java.time.LocalDateTime
 
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
-import akka.NotUsed
-import akka.stream.scaladsl.Source
 
-import scala.concurrent.Future
-
-trait ScheduleEntryRepository {
+trait ScheduleEntryRepository[F[_]] {
   def insertScheduleEntry(scheduleName: String,
                           scheduleBucket: String,
                           entryId: String,
-                          dueDate: LocalDateTime): Future[Unit]
+                          dueDate: LocalDateTime): F[Unit]
   def markScheduleEntryAsFired(scheduleName: String,
                                scheduleBucket: String,
-                               entryId: String): Future[Unit]
-  def getEntries(from: LocalDateTime, to: LocalDateTime): Source[ScheduleEntry, NotUsed]
+                               entryId: String): F[Unit]
+  def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
+    f: (ScheduleEntry) => F[Unit]
+  ): F[Option[ScheduleEntry]]
 }
 
 object ScheduleEntryRepository {

@@ -9,28 +9,33 @@ import cats.implicits._
 import cats.~>
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
+import monix.eval.Task
+import monix.execution.Scheduler
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
-class AccountAPI(account: AccountAggregateOp ~> Future) {
+class AccountAPI(account: AccountAggregateOp ~> Task) {
 
   import AccountAPI._
 
-  def openAccount(dto: DTO.OpenAccount)(
-      implicit ec: ExecutionContext): Future[String Either Done] = dto match {
+  def openAccount(
+    dto: DTO.OpenAccount
+  )(implicit ec: ExecutionContext): Future[String Either Done] = dto match {
     case DTO.OpenAccount(accountId) =>
       account(AccountAggregateOp.OpenAccount(AccountId(accountId)))
         .map(_.leftMap(_.toString))
+        .runAsync(Scheduler(ec))
   }
 
-  def creditAccount(dto: DTO.CreditAccount)(
-      implicit ec: ExecutionContext): Future[String Either Done] = dto match {
+  def creditAccount(
+    dto: DTO.CreditAccount
+  )(implicit ec: ExecutionContext): Future[String Either Done] = dto match {
     case DTO.CreditAccount(accountId, transactionId, amount) =>
       account(
-        AccountAggregateOp.CreditAccount(AccountId(accountId),
-                                         TransactionId(transactionId),
-                                         Amount(amount)))
-        .map(_.leftMap(_.toString))
+        AccountAggregateOp
+          .CreditAccount(AccountId(accountId), TransactionId(transactionId), Amount(amount))
+      ).map(_.leftMap(_.toString))
+        .runAsync(Scheduler(ec))
   }
 }
 
@@ -39,10 +44,7 @@ object AccountAPI {
   @JsonCodec sealed trait DTO
 
   object DTO {
-    case class CreditAccount(accountId: String,
-                             transactionId: String,
-                             amount: Long)
-        extends DTO
+    case class CreditAccount(accountId: String, transactionId: String, amount: Long) extends DTO
     case class OpenAccount(accountId: String) extends DTO
   }
 

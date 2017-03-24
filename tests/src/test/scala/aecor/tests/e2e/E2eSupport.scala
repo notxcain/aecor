@@ -63,38 +63,44 @@ trait E2eSupport {
     val process: In => F[Unit]
     val sources: Vector[FoldableSource[F, F, Committable[F, In]]]
     final def run(implicit F: Monad[F]): F[Unit] =
-      for {
-        processed <- sources
-                      .fold(FoldableSource.empty[F, F, Committable[F, In]])(_ merge _)
-                      .foldM(0) {
-                        case (cnt, committable) =>
-                          committable
-                            .traverse(process)
-                            .flatMap(_ => committable.commit())
-                            .map(_ => cnt + 1)
-                      }
-                      .flatten
-        _ <- if (processed == 0)
-              ().pure[F]
-            else
-              run
-      } yield ()
+      sources
+        .fold(FoldableSource.empty[F, F, Committable[F, In]])(_ merge _)
+        .foldM(0) {
+          case (cnt, committable) =>
+            committable
+              .traverse(process)
+              .flatMap(_ => committable.commit())
+              .map(_ => cnt + 1)
+        }
+        .flatten
+        .void
+
   }
 
   def processes: Vector[WiredProcess[StateT[SpecF, SpecState, ?]]]
+
+  def otherStuff: Vector[StateT[SpecF, SpecState, Unit]] = Vector.empty
 
   final def wired[Op[_]](
     behavior: Op ~> StateT[SpecF, SpecState, ?]
   ): Op ~> StateT[SpecF, SpecState, ?] =
     new (Op ~> StateT[SpecF, SpecState, ?]) {
+      private def runProcesses: StateT[SpecF, SpecState, Unit] =
+        for {
+          stateBefore <- StateT.get[SpecF, SpecState]
+          _ <- (processes.map(_.run) ++ otherStuff).sequence
+          stateAfter <- StateT.get[SpecF, SpecState]
+          _ <- if (stateAfter == stateBefore) {
+                ().pure[StateT[SpecF, SpecState, ?]]
+              } else {
+                runProcesses
+              }
+        } yield ()
+
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
         for {
           x <- behavior(fa)
-          _ <- processes
-                .map(_.run)
-                .foldLeft(StateT.pure[SpecF, SpecState, Unit](())) { (l, r) =>
-                  l.map2(r)((_, _) => ())
-                }
+          _ <- runProcesses
         } yield x
     }
 

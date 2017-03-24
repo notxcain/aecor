@@ -4,12 +4,14 @@ import cats.data.{ EitherT, Kleisli }
 
 import scala.concurrent.{ ExecutionContext, Future }
 import Async.ops._
+import cats.~>
 
 /**
   * The type class for types that can be run in async manner
   */
 trait Async[F[_]] {
   def unsafeRun[A](fa: F[A]): Future[A]
+  def asFunctionK: F ~> Future = Lambda[F ~> Future](unsafeRun(_))
 }
 
 object Async extends AsyncInstances {

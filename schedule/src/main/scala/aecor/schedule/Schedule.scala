@@ -6,14 +6,19 @@ import java.util.UUID
 import aecor.aggregate.runtime._
 import aecor.aggregate.{ CorrelationId, Tagging }
 import aecor.data.EventTag
+import aecor.schedule.process.{
+  DefaultScheduleProcessOps,
+  ScheduleProcess,
+  ScheduleProcessRuntime
+}
 import aecor.streaming._
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.journal.CassandraEventJournal
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
+import cats.MonadError
 import cats.implicits._
-import cats.{ Functor, Monad, MonadError }
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -26,7 +31,7 @@ trait Schedule[F[_]] {
   def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
-  ): Source[Committable[Future, JournalEntry[UUID, ScheduleEvent]], NotUsed]
+  ): Source[Committable[F, JournalEntry[UUID, ScheduleEvent]], NotUsed]
 }
 
 private[schedule] class ConfiguredSchedule(
@@ -37,67 +42,11 @@ private[schedule] class ConfiguredSchedule(
   bucketLength: FiniteDuration,
   refreshInterval: FiniteDuration,
   eventualConsistencyDelay: FiniteDuration,
-  repository: ScheduleEntryRepository,
-  aggregateJournal: AggregateJournal[UUID],
-  offsetStore: OffsetStore[UUID],
+  repository: ScheduleEntryRepository[Future],
+  aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+  offsetStore: OffsetStore[Future, UUID],
   consumerId: ConsumerId
-)(implicit materializer: Materializer) {
-
-  private val runtime = new GenericAkkaRuntime(system)
-
-  private val eventTag = EventTag[ScheduleEvent](entityName)
-
-  private def startAggregate[F[_]: Async: Monad: Capture: CaptureFuture: MonadError[
-    ?[_],
-    EventsourcedBehavior.BehaviorFailure
-  ]]: F[ScheduleAggregate[F]] =
-    for {
-      journal <- CassandraEventJournal[ScheduleEvent, F](system, 8)
-      behavior = EventsourcedBehavior(
-        entityName,
-        DefaultScheduleAggregate.correlation,
-        DefaultScheduleAggregate(clock).asFunctionK,
-        Tagging(eventTag),
-        journal,
-        None,
-        NoopSnapshotStore[F, ScheduleState],
-        Capture[F].capture(UUID.randomUUID())
-      )
-      f <- runtime
-            .start(entityName, DefaultScheduleAggregate.correlation, behavior)
-
-    } yield ScheduleAggregate.fromFunctionK(f)
-
-  private def startProcess[F[_]: Async: CaptureFuture: Capture: Functor](
-    aggregate: ScheduleAggregate[F]
-  ) =
-    ScheduleProcess[F](
-      clock = clock,
-      entityName = entityName,
-      consumerId = consumerId,
-      dayZero = dayZero,
-      refreshInterval = refreshInterval,
-      eventualConsistencyDelay = eventualConsistencyDelay,
-      parallelism = 8,
-      offsetStore = offsetStore,
-      repository = repository,
-      scheduleAggregate = aggregate,
-      aggregateJournal = aggregateJournal,
-      eventTag = eventTag
-    ).run(system)
-
-  private def createSchedule[F[_]](aggregate: ScheduleAggregate[F]): Schedule[F] =
-    new DefaultSchedule(clock, aggregate, bucketLength, aggregateJournal, offsetStore, eventTag)
-
-  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
-                                                            EventsourcedBehavior.BehaviorFailure]]
-    : F[Schedule[F]] =
-    for {
-      aggregate <- startAggregate[F]
-      _ <- startProcess[F](aggregate)
-      schedule = createSchedule[F](aggregate)
-    } yield schedule
-}
+)(implicit materializer: Materializer) {}
 
 object Schedule {
   def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
@@ -108,22 +57,57 @@ object Schedule {
     bucketLength: FiniteDuration,
     refreshInterval: FiniteDuration,
     eventualConsistencyDelay: FiniteDuration,
-    repository: ScheduleEntryRepository,
-    aggregateJournal: AggregateJournal[UUID],
-    offsetStore: OffsetStore[UUID],
+    repository: ScheduleEntryRepository[F],
+    aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+    offsetStore: OffsetStore[F, UUID],
     consumerId: ConsumerId = ConsumerId("io.aecor.schedule.ScheduleProcess")
-  )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] =
-    new ConfiguredSchedule(
-      system,
-      entityName,
-      clock,
-      dayZero,
-      bucketLength,
-      refreshInterval,
-      eventualConsistencyDelay,
-      repository,
-      aggregateJournal,
-      offsetStore,
-      consumerId
-    ).start[F]
+  )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] = {
+    val runtime = new GenericAkkaRuntime(system)
+
+    val eventTag = EventTag[ScheduleEvent](entityName)
+
+    def startAggregate =
+      for {
+        journal <- CassandraEventJournal[F, ScheduleEvent](system, 8)
+        behavior = EventsourcedBehavior(
+          entityName,
+          DefaultScheduleAggregate.correlation,
+          DefaultScheduleAggregate(clock).asFunctionK,
+          Tagging(eventTag),
+          journal,
+          None,
+          NoopSnapshotStore[F, ScheduleState],
+          Capture[F].capture(UUID.randomUUID())
+        )
+        f <- runtime
+              .start(entityName, DefaultScheduleAggregate.correlation, behavior)
+
+      } yield ScheduleAggregate.fromFunctionK(f)
+
+    def startProcess(aggregate: ScheduleAggregate[F]) = {
+      val ops = DefaultScheduleProcessOps[F](
+        clock,
+        consumerId,
+        8,
+        offsetStore,
+        dayZero,
+        repository,
+        aggregate,
+        aggregateJournal,
+        eventTag
+      )
+      val process = ScheduleProcess(ops, eventualConsistencyDelay, repository, aggregate)
+      ScheduleProcessRuntime(entityName, refreshInterval, process).run(system)
+    }
+
+    def createSchedule(aggregate: ScheduleAggregate[F]): Schedule[F] =
+      new DefaultSchedule(clock, aggregate, bucketLength, aggregateJournal, offsetStore, eventTag)
+
+    for {
+      aggregate <- startAggregate
+      _ <- startProcess(aggregate)
+      schedule = createSchedule(aggregate)
+    } yield schedule
+  }
+
 }

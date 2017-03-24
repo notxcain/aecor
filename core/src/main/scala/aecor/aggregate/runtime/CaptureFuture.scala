@@ -15,7 +15,7 @@ object CaptureFuture extends CaptureFutureInstances {
   def apply[F[_]](implicit instance: CaptureFuture[F]): CaptureFuture[F] = instance
   object ops {
     implicit class FutureOps[A](self: => Future[A]) {
-      def capture[F[_]](implicit F: CaptureFuture[F]): F[A] = F.captureF(self)
+      def captureF[F[_]](implicit F: CaptureFuture[F]): F[A] = F.captureF(self)
     }
     implicit class CaptureFutureIdOps[F[_], A](val self: F[A]) extends AnyVal {
       def recapture[G[_]](implicit F: Async[F], G: CaptureFuture[G]): G[A] =

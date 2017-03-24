@@ -4,21 +4,22 @@ import java.time.{ Clock, LocalDateTime }
 import java.util.UUID
 
 import aecor.aggregate.CorrelationId
+import aecor.aggregate.runtime.Async
 import aecor.data.EventTag
 import aecor.streaming._
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
-import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration
 
-private[schedule] class DefaultSchedule[F[_]](clock: Clock,
-                                              aggregate: ScheduleAggregate[F],
-                                              bucketLength: FiniteDuration,
-                                              aggregateJournal: AggregateJournal[UUID],
-                                              offsetStore: OffsetStore[UUID],
-                                              eventTag: EventTag[ScheduleEvent])
-    extends Schedule[F] {
+private[schedule] class DefaultSchedule[F[_]: Async](
+  clock: Clock,
+  aggregate: ScheduleAggregate[F],
+  bucketLength: FiniteDuration,
+  aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+  offsetStore: OffsetStore[F, UUID],
+  eventTag: EventTag[ScheduleEvent]
+) extends Schedule[F] {
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,
                                 correlationId: CorrelationId,
@@ -32,13 +33,9 @@ private[schedule] class DefaultSchedule[F[_]](clock: Clock,
   override def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
-  ): Source[Committable[Future, JournalEntry[UUID, ScheduleEvent]], NotUsed] =
+  ): Source[Committable[F, JournalEntry[UUID, ScheduleEvent]], NotUsed] =
     aggregateJournal
-      .committableEventsByTag[ScheduleEvent](
-        offsetStore,
-        eventTag,
-        ConsumerId(scheduleName + consumerId.value)
-      )
+      .committableEventsByTag(offsetStore, eventTag, ConsumerId(scheduleName + consumerId.value))
       .collect {
         case m if m.value.event.scheduleName == scheduleName => m
       }

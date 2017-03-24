@@ -46,6 +46,7 @@ object Committable {
       override def pure[A](x: A): Committable[F, A] = Committable.pure(x)
     }
   def pure[F[_]: Applicative, A](a: A): Committable[F, A] = Committable(() => ().pure[F], a)
+  def unit[F[_]: Applicative]: Committable[F, Unit] = pure(())
   def collector[F[_], A, B](
     pf: PartialFunction[A, B]
   ): PartialFunction[Committable[F, A], Committable[F, B]] = {

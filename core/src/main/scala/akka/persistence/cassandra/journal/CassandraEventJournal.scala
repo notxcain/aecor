@@ -25,7 +25,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 
 object CassandraEventJournal {
-  def apply[E: PersistentEncoder: PersistentDecoder, F[_]: Async: Capture: CaptureFuture: Functor](
+  def apply[F[_]: Async: Capture: CaptureFuture: Functor, E: PersistentEncoder: PersistentDecoder](
     system: ActorSystem,
     decodingParallelism: Int
   )(implicit materializer: Materializer): F[EventJournal[F, E]] = Capture[F].capture {

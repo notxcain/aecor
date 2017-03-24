@@ -2,6 +2,7 @@ package aecor.aggregate.runtime
 
 import cats.{ Applicative, Functor }
 import cats.data.{ EitherT, Kleisli }
+import monix.eval.Task
 
 trait Capture[F[_]] {
   def capture[A](a: => A): F[A]
@@ -17,4 +18,8 @@ object Capture {
     new Capture[EitherT[F, B, ?]] {
       override def capture[A](a: => A): EitherT[F, B, A] = EitherT.right(Capture[F].capture(a))
     }
+
+  implicit def captureMonixTask: Capture[monix.eval.Task] = new Capture[Task] {
+    override def capture[A](a: => A): Task[A] = Task(a)
+  }
 }

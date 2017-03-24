@@ -13,8 +13,8 @@ import scala.util.Success
 class ScheduleEventCodecSpec extends AkkaSpec with PropertyChecks {
   val codec = ScheduleEventCodec
 
-  implicit val arbitraryLocalDateTime = Arbitrary(Gen.const(LocalDateTime.now()))
-  implicit val arbitraryInstant = Arbitrary(Gen.const(Instant.now()))
+  implicit val arbitraryLocalDateTime = Arbitrary(Gen.lzy(Gen.const(LocalDateTime.now())))
+  implicit val arbitraryInstant = Arbitrary(Gen.lzy(Gen.const(Instant.now())))
 
   "ScheduleEventCodec" must {
     "be able to encode and decode ScheduleEvent" in {

@@ -12,14 +12,17 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String, parallelism: Int)(
-  implicit executionContext: ExecutionContext
-) extends AggregateJournal[UUID] {
+class CassandraAggregateJournal[E: PersistentDecoder](
+  system: ActorSystem,
+  journalIdentifier: String,
+  parallelism: Int
+)(implicit executionContext: ExecutionContext)
+    extends AggregateJournal[UUID, E] {
 
   private val readJournal: CassandraReadJournal =
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
 
-  private def createSource[E: PersistentDecoder](
+  private def createSource(
     inner: Source[EventEnvelope2, NotUsed]
   ): Source[JournalEntry[UUID, E], NotUsed] =
     inner.mapAsync(parallelism) {
@@ -51,19 +54,14 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String, 
         }
     }
 
-  def eventsByTag[E: PersistentDecoder](
-    tag: EventTag[E],
-    offset: Option[UUID]
-  ): Source[JournalEntry[UUID, E], NotUsed] =
+  def eventsByTag(tag: EventTag[E], offset: Option[UUID]): Source[JournalEntry[UUID, E], NotUsed] =
     createSource(
       readJournal
         .eventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
     )
 
-  override def currentEventsByTag[E: PersistentDecoder](
-    tag: EventTag[E],
-    offset: Option[UUID]
-  ): Source[JournalEntry[UUID, E], NotUsed] =
+  override def currentEventsByTag(tag: EventTag[E],
+                                  offset: Option[UUID]): Source[JournalEntry[UUID, E], NotUsed] =
     createSource(
       readJournal
         .currentEventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
@@ -72,10 +70,10 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String, 
 }
 
 object CassandraAggregateJournal {
-  def apply(
+  def apply[E: PersistentDecoder](
     system: ActorSystem,
     journalIdentifier: String = CassandraReadJournal.Identifier,
     parallelism: Int = 8
-  )(implicit executionContext: ExecutionContext): AggregateJournal[UUID] =
+  )(implicit executionContext: ExecutionContext): AggregateJournal[UUID, E] =
     new CassandraAggregateJournal(system, journalIdentifier, parallelism)
 }

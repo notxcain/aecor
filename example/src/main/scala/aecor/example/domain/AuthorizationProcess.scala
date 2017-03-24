@@ -1,5 +1,6 @@
 package aecor.example.domain
 
+import aecor.aggregate.runtime.Async.ops._
 import aecor.example.domain.AccountAggregateOp._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain.CardAuthorizationAggregateOp._
@@ -7,8 +8,9 @@ import akka.stream.scaladsl.Flow
 import akka.{ Done, NotUsed }
 import cats.free.Free
 import freek._
-
-import scala.concurrent.{ ExecutionContext, Future }
+import monix.eval.Task
+import monix.execution.Scheduler
+import monix.cats._
 
 object AuthorizationProcess {
   type PRG =
@@ -60,13 +62,12 @@ object AuthorizationProcess {
       }
   }
 
-  def flow[PassThrough, F2[_] <: CopK[_]](parallelism: Int, interpreter: Interpreter[F2, Future])(
+  def flow[PassThrough, F2[_] <: CopK[_]](parallelism: Int, interpreter: Interpreter[F2, Task])(
     implicit sub: SubCop[PRG.Cop, F2],
-    ec: ExecutionContext
+    ec: Scheduler
   ): Flow[(CardAuthorizationCreated, PassThrough), PassThrough, NotUsed] =
     Flow[(CardAuthorizationCreated, PassThrough)].mapAsync(parallelism) {
       case (e, ps) =>
-        import cats.instances.future._
-        handleEvent(e).interpret(interpreter).map(_ => ps)
+        handleEvent(e).interpret(interpreter).map(_ => ps).unsafeRun
     }
 }

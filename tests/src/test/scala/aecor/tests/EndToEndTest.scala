@@ -1,6 +1,9 @@
 package aecor.tests
 
+import java.time.Instant
+
 import aecor.aggregate.Tagging
+import aecor.aggregate.runtime.Capture
 import aecor.streaming.ConsumerId
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
@@ -8,11 +11,15 @@ import aecor.tests.e2e.TestEventJournal.TestEventJournalState
 import aecor.tests.e2e._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp, NotificationOpHandler }
 import cats.data.StateT
+import cats.implicits._
+import cats.~>
 import org.scalatest.{ FunSuite, Matchers }
 import shapeless.Coproduct
-import cats.implicits._
 
 class EndToEndTest extends FunSuite with Matchers with E2eSupport {
+
+  def instant[F[_]: Capture]: F[Instant] =
+    Capture[F].capture(Instant.ofEpochMilli(System.currentTimeMillis()))
 
   case class SpecState(counterJournalState: TestEventJournalState[CounterEvent],
                        notificationJournalState: TestEventJournalState[NotificationEvent],
@@ -21,7 +28,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def counterEventJournal =
     mkJournal[CounterEvent](_.counterJournalState, (x, a) => x.copy(counterJournalState = a))
 
-  def counterBehavior =
+  def counterBehavior: ~>[CounterOp, StateT[SpecF, SpecState, ?]] =
     mkBehavior(
       "Counter",
       CounterOp.correlation,

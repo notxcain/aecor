@@ -1,6 +1,6 @@
 package aecor.tests
 
-import java.time.{ Clock, Instant, LocalDateTime, ZoneId }
+import java.time._
 
 import scala.collection.immutable._
 import aecor.schedule.{ DefaultScheduleAggregate, ScheduleEvent, ScheduleState }

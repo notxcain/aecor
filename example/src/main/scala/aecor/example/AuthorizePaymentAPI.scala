@@ -17,26 +17,22 @@ import akka.http.scaladsl.server.Route
 import cats.~>
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
-
+import monix.eval.Task
+import aecor.aggregate.runtime.Async.ops._
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
-
-class AuthorizePaymentAPI(
-    authorization: CardAuthorizationAggregateOp ~> Future,
-    eventStream: EventStream[CardAuthorizationAggregateEvent],
-    log: LoggingAdapter) {
+import scala.concurrent.{ ExecutionContext, Future }
+import monix.execution.Scheduler.Implicits.global
+class AuthorizePaymentAPI(authorization: CardAuthorizationAggregateOp ~> Task,
+                          eventStream: EventStream[CardAuthorizationAggregateEvent],
+                          log: LoggingAdapter) {
 
   import DTO._
 
   def authorizePayment(dto: AuthorizePayment)(
-      implicit ec: ExecutionContext): Future[
-    Either[CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] =
+    implicit ec: ExecutionContext
+  ): Future[Either[CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] =
     dto match {
-      case AuthorizePayment(cardAuthorizationId,
-                            accountId,
-                            amount,
-                            acquireId,
-                            terminalId) =>
+      case AuthorizePayment(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
         val command = CreateCardAuthorization(
           CardAuthorizationId(cardAuthorizationId),
           AccountId(accountId),
@@ -56,16 +52,20 @@ class AuthorizePaymentAPI(
               AuthorizePaymentAPI.ApiResult.Authorized
           }
           .flatMap { observer =>
-            authorization(command).flatMap {
-              case Left(rejection) => Future.successful(Left(rejection))
-              case _ => observer.result.map(Right(_))
-            }.map { x =>
-              log.debug("Command [{}] processed with result [{}] in [{}]",
-                        command,
-                        x,
-                        (System.nanoTime() - start) / 1000000)
-              x
-            }
+            authorization(command).unsafeRun
+              .flatMap {
+                case Left(rejection) => Future.successful(Left(rejection))
+                case _ => observer.result.map(Right(_))
+              }
+              .map { x =>
+                log.debug(
+                  "Command [{}] processed with result [{}] in [{}]",
+                  command,
+                  x,
+                  (System.nanoTime() - start) / 1000000
+                )
+                x
+              }
           }
 
     }
@@ -94,23 +94,21 @@ object AuthorizePaymentAPI {
 
   val route: AuthorizePaymentAPI => Route = { api =>
     path("authorization") {
-      extractExecutionContext { implicit ec =>
-        post {
-          entity(as[DTO]) {
-            case dto: DTO.AuthorizePayment =>
-              complete {
-                api.authorizePayment(dto).map {
-                  case Left(e) => StatusCodes.BadRequest -> e.toString
-                  case Right(result) =>
-                    result match {
-                      case ApiResult.Authorized =>
-                        StatusCodes.OK -> "Authorized"
-                      case ApiResult.Declined(reason) =>
-                        StatusCodes.BadRequest -> s"Declined: $reason"
-                    }
-                }
+      post {
+        entity(as[DTO]) {
+          case dto: DTO.AuthorizePayment =>
+            complete {
+              api.authorizePayment(dto).map {
+                case Left(e) => StatusCodes.BadRequest -> e.toString
+                case Right(result) =>
+                  result match {
+                    case ApiResult.Authorized =>
+                      StatusCodes.OK -> "Authorized"
+                    case ApiResult.Declined(reason) =>
+                      StatusCodes.BadRequest -> s"Declined: $reason"
+                  }
               }
-          }
+            }
         }
       }
     }

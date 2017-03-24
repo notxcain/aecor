@@ -16,7 +16,7 @@ import akka.stream.scaladsl.{ Sink, Source }
 import cats.data.{ EitherT, Kleisli }
 import cats.implicits._
 import cats.{ Functor, MonadError }
-
+import Async.ops._
 import scala.concurrent.Future
 import scala.concurrent.duration._
 object ScheduleApp extends App {
@@ -39,9 +39,6 @@ object ScheduleApp extends App {
       CassandraScheduleEntryRepository.init(scheduleEntryRepositoryQueries)
     )
   )
-  val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
-  val scheduleEntryRepository =
-    CassandraScheduleEntryRepository(cassandraSession, scheduleEntryRepositoryQueries)
 
   def runSchedule[F[_]: Async: CaptureFuture: Capture: MonadError[
     ?[_],
@@ -54,9 +51,10 @@ object ScheduleApp extends App {
       bucketLength = 1.day,
       refreshInterval = 100.millis,
       eventualConsistencyDelay = 5.seconds,
-      repository = scheduleEntryRepository,
+      repository =
+        CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries),
       aggregateJournal = CassandraAggregateJournal(system),
-      offsetStore = offsetStore
+      offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 
   def runAdder[F[_]: Async: Capture: Functor](schedule: Schedule[F]): F[Unit] =
@@ -76,13 +74,13 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def runEventWatch[F[_]: Capture: Functor](schedule: Schedule[F]): F[Unit] =
+  def runEventWatch[F[_]: Async: Capture: Functor](schedule: Schedule[F]): F[Unit] =
     Capture[F].capture {
       schedule
         .committableScheduleEvents("SubscriptionInvoicing", ConsumerId("println"))
         .mapAsync(1) { x =>
           println(x.value)
-          x.commit()
+          x.commit().unsafeRun
         }
         .runWith(Sink.ignore)
     }.void
