@@ -19,12 +19,10 @@ import scala.concurrent.Promise
 import scala.concurrent.duration.FiniteDuration
 
 object ScheduleProcess {
-  def apply[F[_]: Async: CaptureFuture: Capture: Monad](
-    ops: ScheduleProcessOps[F],
-    eventualConsistencyDelay: FiniteDuration,
-    repository: ScheduleEntryRepository[F],
-    scheduleAggregate: ScheduleAggregate[F]
-  ): F[Unit] = {
+  def apply[F[_]: Monad](ops: ScheduleProcessOps[F],
+                         eventualConsistencyDelay: FiniteDuration,
+                         repository: ScheduleEntryRepository[F],
+                         scheduleAggregate: ScheduleAggregate[F]): F[Unit] = {
     def updateRepository: F[Unit] =
       ops.processNewEvents {
         case ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, _, dueDate, _) =>

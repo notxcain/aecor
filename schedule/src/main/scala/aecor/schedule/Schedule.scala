@@ -20,7 +20,6 @@ import akka.stream.scaladsl.Source
 import cats.MonadError
 import cats.implicits._
 
-import scala.concurrent.Future
 import scala.concurrent.duration._
 
 trait Schedule[F[_]] {
@@ -33,20 +32,6 @@ trait Schedule[F[_]] {
     consumerId: ConsumerId
   ): Source[Committable[F, JournalEntry[UUID, ScheduleEvent]], NotUsed]
 }
-
-private[schedule] class ConfiguredSchedule(
-  system: ActorSystem,
-  entityName: String,
-  clock: Clock,
-  dayZero: LocalDate,
-  bucketLength: FiniteDuration,
-  refreshInterval: FiniteDuration,
-  eventualConsistencyDelay: FiniteDuration,
-  repository: ScheduleEntryRepository[Future],
-  aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
-  offsetStore: OffsetStore[Future, UUID],
-  consumerId: ConsumerId
-)(implicit materializer: Materializer) {}
 
 object Schedule {
   def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],

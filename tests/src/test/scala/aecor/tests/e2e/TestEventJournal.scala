@@ -3,12 +3,13 @@ package aecor.tests.e2e
 import java.util.UUID
 
 import aecor.aggregate.runtime.EventJournal
+import aecor.aggregate.runtime.EventJournal.EventEnvelope
 import aecor.data.EventTag
-import aecor.streaming.{ Committable, ConsumerId }
+import aecor.streaming.ConsumerId
 import aecor.tests.e2e.TestEventJournal.TestEventJournalState
-import cats.{ Applicative, Monad, Traverse }
 import cats.data.{ NonEmptyVector, StateT }
 import cats.implicits._
+import cats.{ Applicative, Monad }
 
 object TestEventJournal {
   case class TestEventJournalState[E](
@@ -76,14 +77,9 @@ class TestEventJournal[F[_]: Monad, A, E](extract: A => TestEventJournalState[E]
       )
       .transformS(extract, update)
 
-  def eventsByTag(
-    tag: EventTag[E],
-    consumerId: ConsumerId
-  ): FoldableSource[StateT[F, A, ?], StateT[F, A, ?], Committable[StateT[F, A, ?], E]] =
-    new FoldableSource[StateT[F, A, ?], StateT[F, A, ?], Committable[StateT[F, A, ?], E]] {
-      override def foldM[S](zero: S)(
-        step: (S, Committable[StateT[F, A, ?], E]) => StateT[F, A, S]
-      ): StateT[F, A, StateT[F, A, S]] =
+  def eventsByTag(tag: EventTag[E], consumerId: ConsumerId): Processable[StateT[F, A, ?], E] =
+    new Processable[StateT[F, A, ?], E] {
+      override def process(f: (E) => StateT[F, A, Unit]): StateT[F, A, Unit] =
         for {
           offset0 <- StateT
                       .inspect[F, TestEventJournalState[E], Int](
@@ -91,86 +87,45 @@ class TestEventJournal[F[_]: Monad, A, E](extract: A => TestEventJournalState[E]
                       )
                       .transformS(extract, update)
           result <- StateT
-                     .inspect[F, TestEventJournalState[E], StateT[F, A, S]] {
+                     .inspect[F, TestEventJournalState[E], Vector[(EventEnvelope[E], Int)]] {
                        _.eventsByTag
                          .getOrElse(tag, Vector.empty)
                          .zipWithIndex
                          .drop(offset0)
-                         .map {
-                           case (envelope, offset) =>
-                             Committable[StateT[F, A, ?], E](
-                               () =>
-                                 StateT
-                                   .modify[F, TestEventJournalState[E]](
-                                     _.setConsumerOffset(tag, consumerId, offset + 1)
-                                   )
-                                   .transformS(extract, update),
-                               envelope.event
-                             )
-                         }
-                         .foldM(zero)(step)
                      }
                      .transformS(extract, update)
-        } yield result
 
+          _ <- result.traverse {
+                case (envelope, offset) =>
+                  for {
+                    _ <- f(envelope.event)
+                    _ <- StateT
+                          .modify[F, TestEventJournalState[E]](
+                            _.setConsumerOffset(tag, consumerId, offset + 1)
+                          )
+                          .transformS(extract, update)
+                  } yield ()
+              }
+        } yield ()
+    }
+
+}
+
+trait Processable[F[_], A] { outer =>
+  def process(f: A => F[Unit]): F[Unit]
+  def map[B](f: A => B): Processable[F, B] =
+    new Processable[F, B] {
+      override def process(f0: (B) => F[Unit]): F[Unit] = outer.process(a => f0(f(a)))
+    }
+  def merge(that: Processable[F, A])(implicit F: Applicative[F]): Processable[F, A] =
+    new Processable[F, A] {
+      override def process(f: (A) => F[Unit]): F[Unit] =
+        F.map2(outer.process(f), that.process(f))((_, _) => ())
     }
 }
 
-sealed trait FoldableSourceMerge[F[_], G[_]] {
-  def apply[E](lhs: FoldableSource[F, G, E], rhs: FoldableSource[F, G, E]): FoldableSource[F, G, E]
-}
-
-object FoldableSourceMerge {
-  implicit def foldableSourceMergeEq[F[_]: Monad]: FoldableSourceMerge[F, F] =
-    new FoldableSourceMerge[F, F] {
-      override def apply[E](lhs: FoldableSource[F, F, E],
-                            rhs: FoldableSource[F, F, E]): FoldableSource[F, F, E] =
-        new FoldableSource[F, F, E] {
-          override def foldM[S](zero: S)(step: (S, E) => F[S]): F[F[S]] =
-            for {
-              c <- lhs
-                    .foldM(zero)((s, e) => step(s, e))
-                    .flatten
-              o <- rhs.foldM(c)(step)
-            } yield o
-
-        }
-    }
-  implicit def foldableSourceMergeGTraverse[F[_]: Monad, G[_]: Traverse: Monad]
-    : FoldableSourceMerge[F, G] =
-    new FoldableSourceMerge[F, G] {
-      override def apply[E](lhs: FoldableSource[F, G, E],
-                            rhs: FoldableSource[F, G, E]): FoldableSource[F, G, E] =
-        new FoldableSource[F, G, E] {
-          override def foldM[S](zero: S)(step: (S, E) => G[S]): F[G[S]] =
-            for {
-              x <- lhs.foldM(zero)(step)
-              y <- Traverse[G].traverse(x)(zero1 => lhs.foldM(zero1)(step))
-            } yield y.flatten
-        }
-    }
-}
-
-trait FoldableSource[F[_], G[_], A] { outer =>
-  def foldM[S](zero: S)(step: (S, A) => G[S]): F[G[S]]
-
-  def map[B](f: A => B): FoldableSource[F, G, B] = new FoldableSource[F, G, B] {
-    override def foldM[S](zero: S)(step: (S, B) => G[S]): F[G[S]] =
-      outer.foldM(zero) {
-        case (s, e) =>
-          step(s, f(e))
-      }
+object Processable {
+  def empty[F[_]: Applicative, A]: Processable[F, A] = new Processable[F, A] {
+    override def process(f: (A) => F[Unit]): F[Unit] = ().pure[F]
   }
-
-  def merge(
-    that: FoldableSource[F, G, A]
-  )(implicit Merge: FoldableSourceMerge[F, G]): FoldableSource[F, G, A] =
-    Merge(this, that)
-}
-
-object FoldableSource {
-  def empty[F[_]: Applicative, G[_]: Applicative, E]: FoldableSource[F, G, E] =
-    new FoldableSource[F, G, E] {
-      override def foldM[S](zero: S)(step: (S, E) => G[S]): F[G[S]] = zero.pure[G].pure[F]
-    }
 }

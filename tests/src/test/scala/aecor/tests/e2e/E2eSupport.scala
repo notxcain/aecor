@@ -6,7 +6,6 @@ import aecor.aggregate.runtime.EventsourcedBehavior.BehaviorFailure
 import aecor.aggregate.runtime.{ EventsourcedBehavior, NoopSnapshotStore }
 import aecor.aggregate.{ Correlation, Folder, Tagging }
 import aecor.data.{ Folded, Handler }
-import aecor.streaming.Committable
 import aecor.tests.e2e.TestEventJournal.TestEventJournalState
 import cats.data.StateT
 import cats.implicits._
@@ -32,47 +31,39 @@ trait E2eSupport {
   )(implicit folder: Folder[Folded, E, S]): Op ~> StateT[SpecF, SpecState, ?] =
     new (Op ~> StateT[SpecF, SpecState, ?]) {
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
-        EventsourcedBehavior[Op, S, E, StateT[SpecF, SpecState, ?]](
+        EventsourcedBehavior(
           name,
           correlation,
           opHandler,
           tagging,
           journal,
           Option.empty,
-          NoopSnapshotStore.apply,
-          StateT.pure(UUID.randomUUID())
+          NoopSnapshotStore[StateT[SpecF, SpecState, ?], S],
+          StateT.inspect[SpecF, SpecState, UUID](_ => UUID.randomUUID())
         ).run(fa)
           .map(_._2)
     }
 
-  final def wireProcess[F[_], S, In0](
-    process: In0 => F[Unit],
-    sources: FoldableSource[F, F, Committable[F, In0]]*
-  ): WiredProcess[F] = {
+  final def wireProcess[F[_], S, In0](process: In0 => F[Unit],
+                                      sources: Processable[F, In0]*): WiredProcess[F] = {
     val process0 = process
     val sources0 = sources
     new WiredProcess[F] {
       type In = In0
       override val process: (In0) => F[Unit] = process0
-      override val sources: Vector[FoldableSource[F, F, Committable[F, In0]]] = sources0.toVector
+      override val sources: Vector[Processable[F, In0]] =
+        sources0.toVector
     }
   }
 
   sealed trait WiredProcess[F[_]] {
     type In
     val process: In => F[Unit]
-    val sources: Vector[FoldableSource[F, F, Committable[F, In]]]
+    val sources: Vector[Processable[F, In]]
     final def run(implicit F: Monad[F]): F[Unit] =
       sources
-        .fold(FoldableSource.empty[F, F, Committable[F, In]])(_ merge _)
-        .foldM(0) {
-          case (cnt, committable) =>
-            committable
-              .traverse(process)
-              .flatMap(_ => committable.commit())
-              .map(_ => cnt + 1)
-        }
-        .flatten
+        .fold(Processable.empty[F, In])(_ merge _)
+        .process(process)
         .void
 
   }
@@ -81,25 +72,34 @@ trait E2eSupport {
 
   def otherStuff: Vector[StateT[SpecF, SpecState, Unit]] = Vector.empty
 
-  final def wired[Op[_]](
+  private def runProcesses: StateT[SpecF, SpecState, Unit] =
+    for {
+      stateBefore <- StateT.get[SpecF, SpecState]
+      _ <- (processes.map(_.run) ++ otherStuff).sequence
+      stateAfter <- StateT.get[SpecF, SpecState]
+      _ <- if (stateAfter == stateBefore) {
+            ().pure[StateT[SpecF, SpecState, ?]]
+          } else {
+            runProcesses
+          }
+    } yield ()
+
+  final def wiredK[Op[_]](
     behavior: Op ~> StateT[SpecF, SpecState, ?]
   ): Op ~> StateT[SpecF, SpecState, ?] =
     new (Op ~> StateT[SpecF, SpecState, ?]) {
-      private def runProcesses: StateT[SpecF, SpecState, Unit] =
-        for {
-          stateBefore <- StateT.get[SpecF, SpecState]
-          _ <- (processes.map(_.run) ++ otherStuff).sequence
-          stateAfter <- StateT.get[SpecF, SpecState]
-          _ <- if (stateAfter == stateBefore) {
-                ().pure[StateT[SpecF, SpecState, ?]]
-              } else {
-                runProcesses
-              }
-        } yield ()
-
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
         for {
           x <- behavior(fa)
+          _ <- runProcesses
+        } yield x
+    }
+
+  final def wired[A, B](f: A => StateT[SpecF, SpecState, B]): A => StateT[SpecF, SpecState, B] =
+    new (A => StateT[SpecF, SpecState, B]) {
+      override def apply(a: A): StateT[SpecF, SpecState, B] =
+        for {
+          x <- f(a)
           _ <- runProcesses
         } yield x
     }

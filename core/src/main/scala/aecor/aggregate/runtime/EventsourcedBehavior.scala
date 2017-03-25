@@ -30,7 +30,7 @@ object EventsourcedBehavior {
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
-  def apply[Op[_], S, E, F[_]: MonadError[?[_], BehaviorFailure]](
+  def apply[F[_]: MonadError[?[_], BehaviorFailure], Op[_], S, E](
     entityName: String,
     correlation: Correlation[Op],
     opHandler: Op ~> Handler[S, Seq[E], ?],
