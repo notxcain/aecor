@@ -40,20 +40,20 @@ object notification {
       }
   }
 
-  object NotificationOpHandler
-      extends (NotificationOp ~> Handler[NotificationState, Seq[NotificationEvent], ?]) {
-    override def apply[A](
-      fa: NotificationOp[A]
-    ): Handler[NotificationState, Seq[NotificationEvent], A] =
-      fa match {
-        case CreateNotification(nid, cid) =>
-          Handler { _ =>
-            Vector(NotificationCreated(nid, cid)) -> (())
-          }
-        case MarkAsSent(id) =>
-          Handler { _ =>
-            Vector(NotificationSent(id)) -> (())
-          }
-      }
-  }
+  def notificationOpHandler[F[_]: Applicative] =
+    new (NotificationOp ~> Handler[F, NotificationState, Seq[NotificationEvent], ?]) {
+      override def apply[A](
+        fa: NotificationOp[A]
+      ): Handler[F, NotificationState, Seq[NotificationEvent], A] =
+        fa match {
+          case CreateNotification(nid, cid) =>
+            Handler.lift { _ =>
+              Vector(NotificationCreated(nid, cid)) -> (())
+            }
+          case MarkAsSent(id) =>
+            Handler.lift { _ =>
+              Vector(NotificationSent(id)) -> (())
+            }
+        }
+    }
 }

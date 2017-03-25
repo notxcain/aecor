@@ -37,18 +37,19 @@ object CounterState {
     }
 }
 
-object CounterOpHandler extends (CounterOp ~> Handler[CounterState, Seq[CounterEvent], ?]) {
-  override def apply[A](fa: CounterOp[A]): Handler[CounterState, Seq[CounterEvent], A] =
+class CounterOpHandler[F[_]: Applicative]
+    extends (CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?]) {
+  override def apply[A](fa: CounterOp[A]): Handler[F, CounterState, Seq[CounterEvent], A] =
     fa match {
       case Increment(id) =>
-        Handler { x =>
+        Handler.lift { x =>
           Vector(CounterIncremented(id)) -> (x.value + 1)
         }
       case Decrement(id) =>
-        Handler { x =>
+        Handler.lift { x =>
           Vector(CounterDecremented(id)) -> (x.value - 1)
         }
       case GetValue(id) =>
-        Handler(x => Vector.empty -> x.value)
+        Handler.lift(x => Vector.empty -> x.value)
     }
 }

@@ -17,7 +17,7 @@ import aecor.example.domain.CardAuthorizationAggregateEvent.{
 }
 import aecor.example.domain.CardAuthorizationAggregateOp._
 import akka.Done
-import cats.~>
+import cats.{ Applicative, ~> }
 
 import scala.collection.immutable.Seq
 
@@ -70,15 +70,17 @@ object CardAuthorizationAggregate {
 
   val entityNameTag: EventTag[CardAuthorizationAggregateEvent] = EventTag(entityName)
 
-  def commandHandler =
-    new (CardAuthorizationAggregateOp ~> Handler[State, Seq[CardAuthorizationAggregateEvent], ?]) {
+  def commandHandler[F[_]: Applicative] =
+    new (CardAuthorizationAggregateOp ~> Handler[F, State, Seq[CardAuthorizationAggregateEvent], ?]) {
       def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
         (events.toVector, Right(Done))
 
       def reject[R, E](rejection: R): (Seq[E], Either[R, Done]) =
         (Seq.empty, Left(rejection))
-      override def apply[A](command: CardAuthorizationAggregateOp[A]) =
-        Handler {
+      override def apply[A](
+        command: CardAuthorizationAggregateOp[A]
+      ): Handler[F, State, Seq[CardAuthorizationAggregateEvent], A] =
+        Handler.lift {
           case Initial =>
             command match {
               case CreateCardAuthorization(

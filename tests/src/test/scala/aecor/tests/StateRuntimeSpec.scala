@@ -3,7 +3,7 @@ package aecor.tests
 import aecor.aggregate.{ Correlation, Folder, StateRuntime }
 import aecor.data.Handler
 import cats.implicits._
-import cats.{ Id, Monad, ~> }
+import cats.{ Applicative, Id, Monad, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 
 import scala.collection.immutable.Seq
@@ -30,14 +30,14 @@ class StateRuntimeSpec extends FunSuite with Matchers {
         }
       }
   }
-  val behavior: CounterOp ~> Handler[CounterState, Seq[CounterEvent], ?] =
-    Lambda[CounterOp ~> Handler[CounterState, Seq[CounterEvent], ?]] {
+  def behavior[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?] =
+    Lambda[CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?]] {
       case Increment(id) =>
-        Handler { x =>
+        Handler.lift { x =>
           Vector(CounterIncremented(id)) -> (x.value + 1)
         }
       case Decrement(id) =>
-        Handler { x =>
+        Handler.lift { x =>
           Vector(CounterDecremented(id)) -> (x.value - 1)
         }
     }

@@ -1,6 +1,6 @@
 package aecor.schedule
 
-import java.time.{ Clock, LocalDate, LocalDateTime }
+import java.time.{ Clock, LocalDate, LocalDateTime, ZonedDateTime }
 import java.util.UUID
 
 import aecor.aggregate.runtime._
@@ -57,7 +57,7 @@ object Schedule {
         behavior = EventsourcedBehavior(
           entityName,
           DefaultScheduleAggregate.correlation,
-          DefaultScheduleAggregate(clock).asFunctionK,
+          DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
           Tagging(eventTag),
           journal,
           None,

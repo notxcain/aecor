@@ -16,15 +16,17 @@ object VanillaBehavior {
     def applyChanges(instanceId: UUID, state: S, changes: D): F[S]
   }
 
-  def shared[F[_]: Monad, Op[_], S, D](opHandler: Op ~> Handler[S, D, ?],
+  def shared[F[_]: Monad, Op[_], S, D](opHandler: Op ~> Handler[F, S, D, ?],
                                        repository: EntityRepository[F, S, D],
                                        generateInstanceId: F[UUID]): Behavior[Op, F] = {
     def mkBehavior(instanceId: UUID, stateZero: S): Behavior[Op, F] = {
       def rec(state: S): Behavior[Op, F] =
         Behavior(Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
-          val (stateChanges, reply) = opHandler(op).run(state)
-          repository.applyChanges(instanceId, state, stateChanges).map { nextState =>
-            (rec(nextState), reply)
+          opHandler(op).run(state).flatMap {
+            case (stateChanges, reply) =>
+              repository.applyChanges(instanceId, state, stateChanges).map { nextState =>
+                (rec(nextState), reply)
+              }
           }
         })
       rec(stateZero)
@@ -54,19 +56,20 @@ object VanillaBehavior {
 
   def apply[F[_]: Monad, Op[_], S, D](entityName: String,
                                       correlation: Correlation[Op],
-                                      opHandler: Op ~> Handler[S, D, ?],
+                                      opHandler: Op ~> Handler[F, S, D, ?],
                                       loadState: String => F[S],
                                       updateState: (String, UUID, S, D) => F[S],
                                       generateInstanceId: F[UUID]): Behavior[Op, F] = {
     def mkBehavior(entityId: String, instanceId: UUID, stateZero: S): Behavior[Op, F] = {
       def rec(state: S): Behavior[Op, F] =
         Behavior[Op, F] {
-          def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] = {
-            val (stateChanges, reply) = opHandler(op).run(state)
-            updateState(entityId, instanceId, state, stateChanges).map { nextState =>
-              (rec(nextState), reply)
+          def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] =
+            opHandler(op).run(state).flatMap {
+              case (stateChanges, reply) =>
+                updateState(entityId, instanceId, state, stateChanges).map { nextState =>
+                  (rec(nextState), reply)
+                }
             }
-          }
           FunctionK.lift(mk _)
         }
       rec(stateZero)

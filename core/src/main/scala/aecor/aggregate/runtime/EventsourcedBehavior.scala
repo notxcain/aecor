@@ -33,7 +33,7 @@ object EventsourcedBehavior {
   def apply[F[_]: MonadError[?[_], BehaviorFailure], Op[_], S, E](
     entityName: String,
     correlation: Correlation[Op],
-    opHandler: Op ~> Handler[S, Seq[E], ?],
+    opHandler: Op ~> Handler[F, S, Seq[E], ?],
     tagging: Tagging[E],
     journal: EventJournal[F, E],
     snapshotEach: Option[Long],
@@ -49,10 +49,10 @@ object EventsourcedBehavior {
       }
     )
 
-  def mkOpHandler[Op[_], S, E](
-    opHandler: Op ~> Handler[S, Seq[E], ?]
-  ): Op ~> Handler[InternalState[S], Seq[E], ?] =
-    Lambda[Op ~> Handler[InternalState[S], Seq[E], ?]] { op =>
+  def mkOpHandler[F[_], Op[_], S, E](
+    opHandler: Op ~> Handler[F, S, Seq[E], ?]
+  ): Op ~> Handler[F, InternalState[S], Seq[E], ?] =
+    Lambda[Op ~> Handler[F, InternalState[S], Seq[E], ?]] { op =>
       Handler(s => opHandler(op).run(s.entityState))
     }
 

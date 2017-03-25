@@ -8,7 +8,7 @@ import aecor.data.{ EventTag, Folded, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
 import akka.Done
-import cats.~>
+import cats.{ Applicative, ~> }
 
 import scala.collection.immutable.Seq
 
@@ -71,8 +71,8 @@ object AccountAggregate {
 
   val entityNameTag: EventTag[AccountAggregateEvent] = EventTag(entityName)
 
-  def commandHandler(clock: Clock) =
-    new (AccountAggregateOp ~> Handler[Option[AccountAggregate.Account], Seq[
+  def commandHandler[F[_]: Applicative](clock: Clock) =
+    new (AccountAggregateOp ~> Handler[F, Option[AccountAggregate.Account], Seq[
       AccountAggregateEvent
     ], ?]) {
       def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
@@ -81,10 +81,12 @@ object AccountAggregate {
       def reject[R, E](rejection: R): (Seq[E], Either[R, Done]) =
         (Seq.empty, Left(rejection))
 
-      override def apply[A](fa: AccountAggregateOp[A]) =
+      override def apply[A](
+        fa: AccountAggregateOp[A]
+      ): Handler[F, Option[Account], Seq[AccountAggregateEvent], A] =
         fa match {
           case OpenAccount(accountId) =>
-            Handler {
+            Handler.lift[F, Option[Account], Seq[AccountAggregateEvent], A] {
               case None =>
                 accept(AccountOpened(accountId))
               case _ =>
@@ -92,7 +94,7 @@ object AccountAggregate {
             }
 
           case AuthorizeTransaction(_, transactionId, amount) =>
-            Handler {
+            Handler.lift[F, Option[Account], Seq[AccountAggregateEvent], A] {
               case None =>
                 reject(AccountDoesNotExist)
               case Some(Account(id, balance, holds, transactions)) =>
@@ -105,14 +107,14 @@ object AccountAggregate {
                 }
             }
           case VoidTransaction(_, transactionId) =>
-            Handler {
+            Handler.lift[F, Option[Account], Seq[AccountAggregateEvent], A] {
               case None =>
                 reject(AccountDoesNotExist)
               case Some(Account(id, balance, holds, transactions)) =>
                 accept(TransactionVoided(id, transactionId))
             }
           case CaptureTransaction(_, transactionId, clearingAmount) =>
-            Handler {
+            Handler.lift[F, Option[Account], Seq[AccountAggregateEvent], A] {
               case None =>
                 reject(AccountDoesNotExist)
               case Some(Account(id, balance, holds, transactions)) =>
@@ -124,7 +126,7 @@ object AccountAggregate {
                 }
             }
           case CreditAccount(_, transactionId, amount) =>
-            Handler {
+            Handler.lift[F, Option[Account], Seq[AccountAggregateEvent], A] {
               case None =>
                 reject(AccountDoesNotExist)
               case Some(Account(id, balance, holds, transactions)) =>

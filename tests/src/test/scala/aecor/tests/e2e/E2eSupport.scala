@@ -25,7 +25,7 @@ trait E2eSupport {
   final def mkBehavior[Op[_], S, E](
     name: String,
     correlation: Correlation[Op],
-    opHandler: Op ~> Handler[S, Seq[E], ?],
+    opHandler: Op ~> Handler[StateT[SpecF, SpecState, ?], S, Seq[E], ?],
     tagging: Tagging[E],
     journal: TestEventJournal[SpecF, SpecState, E]
   )(implicit folder: Folder[Folded, E, S]): Op ~> StateT[SpecF, SpecState, ?] =

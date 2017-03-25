@@ -17,17 +17,18 @@ object StateRuntime {
     *
     */
   def shared[Op[_], S, E, F[_]: Monad](
-    behavior: Op ~> Handler[S, Seq[E], ?]
+    behavior: Op ~> Handler[F, S, Seq[E], ?]
   )(implicit folder: Folder[F, E, S]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
       override def apply[A](fa: Op[A]): StateT[F, Vector[E], A] =
         for {
           events <- StateT.get[F, Vector[E]]
           state <- StateT.lift(folder.consume(events))
-          result <- {
-            val (es, r) = behavior(fa).run(state)
-            StateT.modify[F, Vector[E]](_ ++ es).map(_ => r)
-          }
+          result <- StateT.lift(behavior(fa).run(state)).flatMap {
+                     case (es, r) =>
+                       StateT.modify[F, Vector[E]](_ ++ es).map(_ => r)
+                   }
+
         } yield result
     }
 
@@ -40,7 +41,7 @@ object StateRuntime {
     *
     */
   def correlated[O[_], S, E, F[_]: Monad](
-    behavior: O ~> Handler[S, Seq[E], ?],
+    behavior: O ~> Handler[F, S, Seq[E], ?],
     correlation: Correlation[O]
   )(implicit folder: Folder[F, E, S]): O ~> StateT[F, Map[String, Vector[E]], ?] =
     new (O ~> StateT[F, Map[String, Vector[E]], ?]) {

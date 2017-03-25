@@ -13,7 +13,7 @@ import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
 import aecor.tests.e2e.TestEventJournal.TestEventJournalState
 import aecor.tests.e2e._
-import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp, NotificationOpHandler }
+import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp, notificationOpHandler }
 import cats.data.StateT
 import cats.implicits._
 import cats.~>
@@ -35,6 +35,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
                        scheduleEntries: Vector[ScheduleEntry],
                        entriesOffset: LocalDateTime)
 
+  val clock = StateClock[SpecF, SpecState](_.time, (s, t) => s.copy(time = t))
+
   def counterEventJournal =
     mkJournal[CounterEvent](_.counterJournalState, (x, a) => x.copy(counterJournalState = a))
 
@@ -42,7 +44,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     mkBehavior(
       "Counter",
       CounterOp.correlation,
-      CounterOpHandler,
+      new CounterOpHandler[StateT[SpecF, SpecState, ?]],
       Tagging(CounterEvent.tag),
       counterEventJournal
     )
@@ -57,7 +59,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     mkBehavior(
       "Notification",
       NotificationOp.correlation,
-      NotificationOpHandler,
+      notificationOpHandler,
       Tagging(NotificationEvent.tag),
       notificationEventJournal
     )
@@ -68,7 +70,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val scheduleAggregate = mkBehavior(
     "Schedule",
     DefaultScheduleAggregate.correlation,
-    DefaultScheduleAggregate(Clock.systemUTC()).asFunctionK,
+    DefaultScheduleAggregate(clock.zonedDateTime(ZoneOffset.UTC)).asFunctionK,
     Tagging(EventTag[ScheduleEvent]("Schedule")),
     schduleEventJournal
   )
@@ -77,8 +79,6 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     _.scheduleEntries,
     (x, a) => x.copy(scheduleEntries = a)
   )
-
-  val clock = StateClock[SpecF, SpecState](_.time, (s, t) => s.copy(time = t))
 
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
   val ops = new ScheduleProcessOps[StateT[SpecF, SpecState, ?]] {
@@ -182,8 +182,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       now <- clock.localDateTime(ZoneOffset.UTC)
       _ <- schedule(ScheduleOp.AddScheduleEntry("foo", "b", "e1", "cid", now.plusSeconds(3)))
       _ <- schedule(ScheduleOp.AddScheduleEntry("foo", "b", "e2", "cid", now.plusSeconds(5)))
-      _ <- tickSeconds(4)
-      _ <- tickSeconds(1)
+      _ <- tickSeconds(3)
+      _ <- tickSeconds(2)
     } yield ()
 
     val (state, _) = program
@@ -201,7 +201,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       .right
       .get
 
-    println(state)
+    println(state.scheduleJournalState.eventsByTag(EventTag("Schedule")).map(_.event))
     state.scheduleEntries.exists(e => e.entryId == "e1" && e.fired) shouldBe true
     state.scheduleEntries.exists(e => e.entryId == "e2" && e.fired) shouldBe true
   }

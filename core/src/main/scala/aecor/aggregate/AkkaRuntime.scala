@@ -1,7 +1,7 @@
 package aecor.aggregate
 
 import aecor.aggregate.AkkaRuntime.CorrelatedCommand
-import aecor.aggregate.runtime.{ Capture, CaptureFuture }
+import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture }
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.data.{ Folded, Handler }
 import akka.actor.ActorSystem
@@ -10,20 +10,21 @@ import akka.pattern.ask
 import akka.util.Timeout
 import cats.{ Monad, ~> }
 import cats.implicits._
+
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
 
 object AkkaRuntime {
-  def apply[F[_]: CaptureFuture: Capture: Monad](system: ActorSystem): AkkaRuntime[F] =
+  def apply[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem): AkkaRuntime[F] =
     new AkkaRuntime(system)
 
   private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
 }
 
-class AkkaRuntime[F[_]: CaptureFuture: Capture: Monad](system: ActorSystem) {
+class AkkaRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {
   def start[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Command ~> Handler[State, Seq[Event], ?],
+    behavior: Command ~> Handler[F, State, Seq[Event], ?],
     correlation: Correlation[Command],
     tagging: Tagging[Event],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,

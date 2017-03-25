@@ -3,21 +3,27 @@ package aecor.aggregate
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
+import java.util.UUID
 
 import aecor.aggregate.AggregateActor.HandleCommand
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
+import aecor.aggregate.runtime.Async
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
 import aecor.data.{ Folded, Handler }
-import akka.actor.{ ActorLogging, Props, ReceiveTimeout }
+import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
-import cats.~>
+import cats.{ Functor, ~> }
+import Async.ops._
+import cats.implicits._
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
 import scala.collection.immutable.Seq
+import akka.pattern.pipe
+
 sealed abstract class SnapshotPolicy[+E] extends Product with Serializable
 
 object SnapshotPolicy {
@@ -41,9 +47,9 @@ object SnapshotPolicy {
 
 object AggregateActor {
 
-  def props[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def props[F[_]: Async: Functor, Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Command ~> Handler[State, Seq[Event], ?],
+    behavior: Command ~> Handler[F, State, Seq[Event], ?],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
     idleTimeout: FiniteDuration
@@ -63,23 +69,28 @@ object AggregateActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
+final class AggregateActor[F[_]: Async: Functor, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
-  behavior: Command ~> Handler[State, Seq[Event], ?],
+  behavior: Op ~> Handler[F, State, Seq[Event], ?],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
   idleTimeout: FiniteDuration
 )(implicit folder: Folder[Folded, Event, State])
     extends PersistentActor
-    with ActorLogging {
+    with ActorLogging
+    with Stash {
 
-  final private val entityId: String =
+  import context.dispatcher
+
+  case class CommandResult[A](opId: UUID, events: Seq[Event], reply: A)
+
+  private val entityId: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
 
   private val eventEncoder = PersistentEncoder[Event]
   private val eventDecoder = PersistentDecoder[Event]
 
-  final override val persistenceId: String = s"$entityName-$entityId"
+  override val persistenceId: String = s"$entityName-$entityId"
 
   private val recoveryStartTimestamp: Instant = Instant.now()
 
@@ -90,7 +101,7 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
   private var eventCount = 0L
   private var snapshotPending = false
 
-  final override def receiveRecover: Receive = {
+  override def receiveRecover: Receive = {
     case repr: PersistentRepr =>
       eventDecoder.decode(repr) match {
         case Left(cause) =>
@@ -124,22 +135,53 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
 
   final override def receiveCommand: Receive = {
     case HandleCommand(command) =>
-      handleCommand(command.asInstanceOf[Command[_]])
+      handleCommand(command.asInstanceOf[Op[_]])
     case ReceiveTimeout =>
       passivate()
     case AggregateActor.Stop =>
       context.stop(self)
+    case CommandResult(opId, events, reply) =>
+      log.debug(
+        "[{}] Received result of unknown command invocation [{}], ignoring reply [{}] and events [{}]",
+        persistenceId,
+        opId,
+        reply,
+        events
+      )
   }
 
-  private def handleCommand(command: Command[_]): Unit = {
-    val (events, reply) = behavior(command).run(state)
-    log.debug(
-      "[{}] Command [{}] produced reply [{}] and events [{}]",
-      persistenceId,
-      command,
-      reply,
-      events
-    )
+  private def handleCommand(command: Op[_]): Unit = {
+    val opId = UUID.randomUUID()
+    behavior(command)
+      .run(state)
+      .map {
+        case (events, reply) =>
+          CommandResult(opId, events, reply)
+      }
+      .unsafeRun
+      .pipeTo(self)(sender)
+    context.become {
+      case CommandResult(`opId`, events, reply) =>
+        log.debug(
+          "[{}] Command [{}] produced reply [{}] and events [{}]",
+          persistenceId,
+          command,
+          reply,
+          events
+        )
+        handleCommandResult(events, reply)
+        unstashAll()
+        context.become(receiveCommand)
+      case Status.Failure(e) =>
+        sender() ! Status.Failure(e)
+        unstashAll()
+        context.become(receiveCommand)
+      case _ =>
+        stash()
+    }
+  }
+
+  private def handleCommandResult[A](events: Seq[Event], reply: A): Unit =
     if (events.isEmpty) {
       sender() ! reply
     } else {
@@ -168,7 +210,6 @@ class AggregateActor[Command[_], State, Event: PersistentEncoder: PersistentDeco
         }
       }
     }
-  }
 
   private def applyEvent(event: Event): Unit = {
     state = folder

@@ -3,7 +3,7 @@ package aecor.example.domain
 import aecor.example.persistentEncoderUtil
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import io.circe.generic.auto._
-sealed trait CardAuthorizationAggregateEvent {
+sealed trait CardAuthorizationAggregateEvent extends Product with Serializable {
   def cardAuthorizationId: CardAuthorizationId
 }
 
