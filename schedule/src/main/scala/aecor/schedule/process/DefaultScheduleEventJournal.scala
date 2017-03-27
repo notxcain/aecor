@@ -2,10 +2,10 @@ package aecor.schedule.process
 
 import java.util.UUID
 
-import aecor.aggregate.runtime.Async.ops._
-import aecor.aggregate.runtime.{ Async, CaptureFuture }
+import aecor.effect.Async.ops._
 import aecor.data.EventTag
 import aecor.schedule.ScheduleEvent
+import aecor.effect.{ Async, CaptureFuture }
 import aecor.streaming._
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Keep, Sink }

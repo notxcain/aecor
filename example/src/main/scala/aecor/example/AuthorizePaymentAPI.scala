@@ -18,10 +18,12 @@ import cats.~>
 import de.heikoseeberger.akkahttpcirce.CirceSupport._
 import io.circe.generic.JsonCodec
 import monix.eval.Task
-import aecor.aggregate.runtime.Async.ops._
+import aecor.effect.Async.ops._
 import scala.concurrent.duration._
 import scala.concurrent.{ ExecutionContext, Future }
 import monix.execution.Scheduler.Implicits.global
+import aecor.effect.monix._
+
 class AuthorizePaymentAPI(authorization: CardAuthorizationAggregateOp ~> Task,
                           eventStream: EventStream[CardAuthorizationAggregateEvent],
                           log: LoggingAdapter) {

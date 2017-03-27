@@ -4,8 +4,8 @@ import java.time.{ Clock, LocalDateTime }
 import java.util.UUID
 
 import aecor.aggregate.CorrelationId
-import aecor.aggregate.runtime.Async
 import aecor.data.EventTag
+import aecor.effect.Async
 import aecor.streaming._
 import akka.NotUsed
 import akka.stream.scaladsl.Source

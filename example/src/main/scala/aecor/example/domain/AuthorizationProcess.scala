@@ -1,6 +1,6 @@
 package aecor.example.domain
 
-import aecor.aggregate.runtime.Async.ops._
+import aecor.effect.Async.ops._
 import aecor.example.domain.AccountAggregateOp._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain.CardAuthorizationAggregateOp._
@@ -11,6 +11,7 @@ import freek._
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.cats._
+import aecor.effect.monix._
 
 object AuthorizationProcess {
   type PRG =

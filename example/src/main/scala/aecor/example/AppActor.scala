@@ -19,8 +19,9 @@ import cats.~>
 import com.typesafe.config.Config
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
-import aecor.aggregate.runtime.Async.ops._
+import aecor.effect.Async.ops._
 import monix.cats._
+import aecor.effect.monix._
 
 object AppActor {
   def props: Props = Props(new AppActor)
@@ -45,7 +46,7 @@ class AppActor extends Actor with ActorLogging {
     )
 
   val startAuthorizationRegion: Task[CardAuthorizationAggregateOp ~> Task] =
-    AkkaRuntime[Task](system).start(
+    AkkaPersistenceRuntime[Task](system).start(
       CardAuthorizationAggregate.entityName,
       CardAuthorizationAggregate.commandHandler,
       CardAuthorizationAggregate.correlation,
@@ -53,7 +54,7 @@ class AppActor extends Actor with ActorLogging {
     )
 
   val startAccountRegion: Task[AccountAggregateOp ~> Task] =
-    AkkaRuntime[Task](system).start(
+    AkkaPersistenceRuntime[Task](system).start(
       AccountAggregate.entityName,
       AccountAggregate.commandHandler(Clock.systemUTC()),
       AccountAggregate.correlation,

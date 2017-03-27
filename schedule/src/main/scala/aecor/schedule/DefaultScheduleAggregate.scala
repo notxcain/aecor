@@ -11,6 +11,7 @@ import ScheduleState._
 import cats.Functor
 import cats.implicits._
 import Folded.syntax._
+
 import scala.collection.immutable.Seq
 
 object DefaultScheduleAggregate {

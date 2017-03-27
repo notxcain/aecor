@@ -8,9 +8,10 @@ import aecor.aggregate.{ CorrelationId, Tagging }
 import aecor.data.EventTag
 import aecor.schedule.process.{
   DefaultScheduleEventJournal,
-  ScheduleProcess,
-  PeriodicProcessRuntime
+  PeriodicProcessRuntime,
+  ScheduleProcess
 }
+import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.streaming._
 import akka.NotUsed
 import akka.actor.ActorSystem

@@ -3,13 +3,14 @@ package aecor.aggregate.runtime
 import aecor.aggregate._
 import aecor.aggregate.runtime.GenericAkkaRuntime.CorrelatedCommand
 import aecor.aggregate.runtime.behavior.Behavior
+import aecor.effect.{ Async, Capture, CaptureFuture }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
 import cats.{ Functor, ~> }
-
 import cats.implicits._
+
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
@@ -22,7 +23,7 @@ class GenericAkkaRuntime(system: ActorSystem) {
     entityName: String,
     correlation: Correlation[Op],
     behavior: Behavior[Op, F],
-    settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
+    settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
   ): F[Op ~> F] =
     Capture[F]
       .capture {

@@ -15,12 +15,15 @@ lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 
+lazy val monixVersion = "2.2.1"
+lazy val fs2Version = "0.9.4"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.2"
 lazy val kindProjectorVersion = "0.9.3"
 lazy val paradiseVersion = "2.1.0"
+lazy val simulacrumVersion = "0.10.0"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
@@ -40,7 +43,7 @@ lazy val aecor = project
   .settings(moduleName := "aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
-  .aggregate(core, example, schedule, tests)
+  .aggregate(core, example, schedule, effectMonix, effectFs2, tests)
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
 lazy val core =
@@ -52,15 +55,29 @@ lazy val schedule = project
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
+lazy val effectMonix = project
+  .in(file("aecor-monix"))
+  .dependsOn(core)
+  .settings(name := "aecor-monix")
+  .settings(aecorSettings)
+  .settings(effectMonixSettings)
+
+lazy val effectFs2 = project
+  .in(file("aecor-fs2"))
+  .dependsOn(core)
+  .settings(name := "aecor-fs2")
+  .settings(aecorSettings)
+  .settings(effectFs2Settings)
+
 lazy val tests = project
-  .dependsOn(core, example, schedule)
+  .dependsOn(core, example, schedule, effectMonix, effectFs2)
   .settings(moduleName := "aecor-tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = project
-  .dependsOn(core, schedule)
+  .dependsOn(core, schedule, effectMonix)
   .settings(moduleName := "aecor-example")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -73,12 +90,9 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
-    "co.fs2" %% "fs2-core" % "0.9.4",
-    "io.monix" %% "monix-eval" % "2.2.1",
-    "io.monix" %% "monix-cats" % "2.2.1",
-    "com.slamdata" %% "matryoshka-core" % "0.18.3",
     "com.chuusai" %% "shapeless" % shapelessVersion,
-    "org.typelevel" %% "cats" % catsVersion
+    "org.typelevel" %% "cats" % catsVersion,
+    "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
   )
 )
 
@@ -89,8 +103,17 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   )
 )
 
+lazy val effectMonixSettings = Seq(
+  libraryDependencies ++= Seq(
+    "io.monix" %% "monix-eval" % monixVersion,
+    "io.monix" %% "monix-cats" % monixVersion
+  )
+)
+
+lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-core" % fs2Version))
+
 lazy val exampleSettings = {
-  val circeVersion = "0.6.1"
+  val circeVersion = "0.7.0"
   val akkaHttpVersion = "10.0.3"
   val akkaHttpJsonVersion = "1.11.0"
   val freekVersion = "0.6.5"

@@ -43,10 +43,10 @@ class StateRuntimeSpec extends FunSuite with Matchers {
     }
 
   val sharedRuntime =
-    StateRuntime.shared[CounterOp, CounterState, CounterEvent, Id](behavior)
+    StateRuntime.shared[Id, CounterOp, CounterState, CounterEvent](behavior)
 
   val correlatedRuntime =
-    StateRuntime.correlated[CounterOp, CounterState, CounterEvent, Id](behavior, correlation)
+    StateRuntime.correlate(sharedRuntime, correlation)
 
   def mkProgram[F[_]: Monad](runtime: CounterOp ~> F): F[Long] =
     for {

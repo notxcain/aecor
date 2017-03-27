@@ -31,7 +31,8 @@ object ScheduleProcess {
         case ScheduleEntryFired(scheduleName, scheduleBucket, entryId, _, _) =>
           repository.markScheduleEntryAsFired(scheduleName, scheduleBucket, entryId)
       }
-    def fireEntries(from: LocalDateTime, to: LocalDateTime) =
+    def fireEntries(from: LocalDateTime,
+                    to: LocalDateTime): F[Option[ScheduleEntryRepository.ScheduleEntry]] =
       repository.processEntries(from, to, parallelism) { entry =>
         if (entry.fired)
           ().pure[F]

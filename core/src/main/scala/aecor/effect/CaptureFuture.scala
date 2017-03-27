@@ -1,4 +1,4 @@
-package aecor.aggregate.runtime
+package aecor.effect
 
 import cats.Functor
 import cats.data.{ EitherT, Kleisli }
@@ -37,17 +37,4 @@ sealed trait CaptureFutureInstances {
         EitherT.right(CaptureFuture[F].captureF(future))
     }
 
-  implicit def fs2Task(implicit S: fs2.Strategy,
-                       E: scala.concurrent.ExecutionContext): CaptureFuture[fs2.Task] =
-    new CaptureFuture[fs2.Task] {
-      override def captureF[A](future: => Future[A]): fs2.Task[A] = fs2.Task.fromFuture(future)
-    }
-
-  implicit def monixTask(
-    implicit scheduler: monix.execution.Scheduler
-  ): CaptureFuture[monix.eval.Task] =
-    new CaptureFuture[monix.eval.Task] {
-      override def captureF[A](future: => Future[A]): monix.eval.Task[A] =
-        monix.eval.Task.defer(monix.eval.Task.fromFuture(future))
-    }
 }

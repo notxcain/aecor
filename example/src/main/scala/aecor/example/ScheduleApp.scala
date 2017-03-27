@@ -3,7 +3,8 @@ package aecor.example
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture, EventsourcedBehavior }
+import aecor.aggregate.runtime.EventsourcedBehavior
+import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
 import akka.actor.ActorSystem

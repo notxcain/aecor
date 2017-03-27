@@ -1,9 +1,9 @@
 package aecor.aggregate
 
-import aecor.aggregate.AkkaRuntime.CorrelatedCommand
-import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture }
+import aecor.aggregate.AkkaPersistenceRuntime.CorrelatedCommand
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.data.{ Folded, Handler }
+import aecor.effect.{ Async, Capture, CaptureFuture }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
@@ -14,29 +14,37 @@ import cats.implicits._
 import scala.collection.immutable.Seq
 import scala.concurrent.Future
 
-object AkkaRuntime {
-  def apply[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem): AkkaRuntime[F] =
-    new AkkaRuntime(system)
+object AkkaPersistenceRuntime {
+  def apply[F[_]: Async: CaptureFuture: Capture: Monad](
+    system: ActorSystem
+  ): AkkaPersistenceRuntime[F] =
+    new AkkaPersistenceRuntime(system)
 
   private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
 }
 
-class AkkaRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {
-  def start[Command[_], State, Event: PersistentEncoder: PersistentDecoder](
+class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {
+  def start[Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Command ~> Handler[F, State, Seq[Event], ?],
-    correlation: Correlation[Command],
+    behavior: Op ~> Handler[F, State, Seq[Event], ?],
+    correlation: Correlation[Op],
     tagging: Tagging[Event],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
-    settings: AkkaRuntimeSettings = AkkaRuntimeSettings.default(system)
-  )(implicit folder: Folder[Folded, Event, State]): F[Command ~> F] = {
+    settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
+  )(implicit folder: Folder[Folded, Event, State]): F[Op ~> F] = {
 
     val props =
-      AggregateActor.props(entityName, behavior, snapshotPolicy, tagging, settings.idleTimeout)
+      AkkaPersistenceRuntimeActor.props(
+        entityName,
+        behavior,
+        snapshotPolicy,
+        tagging,
+        settings.idleTimeout
+      )
 
     def extractEntityId: ShardRegion.ExtractEntityId = {
       case CorrelatedCommand(entityId, c) =>
-        (entityId, AggregateActor.HandleCommand(c))
+        (entityId, AkkaPersistenceRuntimeActor.HandleCommand(c))
     }
 
     val numberOfShards = settings.numberOfShards
@@ -55,9 +63,9 @@ class AkkaRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSyste
     )
 
     Capture[F].capture(startShardRegion).map { regionRef =>
-      new (Command ~> F) {
+      new (Op ~> F) {
         implicit private val timeout = Timeout(settings.askTimeout)
-        override def apply[A](fa: Command[A]): F[A] =
+        override def apply[A](fa: Op[A]): F[A] =
           CaptureFuture[F].captureF {
             (regionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
           }

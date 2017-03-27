@@ -2,20 +2,21 @@ package aecor.aggregate.runtime
 
 import java.util.UUID
 
-import aecor.aggregate.runtime.Async.ops._
+import aecor.effect.Async.ops._
 import aecor.aggregate.runtime.RuntimeActor.PerformOp
 import aecor.aggregate.runtime.behavior.Behavior
+import aecor.effect.Async
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import cats.Functor
-import fs2.util.NonFatal
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
 object RuntimeActor {
-  def props[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
+  def props[F[_]: Async: Functor, Op[_]](behavior: Behavior[Op, F],
                                          idleTimeout: FiniteDuration): Props =
     Props(new RuntimeActor(behavior, idleTimeout))
 
@@ -23,8 +24,8 @@ object RuntimeActor {
   case object Stop
 }
 
-final class RuntimeActor[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
-                                                      idleTimeout: FiniteDuration)
+private[aecor] final class RuntimeActor[F[_]: Async: Functor, Op[_]](behavior: Behavior[Op, F],
+                                                                     idleTimeout: FiniteDuration)
     extends Actor
     with Stash
     with ActorLogging {
@@ -45,13 +46,12 @@ final class RuntimeActor[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
         .unsafeRun
         .map(x => Result(opId, Success(x)))
         .recover {
-          case NonFatal(e) => Failure(e)
+          case NonFatal(e) => Result(opId, Failure(e))
         }
         .pipeTo(self)(sender)
 
       become {
         case Result(`opId`, value) =>
-          unstashAll()
           value match {
             case Success((newBehavior, reply)) =>
               sender() ! reply
@@ -60,24 +60,18 @@ final class RuntimeActor[Op[_], F[_]: Async: Functor](behavior: Behavior[Op, F],
               sender() ! Status.Failure(cause)
               throw cause
           }
-        case Result(_, _) =>
-          log.debug(
-            "Ignoring result of another operation. Probably targeted previous instance of actor."
-          )
-        case ReceiveTimeout =>
-          setIdleTimeout()
+          unstashAll()
         case _ =>
           stash()
       }
     case ReceiveTimeout =>
       passivate()
-      become {
-        case RuntimeActor.Stop =>
-          unstashAll()
-          context.stop(self)
-        case _ =>
-          stash()
-      }
+    case RuntimeActor.Stop =>
+      context.stop(self)
+    case Result(_, _) =>
+      log.debug(
+        "Ignoring result of another operation. Probably targeted previous instance of actor."
+      )
   }
 
   private def passivate(): Unit = {

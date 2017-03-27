@@ -2,15 +2,15 @@ package akka.persistence.cassandra.journal
 
 import java.util.UUID
 
+import aecor.aggregate.runtime.EventJournal
 import aecor.aggregate.runtime.EventJournal.EventEnvelope
-import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture, EventJournal }
 import aecor.aggregate.serialization.{
   DecodingFailure,
   PersistentDecoder,
   PersistentEncoder,
   PersistentRepr
 }
-
+import aecor.effect.{ Async, Capture, CaptureFuture }
 import akka.actor.{ ActorSystem, Props }
 import akka.pattern._
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
@@ -18,8 +18,8 @@ import akka.persistence.query.PersistenceQuery
 import akka.stream.Materializer
 import akka.util.Timeout
 import cats.data.NonEmptyVector
-import cats.{ Functor, Monad }
 import cats.implicits._
+import cats.{ Functor, Monad }
 
 import scala.concurrent.Future
 import scala.concurrent.duration._

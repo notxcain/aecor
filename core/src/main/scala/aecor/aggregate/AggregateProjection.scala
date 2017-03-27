@@ -2,10 +2,10 @@ package aecor.aggregate
 
 import java.util.UUID
 
-import aecor.aggregate.runtime.Async
-import aecor.aggregate.runtime.Async.ops._
+import aecor.effect.Async.ops._
 import aecor.data.Folded
 import aecor.data.Folded.{ Impossible, Next }
+import aecor.effect.Async
 import aecor.streaming.{ Committable, JournalEntry }
 import akka.NotUsed
 import akka.stream.scaladsl.Flow

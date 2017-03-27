@@ -4,11 +4,11 @@ import java.time._
 import java.util.UUID
 
 import aecor.aggregate.Tagging
-import aecor.aggregate.runtime.Capture
 import aecor.data.EventTag
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
+import aecor.effect.Capture
 import aecor.streaming.{ ConsumerId, OffsetStore }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState

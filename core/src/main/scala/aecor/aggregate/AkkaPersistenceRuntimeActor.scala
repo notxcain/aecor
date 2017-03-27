@@ -5,18 +5,18 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 import java.util.UUID
 
-import aecor.aggregate.AggregateActor.HandleCommand
+import aecor.aggregate.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.aggregate.SnapshotPolicy.{ EachNumberOfEvents, Never }
-import aecor.aggregate.runtime.Async
 import aecor.aggregate.serialization.PersistentDecoder.Result
 import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder, PersistentRepr }
 import aecor.data.{ Folded, Handler }
+import aecor.effect.Async
+import Async.ops._
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.{ Functor, ~> }
-import Async.ops._
 import cats.implicits._
 
 import scala.concurrent.duration.FiniteDuration
@@ -45,7 +45,7 @@ object SnapshotPolicy {
 
 }
 
-object AggregateActor {
+object AkkaPersistenceRuntimeActor {
 
   def props[F[_]: Async: Functor, Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
@@ -54,7 +54,9 @@ object AggregateActor {
     tagging: Tagging[Event],
     idleTimeout: FiniteDuration
   )(implicit folder: Folder[Folded, Event, State]): Props =
-    Props(new AggregateActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout))
+    Props(
+      new AkkaPersistenceRuntimeActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout)
+    )
 
   final case class HandleCommand[C[_], A](command: C[A])
   case object Stop
@@ -69,7 +71,7 @@ object AggregateActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-final class AggregateActor[F[_]: Async: Functor, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
+final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
   behavior: Op ~> Handler[F, State, Seq[Event], ?],
   snapshotPolicy: SnapshotPolicy[State],
@@ -138,7 +140,7 @@ final class AggregateActor[F[_]: Async: Functor, Op[_], State, Event: Persistent
       handleCommand(command.asInstanceOf[Op[_]])
     case ReceiveTimeout =>
       passivate()
-    case AggregateActor.Stop =>
+    case AkkaPersistenceRuntimeActor.Stop =>
       context.stop(self)
     case CommandResult(opId, events, reply) =>
       log.debug(
@@ -240,7 +242,7 @@ final class AggregateActor[F[_]: Async: Functor, Op[_], State, Event: Persistent
 
   private def passivate(): Unit = {
     log.debug("[{}] Passivating...", persistenceId)
-    context.parent ! ShardRegion.Passivate(AggregateActor.Stop)
+    context.parent ! ShardRegion.Passivate(AkkaPersistenceRuntimeActor.Stop)
   }
 
   private def setIdleTimeout(): Unit = {

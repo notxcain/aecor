@@ -1,6 +1,6 @@
 package aecor.schedule.process
 
-import aecor.aggregate.runtime.{ Async, Capture, CaptureFuture }
+import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.streaming.StreamSupervisor
 import aecor.streaming.StreamSupervisor.StreamKillSwitch
 import akka.actor.ActorSystem
@@ -14,11 +14,11 @@ import cats.implicits._
 
 object PeriodicProcessRuntime {
   def apply[F[_]: Async: CaptureFuture: Capture: Monad](
-    entityName: String,
+    name: String,
     tickInterval: FiniteDuration,
     processCycle: F[Unit]
   )(implicit materializer: Materializer): PeriodicProcessRuntime[F] =
-    new PeriodicProcessRuntime[F](entityName, tickInterval, processCycle)
+    new PeriodicProcessRuntime[F](name, tickInterval, processCycle)
 }
 
 class PeriodicProcessRuntime[F[_]: Async: CaptureFuture: Capture: Monad](

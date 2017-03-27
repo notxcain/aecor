@@ -1,8 +1,8 @@
 package aecor.streaming
 
-import aecor.aggregate.runtime.Async
-import aecor.aggregate.runtime.Async.ops._
 import aecor.data.EventTag
+import aecor.effect.Async
+import Async.ops._
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
@@ -29,8 +29,8 @@ trait AggregateJournal[Offset, E] {
       }
       .flatMapConcat { storedOffset =>
         eventsByTag(tag, storedOffset)
-          .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
       }
+      .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
 
   final def committableCurrentEventsByTag[F[_]: Async](
     offsetStore: OffsetStore[F, Offset],
@@ -44,6 +44,6 @@ trait AggregateJournal[Offset, E] {
       }
       .flatMapConcat { storedOffset =>
         currentEventsByTag(tag, storedOffset)
-          .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
       }
+      .map(x => Committable(() => offsetStore.setOffset(tag.value, consumerId, x.offset), x))
 }

@@ -1,10 +1,13 @@
 package aecor.tests.e2e
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.aggregate.{ Correlation, Folder }
 import aecor.data.{ EventTag, Handler }
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
+import aecor.tests.PersistentEncoderCirce
 import cats.implicits._
 import cats.{ Applicative, ~> }
+import io.circe.generic.auto._
 
 import scala.collection.immutable.Seq
 
@@ -24,6 +27,10 @@ object CounterEvent {
   case class CounterIncremented(id: String) extends CounterEvent
   case class CounterDecremented(id: String) extends CounterEvent
   val tag: EventTag[CounterEvent] = EventTag[CounterEvent]("Counter")
+  implicit def encoder: PersistentEncoder[CounterEvent] =
+    PersistentEncoderCirce.circePersistentEncoder[CounterEvent]
+  implicit def decoder: PersistentDecoder[CounterEvent] =
+    PersistentEncoderCirce.circePersistentDecoder[CounterEvent]
 }
 
 case class CounterState(value: Long)
@@ -35,6 +42,11 @@ object CounterState {
         case CounterDecremented(_) => CounterState(x - 1).pure[F]
       }
     }
+}
+
+object CounterOpHandler {
+  def apply[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?] =
+    new CounterOpHandler[F]
 }
 
 class CounterOpHandler[F[_]: Applicative]

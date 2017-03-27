@@ -2,7 +2,7 @@ package aecor.streaming
 
 import java.util.UUID
 
-import aecor.aggregate.runtime.{ Async, CaptureFuture }
+import aecor.effect.{ Async, CaptureFuture }
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import com.datastax.driver.core.Session

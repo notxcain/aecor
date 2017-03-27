@@ -1,6 +1,6 @@
 package aecor.streaming
 
-import aecor.aggregate.runtime.{ Capture, CaptureFuture }
+import aecor.effect.{ Capture, CaptureFuture }
 import aecor.streaming.StreamSupervisor.StreamKillSwitch
 import akka.actor.{ ActorSystem, SupervisorStrategy }
 import akka.cluster.singleton.{ ClusterSingletonManager, ClusterSingletonManagerSettings }

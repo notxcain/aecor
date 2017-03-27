@@ -3,9 +3,9 @@ package aecor.schedule
 import java.time._
 import java.time.format.DateTimeFormatter
 
-import aecor.aggregate.runtime.{ Async, CaptureFuture }
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
+import aecor.effect.{ Async, CaptureFuture }
 import akka.NotUsed
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
@@ -15,6 +15,7 @@ import com.datastax.driver.core.{ Row, Session }
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
 import Async.ops._
+
 import scala.concurrent.{ ExecutionContext, Future }
 
 class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
