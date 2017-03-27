@@ -42,48 +42,9 @@ object VanillaBehavior {
   }
 
   def correlated[F[_]: Monad, Op[_], S, D](
-    entityName: String,
-    correlation: Correlation[Op],
-    entityBehavior: CorrelationId => Behavior[Op, F]
+    entityBehavior: Op[_] => Behavior[Op, F]
   ): Behavior[Op, F] =
     Behavior(Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { firstOp =>
-      for {
-        entityId <- s"$entityName-${correlation(firstOp)}".pure[F]
-        behavior = entityBehavior(entityId)
-        result <- behavior.run(firstOp)
-      } yield result
+      entityBehavior(firstOp).run(firstOp)
     })
-
-  def apply[F[_]: Monad, Op[_], S, D](entityName: String,
-                                      correlation: Correlation[Op],
-                                      opHandler: Op ~> Handler[F, S, D, ?],
-                                      loadState: String => F[S],
-                                      updateState: (String, UUID, S, D) => F[S],
-                                      generateInstanceId: F[UUID]): Behavior[Op, F] = {
-    def mkBehavior(entityId: String, instanceId: UUID, stateZero: S): Behavior[Op, F] = {
-      def rec(state: S): Behavior[Op, F] =
-        Behavior[Op, F] {
-          def mk[A](op: Op[A]): PairT[F, Behavior[Op, F], A] =
-            opHandler(op).run(state).flatMap {
-              case (stateChanges, reply) =>
-                updateState(entityId, instanceId, state, stateChanges).map { nextState =>
-                  (rec(nextState), reply)
-                }
-            }
-          FunctionK.lift(mk _)
-        }
-      rec(stateZero)
-    }
-    Behavior[Op, F](new (Op ~> PairT[F, Behavior[Op, F], ?]) {
-      override def apply[A](firstOp: Op[A]): PairT[F, Behavior[Op, F], A] =
-        for {
-          instanceId <- generateInstanceId
-          entityId = s"$entityName-${correlation(firstOp)}"
-          state <- loadState(entityId)
-          behavior = mkBehavior(entityId, instanceId, state)
-          result <- behavior.run(firstOp)
-        } yield result
-    })
-  }
-
 }

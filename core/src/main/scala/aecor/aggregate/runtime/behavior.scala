@@ -11,6 +11,7 @@ object behavior {
     * A transformer type representing a `(A, B)` wrapped in `F`
     */
   type PairT[F[_], A, B] = F[(A, B)]
+  type BehaviorT[Op[_], F[_], A] = PairT[F, Behavior[Op, F], A]
 
   /**
     * `Behavior[Op, F]` says that each operation `Op[A]` will cause effect `F`
@@ -26,11 +27,4 @@ object behavior {
       FunctionK.lift(mk _)
     }
   }
-
-  def stateRuntime[Op[_], F[_]: Applicative](
-    behavior: Behavior[Op, F]
-  ): Op ~> StateT[F, Behavior[Op, F], ?] =
-    Lambda[Op ~> StateT[F, Behavior[Op, F], ?]] { op =>
-      StateT(_.run(op))
-    }
 }

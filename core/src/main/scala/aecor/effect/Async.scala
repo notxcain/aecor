@@ -5,7 +5,6 @@ import cats.data.{ EitherT, Kleisli }
 import cats.~>
 import simulacrum.typeclass
 
-import scala.concurrent
 import scala.concurrent.{ ExecutionContext, Future }
 
 /**

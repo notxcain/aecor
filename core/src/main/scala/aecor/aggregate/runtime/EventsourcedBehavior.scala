@@ -40,14 +40,13 @@ object EventsourcedBehavior {
     snapshotStore: SnapshotStore[F, S],
     generateInstanceId: F[UUID]
   )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] =
-    VanillaBehavior.correlated[F, Op, InternalState[S], Seq[E]](
-      entityName,
-      correlation,
+    VanillaBehavior.correlated[F, Op, InternalState[S], Seq[E]] { op =>
+      val entityId = s"$entityName-${correlation(op)}"
       repository(journal, snapshotEach, snapshotStore, tagging).andThen { r =>
         VanillaBehavior
           .shared[F, Op, InternalState[S], Seq[E]](mkOpHandler(opHandler), r, generateInstanceId)
-      }
-    )
+      }(entityId)
+    }
 
   def mkOpHandler[F[_], Op[_], S, E](
     opHandler: Op ~> Handler[F, S, Seq[E], ?]

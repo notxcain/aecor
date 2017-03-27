@@ -1,28 +1,29 @@
 package aecor.tests
 
-import aecor.aggregate.{ AkkaPersistenceRuntime, Tagging }
+import aecor.aggregate.StateRuntime
+import aecor.aggregate.runtime.{ GenericAkkaRuntime, StateBehavior }
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{ Config, ConfigFactory }
 import monix.eval.Task
+import monix.execution.Scheduler
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike, Matchers }
-import monix.cats._
+import monix.cats.monixToCatsMonad
 import aecor.effect.monix._
-import monix.execution.Scheduler
-
+import cats.implicits._
 import scala.concurrent.duration._
 
-object AkkaPersistenceRuntimeSpec {
+object ShardedRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
         akka.persistence.journal.plugin=akka.persistence.journal.inmem
         akka.persistence.snapshot-store.plugin=akka.persistence.no-snapshot-store
      """).withFallback(ConfigFactory.load())
 }
 
-class AkkaPersistenceRuntimeSpec
-    extends TestKit(ActorSystem("aecor-example", AkkaPersistenceRuntimeSpec.conf))
+class ShardedRuntimeSpec
+    extends TestKit(ActorSystem("aecor-example", ShardedRuntimeSpec.conf))
     with FunSuiteLike
     with Matchers
     with ScalaFutures
@@ -35,12 +36,12 @@ class AkkaPersistenceRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val startRuntime = AkkaPersistenceRuntime[Task](system).start(
-    "Counter",
-    CounterOpHandler[Task],
-    CounterOp.correlation,
-    Tagging(CounterEvent.tag)
+  val behavior = StateBehavior(
+    StateRuntime.shared(CounterOpHandler[Task]),
+    Vector.empty[CounterEvent].pure[Task]
   )
+
+  val startRuntime = GenericAkkaRuntime(system).start("Counter", CounterOp.correlation, behavior)
 
   test("Runtime should work") {
     val program = for {
