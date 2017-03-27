@@ -32,7 +32,7 @@ private[aecor] final class RuntimeActor[F[_]: Async: Functor, Op[_]](behavior: B
 
   import context._
 
-  private final case class Result(id: UUID, value: Try[(Behavior[Op, F], Any)])
+  private case class Result(id: UUID, value: Try[(Behavior[Op, F], Any)])
 
   setIdleTimeout()
 

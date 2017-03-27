@@ -15,7 +15,7 @@ import akka.persistence.cassandra.journal.CassandraEventJournalActor._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.serialization.SerializationExtension
 import cats.data.NonEmptyVector
-import cats.implicits._
+
 import com.datastax.driver.core._
 import com.datastax.driver.core.policies.{ LoggingRetryPolicy, RetryPolicy }
 import com.datastax.driver.core.utils.UUIDs
@@ -89,17 +89,15 @@ class CassandraEventJournalActor[E: PersistentEncoder](cfg: Config)
 
   def receive: Receive = {
     case WriteMessages(persistenceId, messages, instanceId) =>
-      val writeResult = Future(
-        breaker.withCircuitBreaker(
-          asyncWriteMessages(
-            AtomicWrite(
-              persistenceId,
-              messages.asInstanceOf[NonEmptyVector[EventEnvelope[E]]].toVector,
-              instanceId
-            )
+      val writeResult = breaker.withCircuitBreaker(
+        asyncWriteMessages(
+          AtomicWrite(
+            persistenceId,
+            messages.asInstanceOf[NonEmptyVector[EventEnvelope[E]]].toVector,
+            instanceId
           )
         )
-      ).flatten
+      )
       writeResult.pipeTo(sender())
       ()
 
