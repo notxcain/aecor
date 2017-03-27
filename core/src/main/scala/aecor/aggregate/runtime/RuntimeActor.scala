@@ -4,7 +4,7 @@ import java.util.UUID
 
 import aecor.effect.Async.ops._
 import aecor.aggregate.runtime.RuntimeActor.PerformOp
-import aecor.aggregate.runtime.behavior.Behavior
+import aecor.data.Behavior
 import aecor.effect.Async
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion

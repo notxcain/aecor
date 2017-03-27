@@ -2,10 +2,8 @@ package aecor.aggregate.runtime
 
 import java.util.UUID
 
-import aecor.aggregate.{ Correlation, CorrelationId }
-import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
+import aecor.data.{ Behavior, PairT }
 import aecor.data.Handler
-import cats.arrow.FunctionK
 import cats.implicits._
 import cats.{ Monad, ~> }
 

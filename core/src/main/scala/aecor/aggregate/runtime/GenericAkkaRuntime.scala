@@ -2,7 +2,7 @@ package aecor.aggregate.runtime
 
 import aecor.aggregate._
 import aecor.aggregate.runtime.GenericAkkaRuntime.CorrelatedCommand
-import aecor.aggregate.runtime.behavior.Behavior
+import aecor.data.Behavior
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }

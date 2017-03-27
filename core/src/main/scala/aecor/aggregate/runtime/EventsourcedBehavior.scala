@@ -5,7 +5,7 @@ import java.util.UUID
 import aecor.aggregate._
 import aecor.aggregate.runtime.EventJournal.EventEnvelope
 import aecor.aggregate.runtime.VanillaBehavior.EntityRepository
-import aecor.aggregate.runtime.behavior.Behavior
+import aecor.data.Behavior
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Folded, Handler }
 import akka.cluster.sharding.ShardRegion.EntityId

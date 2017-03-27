@@ -1,6 +1,6 @@
 package aecor.aggregate.runtime
 
-import aecor.aggregate.runtime.behavior.{ Behavior, PairT }
+import aecor.data.{ Behavior, PairT }
 import cats.data.StateT
 import cats.implicits._
 import cats.{ Monad, ~> }
