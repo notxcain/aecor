@@ -7,14 +7,14 @@ import aecor.aggregate.runtime.{ EventsourcedBehavior, NoopSnapshotStore }
 import aecor.aggregate.{ Correlation, Folder, Tagging }
 import aecor.data.{ Folded, Handler }
 import aecor.tests.e2e.TestEventJournal.TestEventJournalState
-import cats.data.StateT
+import cats.data.{ EitherT, StateT }
 import cats.implicits._
-import cats.{ Monad, ~> }
+import cats.{ Eval, Monad, ~> }
 
 import scala.collection.immutable._
 
 trait E2eSupport {
-  final type SpecF[A] = Either[BehaviorFailure, A]
+  final type SpecF[A] = EitherT[Eval, BehaviorFailure, A]
   type SpecState
   final def mkJournal[E](
     extract: SpecState => TestEventJournalState[E],

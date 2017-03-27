@@ -1,13 +1,16 @@
 package aecor.schedule
 
-import java.time.{ LocalDateTime, ZonedDateTime }
+import java.time.{ Instant, LocalDateTime, ZonedDateTime }
 
-import aecor.aggregate.{ Correlation, CorrelationId }
-import aecor.data.Handler
+import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.aggregate.{ Correlation, CorrelationId, Folder }
+import aecor.data.{ Folded, Handler }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
+import aecor.schedule.protobuf.ScheduleEventCodec
+import ScheduleState._
 import cats.Functor
 import cats.implicits._
-
+import Folded.syntax._
 import scala.collection.immutable.Seq
 
 object DefaultScheduleAggregate {
@@ -36,7 +39,7 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
       clock.map { c =>
         val timestamp = c.toInstant
         val now = c.toLocalDateTime
-        if (state.entries.get(entryId).isDefined) {
+        if (state.unfired.get(entryId).isDefined || state.fired.contains(entryId)) {
           Vector.empty -> (())
         } else {
           val scheduleEntryAdded = ScheduleEntryAdded(
@@ -80,4 +83,65 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
           .toVector -> (())
       }
     }
+}
+
+sealed abstract class ScheduleEvent extends Product with Serializable {
+  def scheduleName: String
+  def scheduleBucket: String
+  def entryId: String
+  def timestamp: Instant
+}
+
+object ScheduleEvent extends ScheduleEventInstances {
+  final case class ScheduleEntryAdded(scheduleName: String,
+                                      scheduleBucket: String,
+                                      entryId: String,
+                                      correlationId: CorrelationId,
+                                      dueDate: LocalDateTime,
+                                      timestamp: Instant)
+      extends ScheduleEvent
+
+  final case class ScheduleEntryFired(scheduleName: String,
+                                      scheduleBucket: String,
+                                      entryId: String,
+                                      correlationId: CorrelationId,
+                                      timestamp: Instant)
+      extends ScheduleEvent
+}
+
+trait ScheduleEventInstances {
+  implicit val persistentEncoder: PersistentEncoder[ScheduleEvent] =
+    PersistentEncoder.fromCodec(ScheduleEventCodec)
+  implicit val persistentDecoder: PersistentDecoder[ScheduleEvent] =
+    PersistentDecoder.fromCodec(ScheduleEventCodec)
+}
+
+private[aecor] case class ScheduleState(unfired: Map[String, ScheduleEntry], fired: Set[String]) {
+  def addEntry(entryId: String,
+               correlationId: CorrelationId,
+               dueDate: LocalDateTime): ScheduleState =
+    copy(unfired = unfired + (entryId -> ScheduleEntry(entryId, correlationId, dueDate)))
+
+  def markEntryAsFired(entryId: String): ScheduleState =
+    copy(unfired = unfired - entryId, fired = fired + entryId)
+
+  def findEntry(entryId: String): Option[ScheduleEntry] =
+    unfired.get(entryId)
+
+  def update(event: ScheduleEvent): Folded[ScheduleState] = event match {
+    case ScheduleEntryAdded(_, _, entryId, correlationId, dueDate, _) =>
+      addEntry(entryId, correlationId, dueDate).next
+    case e: ScheduleEntryFired =>
+      markEntryAsFired(e.entryId).next
+  }
+}
+
+private[aecor] object ScheduleState {
+
+  def initial: ScheduleState = ScheduleState(Map.empty, Set.empty)
+
+  case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
+
+  implicit val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
+    Folder.instance(initial)(_.update)
 }

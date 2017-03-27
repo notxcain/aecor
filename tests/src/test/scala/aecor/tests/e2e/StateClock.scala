@@ -13,12 +13,10 @@ class StateClock[F[_], S](extract: S => Instant, update: (S, Instant) => S) {
     instant.map(LocalDateTime.ofInstant(_, zoneId))
   def zonedDateTime(zoneId: ZoneId)(implicit F: Applicative[F]): StateT[F, S, ZonedDateTime] =
     instant.map(ZonedDateTime.ofInstant(_, zoneId))
-
   def tick(temporalAmount: TemporalAmount)(implicit F: Applicative[F]): StateT[F, S, Unit] =
     StateT
       .modify[F, Instant](_.plus(temporalAmount))
       .transformS(extract, update)
-
 }
 
 object StateClock {

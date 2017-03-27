@@ -3,9 +3,9 @@ package aecor.streaming
 import java.util.UUID
 
 import aecor.aggregate.runtime.{ Async, CaptureFuture }
+import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import com.datastax.driver.core.Session
-import akka.persistence.cassandra._
 
 import scala.concurrent.{ ExecutionContext, Future }
 
@@ -61,4 +61,5 @@ class CassandraOffsetStore[F[_]: Async: CaptureFuture](
         .flatMap(session.executeWrite)
         .map(_ => ())
     }
+
 }

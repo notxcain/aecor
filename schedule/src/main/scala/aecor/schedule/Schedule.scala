@@ -7,9 +7,9 @@ import aecor.aggregate.runtime._
 import aecor.aggregate.{ CorrelationId, Tagging }
 import aecor.data.EventTag
 import aecor.schedule.process.{
-  DefaultScheduleProcessOps,
+  DefaultScheduleEventJournal,
   ScheduleProcess,
-  ScheduleProcessRuntime
+  PeriodicProcessRuntime
 }
 import aecor.streaming._
 import akka.NotUsed
@@ -70,19 +70,20 @@ object Schedule {
       } yield ScheduleAggregate.fromFunctionK(f)
 
     def startProcess(aggregate: ScheduleAggregate[F]) = {
-      val ops = DefaultScheduleProcessOps[F](
-        clock,
-        consumerId,
-        8,
-        offsetStore,
+      val journal =
+        DefaultScheduleEventJournal[F](consumerId, 8, offsetStore, aggregateJournal, eventTag)
+      val process = ScheduleProcess(
+        journal,
         dayZero,
+        consumerId,
+        OffsetStore.uuidToLocalDateTime(offsetStore, clock.getZone),
+        eventualConsistencyDelay,
         repository,
         aggregate,
-        aggregateJournal,
-        eventTag
+        Capture[F].capture(LocalDateTime.now(clock)),
+        8
       )
-      val process = ScheduleProcess(ops, eventualConsistencyDelay, repository, aggregate)
-      ScheduleProcessRuntime(entityName, refreshInterval, process).run(system)
+      PeriodicProcessRuntime(entityName, refreshInterval, process).run(system)
     }
 
     def createSchedule(aggregate: ScheduleAggregate[F]): Schedule[F] =
