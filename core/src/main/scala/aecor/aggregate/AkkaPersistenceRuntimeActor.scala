@@ -103,15 +103,21 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Even
   private var eventCount = 0L
   private var snapshotPending = false
 
+  private def recover(repr: PersistentRepr): Unit =
+    eventDecoder.decode(repr) match {
+      case Left(cause) =>
+        onRecoveryFailure(cause, Some(repr))
+      case Right(event) =>
+        log.debug("[{}] Recovering [{}]", persistenceId, event)
+        applyEvent(event)
+        eventCount += 1
+    }
   override def receiveRecover: Receive = {
     case repr: PersistentRepr =>
-      eventDecoder.decode(repr) match {
-        case Left(cause) =>
-          onRecoveryFailure(cause, Some(repr))
-        case Right(event) =>
-          applyEvent(event)
-          eventCount += 1
-      }
+      recover(repr)
+
+    case Tagged(repr: PersistentRepr, _) =>
+      recover(repr)
 
     case SnapshotOffer(_, snapshotRepr: PersistentRepr) =>
       snapshotPolicy match {
@@ -133,6 +139,9 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Even
         Duration.between(recoveryStartTimestamp, Instant.now()).toMillis
       )
       setIdleTimeout()
+
+    case other =>
+      throw new IllegalStateException(s"Unexpected message during recovery [$other]")
   }
 
   final override def receiveCommand: Receive = {

@@ -18,6 +18,7 @@ object AkkaPersistenceRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
         akka.persistence.journal.plugin=akka.persistence.journal.inmem
         akka.persistence.snapshot-store.plugin=akka.persistence.no-snapshot-store
+        aecor.akka-runtime.idle-timeout = 1s
      """).withFallback(ConfigFactory.load())
 }
 
@@ -28,7 +29,7 @@ class AkkaPersistenceRuntimeSpec
     with ScalaFutures
     with BeforeAndAfterAll {
 
-  override implicit val patienceConfig = PatienceConfig(4.seconds, 2.second)
+  override implicit val patienceConfig = PatienceConfig(15.seconds, 150.millis)
 
   implicit val scheduler = Scheduler(system.dispatcher)
 
@@ -50,11 +51,12 @@ class AkkaPersistenceRuntimeSpec
       _2 <- runtime(CounterOp.GetValue("2"))
       _ <- runtime(CounterOp.Decrement("1"))
       _1 <- runtime(CounterOp.GetValue("1"))
-      _ <- startRuntime
-    } yield (_1, _2)
+      afterPassivation <- runtime(CounterOp.GetValue("2")).delayExecution(2.seconds)
+    } yield (_1, _2, afterPassivation)
 
-    val (_1, _2) = program.runAsync.futureValue
+    val (_1, _2, afterPassivation) = program.runAsync.futureValue
     _1 shouldBe 0L
     _2 shouldBe 1L
+    afterPassivation shouldBe 1L
   }
 }

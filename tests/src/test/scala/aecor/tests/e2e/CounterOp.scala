@@ -55,13 +55,13 @@ class CounterOpHandler[F[_]: Applicative]
     fa match {
       case Increment(id) =>
         Handler.lift { x =>
-          Vector(CounterIncremented(id)) -> (x.value + 1)
+          Seq(CounterIncremented(id)) -> (x.value + 1)
         }
       case Decrement(id) =>
         Handler.lift { x =>
-          Vector(CounterDecremented(id)) -> (x.value - 1)
+          Seq(CounterDecremented(id)) -> (x.value - 1)
         }
       case GetValue(id) =>
-        Handler.lift(x => Vector.empty -> x.value)
+        Handler.lift(x => Seq.empty -> x.value)
     }
 }

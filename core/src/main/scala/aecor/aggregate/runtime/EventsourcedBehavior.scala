@@ -36,17 +36,19 @@ object EventsourcedBehavior {
     opHandler: Op ~> Handler[F, S, Seq[E], ?],
     tagging: Tagging[E],
     journal: EventJournal[F, E],
+    generateInstanceId: F[UUID],
     snapshotEach: Option[Long],
-    snapshotStore: SnapshotStore[F, S],
-    generateInstanceId: F[UUID]
-  )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] =
-    VanillaBehavior.correlated[F, Op, InternalState[S], Seq[E]] { op =>
-      val entityId = s"$entityName-${correlation(op)}"
-      repository(journal, snapshotEach, snapshotStore, tagging).andThen { r =>
+    snapshotStore: KeyValueStore[F, String, InternalState[S]]
+  )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] = Behavior.roll {
+    generateInstanceId.map { instanceId =>
+      VanillaBehavior.correlated[F, Op, InternalState[S], Seq[E]] { op =>
+        val entityId = s"$entityName-${correlation(op)}"
+        val r = repository(journal, snapshotEach, snapshotStore, tagging, instanceId, entityId)
         VanillaBehavior
-          .shared[F, Op, InternalState[S], Seq[E]](mkOpHandler(opHandler), r, generateInstanceId)
-      }(entityId)
+          .shared[F, Op, InternalState[S], Seq[E]](mkOpHandler(opHandler), r)
+      }
     }
+  }
 
   def mkOpHandler[F[_], Op[_], S, E](
     opHandler: Op ~> Handler[F, S, Seq[E], ?]
@@ -55,16 +57,18 @@ object EventsourcedBehavior {
       Handler(s => opHandler(op).run(s.entityState))
     }
 
-  def repository[F[_]: MonadError[?[_], BehaviorFailure], S, E](journal: EventJournal[F, E],
-                                                                snapshotEach: Option[Long],
-                                                                snapshotStore: SnapshotStore[F, S],
-                                                                tagging: Tagging[E])(
-    implicit S: Folder[Folded, E, S]
-  ): CorrelationId => EntityRepository[F, InternalState[S], Seq[E]] = { entityId =>
+  def repository[F[_]: MonadError[?[_], BehaviorFailure], S, E](
+    journal: EventJournal[F, E],
+    snapshotEach: Option[Long],
+    snapshotStore: KeyValueStore[F, String, InternalState[S]],
+    tagging: Tagging[E],
+    instanceId: UUID,
+    entityId: CorrelationId
+  )(implicit S: Folder[Folded, E, S]): EntityRepository[F, InternalState[S], Seq[E]] =
     new EntityRepository[F, InternalState[S], Seq[E]] {
       override def loadState: F[InternalState[S]] =
         for {
-          snapshot <- snapshotStore.loadSnapshot(entityId)
+          snapshot <- snapshotStore.getValue(entityId)
           state <- journal
                     .foldById(
                       entityId,
@@ -81,9 +85,7 @@ object EventsourcedBehavior {
                     }
         } yield state
 
-      override def applyChanges(instanceId: UUID,
-                                state: InternalState[S],
-                                events: Seq[E]): F[InternalState[S]] =
+      override def applyChanges(state: InternalState[S], events: Seq[E]): F[InternalState[S]] =
         if (events.isEmpty) {
           state.pure[F]
         } else {
@@ -107,7 +109,7 @@ object EventsourcedBehavior {
                         NonEmptyVector.of(envelopes.head, envelopes.tail: _*)
                       )
                 _ <- if (snapshotNeeded) {
-                      snapshotStore.saveSnapshot(entityId, nextState).map(_ => nextState)
+                      snapshotStore.setValue(entityId, nextState).map(_ => nextState)
                     } else {
                       nextState.pure[F]
                     }
@@ -119,5 +121,4 @@ object EventsourcedBehavior {
           }
         }
     }
-  }
 }

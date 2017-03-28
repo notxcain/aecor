@@ -1,7 +1,7 @@
 package aecor.data
 
 import cats.arrow.FunctionK
-import cats.{ Functor, ~> }
+import cats.{ FlatMap, Functor, ~> }
 import cats.implicits._
 
 /**
@@ -17,4 +17,12 @@ final case class Behavior[Op[_], F[_]](run: Op ~> PairT[F, Behavior[Op, F], ?]) 
       }
     FunctionK.lift(mk _)
   }
+}
+
+object Behavior {
+  def roll[F[_]: FlatMap, Op[_]](f: F[Behavior[Op, F]]): Behavior[Op, F] =
+    Behavior[Op, F](new (Op ~> PairT[F, Behavior[Op, F], ?]) {
+      override def apply[A](op: Op[A]): PairT[F, Behavior[Op, F], A] =
+        FlatMap[F].flatMap(f)(_.run(op))
+    })
 }

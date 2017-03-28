@@ -104,10 +104,7 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 )
 
 lazy val effectMonixSettings = Seq(
-  libraryDependencies ++= Seq(
-    "io.monix" %% "monix-eval" % monixVersion,
-    "io.monix" %% "monix-cats" % monixVersion
-  )
+  libraryDependencies ++= Seq("io.monix" %% "monix-eval" % monixVersion)
 )
 
 lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-core" % fs2Version))
@@ -121,6 +118,7 @@ lazy val exampleSettings = {
     resolvers ++= Seq(Resolver.bintrayRepo("projectseptemberinc", "maven")),
     libraryDependencies ++=
       Seq(
+        "io.monix" %% "monix-cats" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
         "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
         ("com.projectseptember" %% "freek" % freekVersion)

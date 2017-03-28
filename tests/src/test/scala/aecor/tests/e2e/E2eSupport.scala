@@ -2,8 +2,8 @@ package aecor.tests.e2e
 
 import java.util.UUID
 
-import aecor.aggregate.runtime.EventsourcedBehavior.BehaviorFailure
-import aecor.aggregate.runtime.{ EventsourcedBehavior, NoopSnapshotStore }
+import aecor.aggregate.runtime.EventsourcedBehavior.{ BehaviorFailure, InternalState }
+import aecor.aggregate.runtime.{ EventsourcedBehavior, NoopKeyValueStore }
 import aecor.aggregate.{ Correlation, Folder, Tagging }
 import aecor.data.{ Folded, Handler }
 import aecor.tests.e2e.TestEventJournal.TestEventJournalState
@@ -37,9 +37,9 @@ trait E2eSupport {
           opHandler,
           tagging,
           journal,
+          StateT.inspect[SpecF, SpecState, UUID](_ => UUID.randomUUID()),
           Option.empty,
-          NoopSnapshotStore[StateT[SpecF, SpecState, ?], S],
-          StateT.inspect[SpecF, SpecState, UUID](_ => UUID.randomUUID())
+          NoopKeyValueStore[StateT[SpecF, SpecState, ?], String, InternalState[S]]
         ).run(fa)
           .map(_._2)
     }

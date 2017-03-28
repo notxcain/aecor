@@ -1,52 +1,20 @@
 package aecor.tests
 
-import aecor.aggregate.{ Correlation, Folder, StateRuntime }
-import aecor.data.Handler
+import aecor.aggregate.StateRuntime
+import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
+import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
+import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
 import cats.implicits._
-import cats.{ Applicative, Id, Monad, ~> }
+import cats.{ Id, Monad, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 
-import scala.collection.immutable.Seq
-
 class StateRuntimeSpec extends FunSuite with Matchers {
-  sealed trait CounterOp[A] {
-    def id: String
-  }
-  case class Increment(id: String) extends CounterOp[Long]
-  case class Decrement(id: String) extends CounterOp[Long]
-
-  val correlation = Correlation[CounterOp](_.id)
-
-  sealed trait CounterEvent
-  case class CounterIncremented(id: String) extends CounterEvent
-  case class CounterDecremented(id: String) extends CounterEvent
-  case class CounterState(value: Long)
-  object CounterState {
-    implicit val folder: Folder[Id, CounterEvent, CounterState] =
-      Folder.instance(CounterState(0)) {
-        case CounterState(x) => {
-          case CounterIncremented(_) => CounterState(x + 1)
-          case CounterDecremented(_) => CounterState(x - 1)
-        }
-      }
-  }
-  def behavior[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?] =
-    Lambda[CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?]] {
-      case Increment(id) =>
-        Handler.lift { x =>
-          Vector(CounterIncremented(id)) -> (x.value + 1)
-        }
-      case Decrement(id) =>
-        Handler.lift { x =>
-          Vector(CounterDecremented(id)) -> (x.value - 1)
-        }
-    }
 
   val sharedRuntime =
-    StateRuntime.shared[Id, CounterOp, CounterState, CounterEvent](behavior)
+    StateRuntime.shared[Id, CounterOp, CounterState, CounterEvent](CounterOpHandler[Id])
 
   val correlatedRuntime =
-    StateRuntime.correlate(sharedRuntime, correlation)
+    StateRuntime.correlate(sharedRuntime, CounterOp.correlation)
 
   def mkProgram[F[_]: Monad](runtime: CounterOp ~> F): F[Long] =
     for {

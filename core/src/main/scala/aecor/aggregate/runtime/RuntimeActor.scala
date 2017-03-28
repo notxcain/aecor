@@ -24,8 +24,8 @@ object RuntimeActor {
   case object Stop
 }
 
-private[aecor] final class RuntimeActor[F[_]: Async: Functor, Op[_]](behavior: Behavior[Op, F],
-                                                                     idleTimeout: FiniteDuration)
+private[aecor] final class RuntimeActor[F[_]: Async, Op[_]](behavior: Behavior[Op, F],
+                                                            idleTimeout: FiniteDuration)
     extends Actor
     with Stash
     with ActorLogging {

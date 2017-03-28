@@ -3,6 +3,7 @@ package aecor.schedule
 import java.time.{ Clock, LocalDate, LocalDateTime, ZonedDateTime }
 import java.util.UUID
 
+import aecor.aggregate.runtime.EventsourcedBehavior.InternalState
 import aecor.aggregate.runtime._
 import aecor.aggregate.{ CorrelationId, Tagging }
 import aecor.data.EventTag
@@ -61,9 +62,9 @@ object Schedule {
           DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
           Tagging(eventTag),
           journal,
+          Capture[F].capture(UUID.randomUUID()),
           None,
-          NoopSnapshotStore[F, ScheduleState],
-          Capture[F].capture(UUID.randomUUID())
+          NoopKeyValueStore[F, String, InternalState[ScheduleState]]
         )
         f <- runtime
               .start(entityName, DefaultScheduleAggregate.correlation, behavior)
