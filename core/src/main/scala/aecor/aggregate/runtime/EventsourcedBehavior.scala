@@ -69,13 +69,10 @@ object EventsourcedBehavior {
       override def loadState: F[InternalState[S]] =
         for {
           snapshot <- snapshotStore.getValue(entityId)
+          offset = snapshot.map(_.version).getOrElse(0L)
+          zeroState = snapshot.getOrElse(InternalState.zero)
           state <- journal
-                    .foldById(
-                      entityId,
-                      snapshot.map(_.version).getOrElse(0L),
-                      snapshot.getOrElse(InternalState.zero),
-                      (_: InternalState[S]).step(_)
-                    )
+                    .foldById(entityId, offset, zeroState, (_: InternalState[S]).step(_))
                     .flatMap {
                       case Next(x) => x.pure[F]
                       case Impossible =>
