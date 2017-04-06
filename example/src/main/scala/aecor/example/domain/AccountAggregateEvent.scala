@@ -1,7 +1,7 @@
 package aecor.example.domain
 
 import aecor.example.persistentEncoderUtil
-import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import io.circe.generic.auto._
 
 sealed abstract class AccountAggregateEvent extends Product with Serializable {

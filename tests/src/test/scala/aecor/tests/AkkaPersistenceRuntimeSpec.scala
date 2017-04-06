@@ -1,6 +1,6 @@
 package aecor.tests
 
-import aecor.aggregate.{ AkkaPersistenceRuntime, Tagging }
+import aecor.data.Tagging
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -10,20 +10,23 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike, Matchers }
 import monix.cats._
 import aecor.effect.monix._
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
 import monix.execution.Scheduler
 
 import scala.concurrent.duration._
 
 object AkkaPersistenceRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
+        cluster.system-name=test
         akka.persistence.journal.plugin=akka.persistence.journal.inmem
         akka.persistence.snapshot-store.plugin=akka.persistence.no-snapshot-store
         aecor.akka-runtime.idle-timeout = 1s
+        cluster.seed-nodes = ["akka://test@127.0.0.1:51000"]
      """).withFallback(ConfigFactory.load())
 }
 
 class AkkaPersistenceRuntimeSpec
-    extends TestKit(ActorSystem("aecor-example", AkkaPersistenceRuntimeSpec.conf))
+    extends TestKit(ActorSystem("test", AkkaPersistenceRuntimeSpec.conf))
     with FunSuiteLike
     with Matchers
     with ScalaFutures

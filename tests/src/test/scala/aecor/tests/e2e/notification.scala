@@ -1,7 +1,7 @@
 package aecor.tests.e2e
 
-import aecor.aggregate.{ Correlation, Folder }
-import aecor.data.{ EventTag, Handler }
+import aecor.aggregate.Folder
+import aecor.data.{ Correlation, EventTag, Handler }
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
 import aecor.tests.e2e.notification.NotificationOp.{ CreateNotification, MarkAsSent }
 import cats.implicits._

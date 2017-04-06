@@ -2,15 +2,15 @@ package aecor.schedule
 
 import java.time.{ Instant, LocalDateTime, ZonedDateTime }
 
-import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
-import aecor.aggregate.{ Correlation, CorrelationId, Folder }
-import aecor.data.{ Folded, Handler }
+import aecor.aggregate.Folder
+import aecor.data.Folded.syntax._
+import aecor.data.{ Correlation, CorrelationId, Folded, Handler }
+import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
+import aecor.schedule.ScheduleState._
 import aecor.schedule.protobuf.ScheduleEventCodec
-import ScheduleState._
 import cats.Functor
 import cats.implicits._
-import Folded.syntax._
 
 import scala.collection.immutable.Seq
 

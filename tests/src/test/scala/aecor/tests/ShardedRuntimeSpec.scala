@@ -1,30 +1,34 @@
 package aecor.tests
 
 import aecor.aggregate.StateRuntime
-import aecor.aggregate.runtime.{ GenericAkkaRuntime, StateBehavior }
+import aecor.data.StateBehavior
+import aecor.effect.monix._
+import aecor.runtime.akkacluster.GenericAkkaRuntime
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import cats.implicits._
 import com.typesafe.config.{ Config, ConfigFactory }
+import monix.cats.monixToCatsMonad
 import monix.eval.Task
 import monix.execution.Scheduler
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike, Matchers }
-import monix.cats.monixToCatsMonad
-import aecor.effect.monix._
-import cats.implicits._
+
 import scala.concurrent.duration._
 
 object ShardedRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
+        cluster.system-name=test
         akka.persistence.journal.plugin=akka.persistence.journal.inmem
         akka.persistence.snapshot-store.plugin=akka.persistence.no-snapshot-store
         aecor.akka-runtime.idle-timeout = 1s
+                                                  cluster.seed-nodes = ["akka://test@127.0.0.1:51000"]
      """).withFallback(ConfigFactory.load())
 }
 
 class ShardedRuntimeSpec
-    extends TestKit(ActorSystem("aecor-example", ShardedRuntimeSpec.conf))
+    extends TestKit(ActorSystem("test", ShardedRuntimeSpec.conf))
     with FunSuiteLike
     with Matchers
     with ScalaFutures

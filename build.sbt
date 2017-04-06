@@ -9,7 +9,7 @@ lazy val buildSettings = Seq(
 )
 
 lazy val akkaVersion = "2.4.17"
-lazy val akkaPersistenceCassandra = "0.23"
+lazy val akkaPersistenceCassandra = "0.25"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
@@ -40,56 +40,72 @@ lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
 lazy val aecor = project
   .in(file("."))
-  .settings(moduleName := "aecor")
+  .settings(moduleName := "aecor", name := "Aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .aggregate(core, example, schedule, effectMonix, effectFs2, tests)
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
 lazy val core =
-  project.settings(moduleName := "aecor-core").settings(aecorSettings).settings(coreSettings)
+  project
+    .settings(moduleName := "aecor-core", name := "Aecor Core")
+    .settings(aecorSettings)
+    .settings(coreSettings)
+
+lazy val akkaPersistence = project
+  .in(file("aecor-akka-persistence"))
+  .settings(
+    moduleName := "aecor-akka-persistence",
+    name := "Aecor Runtime based on Akka Cluster Sharding and Persistence"
+  )
+  .dependsOn(core)
+  .settings(aecorSettings)
+  .settings(akkaPersistenceSettings)
 
 lazy val schedule = project
-  .dependsOn(core)
-  .settings(moduleName := "aecor-schedule")
+  .dependsOn(akkaPersistence)
+  .settings(moduleName := "aecor-schedule", name := "Aecor Schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
 lazy val effectMonix = project
   .in(file("aecor-monix"))
+  .settings(moduleName := "aecor-monix", name := "Aecor Monix")
   .dependsOn(core)
-  .settings(name := "aecor-monix")
   .settings(aecorSettings)
   .settings(effectMonixSettings)
 
 lazy val effectFs2 = project
   .in(file("aecor-fs2"))
+  .settings(moduleName := "aecor-fs2", name := "Aecor FS2")
   .dependsOn(core)
-  .settings(name := "aecor-fs2")
   .settings(aecorSettings)
   .settings(effectFs2Settings)
 
+lazy val testKit = project
+  .in(file("aecor-test-kit"))
+  .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
+  .dependsOn(core)
+  .settings(aecorSettings)
+
 lazy val tests = project
-  .dependsOn(core, example, schedule, effectMonix, effectFs2)
-  .settings(moduleName := "aecor-tests")
+  .dependsOn(core, example, schedule, effectMonix, effectFs2, testKit, akkaPersistence)
+  .settings(moduleName := "aecor-tests", name := "Aecor Tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = project
   .dependsOn(core, schedule, effectMonix)
-  .settings(moduleName := "aecor-example")
+  .settings(moduleName := "aecor-example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
@@ -100,6 +116,16 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
     "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
+  )
+)
+
+lazy val akkaPersistenceSettings = Seq(
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra
   )
 )
 
@@ -118,6 +144,7 @@ lazy val exampleSettings = {
     resolvers ++= Seq(Resolver.bintrayRepo("projectseptemberinc", "maven")),
     libraryDependencies ++=
       Seq(
+        "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-cats" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
         "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,

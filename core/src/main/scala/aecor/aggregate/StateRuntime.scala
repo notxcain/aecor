@@ -1,6 +1,6 @@
 package aecor.aggregate
 
-import aecor.data.Handler
+import aecor.data.{ Correlation, Handler }
 import cats.data._
 import cats.implicits._
 import cats.{ Monad, ~> }

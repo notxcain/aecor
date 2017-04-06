@@ -1,9 +1,9 @@
 package aecor.example.domain
 import java.util.UUID
 
-import aecor.aggregate.{ Correlation, Folder }
+import aecor.aggregate.Folder
 import aecor.data.Folded.syntax._
-import aecor.data.{ EventTag, Folded, Handler }
+import aecor.data.{ Correlation, EventTag, Folded, Handler }
 import aecor.example.domain.CardAuthorizationAggregate.State.{
   Accepted,
   Created,

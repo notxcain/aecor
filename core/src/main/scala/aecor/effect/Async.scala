@@ -2,13 +2,14 @@ package aecor.effect
 
 import aecor.effect.Async.ops._
 import cats.data.{ EitherT, Kleisli }
-import cats.{ Monoid, ~> }
+import cats.~>
 import simulacrum.typeclass
 
 import scala.concurrent.{ ExecutionContext, Future }
 
 /**
   * The type class for types that can be run in async manner
+  * F[A] should not execute any side effects before `unsafeRun`
   */
 @typeclass
 trait Async[F[_]] {
@@ -18,16 +19,16 @@ trait Async[F[_]] {
 
 object Async extends AsyncInstances
 sealed trait AsyncInstances {
-  implicit def aecorEffectAsyncInstanceForKleisliFuture[A: Monoid]: Async[Kleisli[Future, A, ?]] =
-    new Async[Kleisli[Future, A, ?]] {
-      override def unsafeRun[B](fa: Kleisli[Future, A, B]): Future[B] = fa.run(Monoid[A].empty)
+  implicit def aecorEffectAsyncInstanceForKleisliFuture: Async[Kleisli[Future, Unit, ?]] =
+    new Async[Kleisli[Future, Unit, ?]] {
+      override def unsafeRun[B](fa: Kleisli[Future, Unit, B]): Future[B] =
+        fa.run(())
     }
 
-  implicit def aecorEffectAsyncInstanceForKleisliAsyncF[F[_]: Async, A: Monoid]
-    : Async[Kleisli[F, A, ?]] =
-    new Async[Kleisli[F, A, ?]] {
-      override def unsafeRun[B](fa: Kleisli[F, A, B]): Future[B] =
-        fa.run(Monoid[A].empty).unsafeRun
+  implicit def aecorEffectAsyncInstanceForKleisliAsyncF[F[_]: Async]: Async[Kleisli[F, Unit, ?]] =
+    new Async[Kleisli[F, Unit, ?]] {
+      override def unsafeRun[B](fa: Kleisli[F, Unit, B]): Future[B] =
+        fa.run(()).unsafeRun
     }
 
   implicit def eitherTAsync[F[_]: Async, L <: Throwable](

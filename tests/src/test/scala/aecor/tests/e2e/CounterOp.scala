@@ -1,10 +1,10 @@
 package aecor.tests.e2e
-import aecor.aggregate.serialization.{ PersistentDecoder, PersistentEncoder }
-import aecor.aggregate.{ Correlation, Folder }
-import aecor.data.{ EventTag, Handler }
+import aecor.aggregate.Folder
+import aecor.data.{ Correlation, EventTag, Handler }
+import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
-import aecor.tests.PersistentEncoderCirce
 import cats.implicits._
 import cats.{ Applicative, ~> }
 import io.circe.generic.auto._

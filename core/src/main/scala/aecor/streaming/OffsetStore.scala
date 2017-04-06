@@ -1,13 +1,8 @@
 package aecor.streaming
 
-import java.time.{ Instant, LocalDateTime, ZoneId }
-import java.util.UUID
-
-import aecor.aggregate.runtime.KeyValueStore
 import cats.functor.Invariant
-import cats.{ Functor, ~> }
 import cats.implicits._
-import com.datastax.driver.core.utils.UUIDs
+import cats.{ Functor, ~> }
 final case class ConsumerId(value: String) extends AnyVal
 
 final case class TagName(value: String) extends AnyVal
@@ -40,12 +35,5 @@ object OffsetStore {
       override def imap[A, B](fa: OffsetStore[F, A])(f: (A) => B)(g: (B) => A): OffsetStore[F, B] =
         fa.imap(f, g)
     }
-
-  def uuidToLocalDateTime[F[_]: Functor](store: OffsetStore[F, UUID],
-                                         zoneId: ZoneId): OffsetStore[F, LocalDateTime] =
-    store.imap(
-      uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
-      value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli)
-    )
 
 }

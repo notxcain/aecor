@@ -2,7 +2,7 @@ package aecor.schedule.protobuf
 
 import java.time.{ Instant, LocalDateTime, ZoneOffset }
 
-import aecor.aggregate.serialization.Codec
+import aecor.runtime.akkapersistence.serialization.Codec
 import aecor.schedule.ScheduleEvent
 import aecor.schedule.serialization.protobuf.msg.{ ScheduleEntryAdded, ScheduleEntryFired }
 

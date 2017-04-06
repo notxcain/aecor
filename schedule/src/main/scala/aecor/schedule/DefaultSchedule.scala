@@ -3,10 +3,10 @@ package aecor.schedule
 import java.time.{ Clock, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.CorrelationId
-import aecor.data.EventTag
+import aecor.data.{ Committable, CorrelationId, EventTag }
 import aecor.effect.Async
-import aecor.streaming._
+import aecor.runtime.akkapersistence.{ AggregateJournal, JournalEntry }
+import aecor.streaming.{ ConsumerId, OffsetStore }
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 

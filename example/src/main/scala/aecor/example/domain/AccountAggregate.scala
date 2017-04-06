@@ -2,9 +2,9 @@ package aecor.example.domain
 
 import java.time.Clock
 
-import aecor.aggregate.{ Correlation, Folder }
+import aecor.aggregate.Folder
 import aecor.data.Folded.syntax._
-import aecor.data.{ EventTag, Folded, Handler }
+import aecor.data.{ Correlation, EventTag, Folded, Handler }
 import aecor.example.domain.AccountAggregateEvent._
 import aecor.example.domain.AccountAggregateOp._
 import akka.Done

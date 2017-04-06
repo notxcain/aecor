@@ -1,26 +1,24 @@
 package aecor.schedule
 
-import java.time.{ Clock, LocalDate, LocalDateTime, ZonedDateTime }
+import java.time._
 import java.util.UUID
 
-import aecor.aggregate.runtime.EventsourcedBehavior.InternalState
-import aecor.aggregate.runtime._
-import aecor.aggregate.{ CorrelationId, Tagging }
-import aecor.data.EventTag
+import aecor.data._
+import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.runtime.akkapersistence._
 import aecor.schedule.process.{
   DefaultScheduleEventJournal,
   PeriodicProcessRuntime,
   ScheduleProcess
 }
-import aecor.effect.{ Async, Capture, CaptureFuture }
-import aecor.streaming._
+import aecor.streaming.{ ConsumerId, OffsetStore }
 import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.persistence.cassandra.journal.CassandraEventJournal
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import cats.MonadError
 import cats.implicits._
+import com.datastax.driver.core.utils.UUIDs
 
 import scala.concurrent.duration._
 
@@ -49,36 +47,37 @@ object Schedule {
     offsetStore: OffsetStore[F, UUID],
     consumerId: ConsumerId = ConsumerId("io.aecor.schedule.ScheduleProcess")
   )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] = {
-    val runtime = new GenericAkkaRuntime(system)
 
     val eventTag = EventTag[ScheduleEvent](entityName)
 
+    val runtime = AkkaPersistenceRuntime(system)
+
+    def uuidToLocalDateTime(store: OffsetStore[F, UUID],
+                            zoneId: ZoneId): OffsetStore[F, LocalDateTime] =
+      store.imap(
+        uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
+        value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli)
+      )
+
     def startAggregate =
       for {
-        journal <- CassandraEventJournal[F, ScheduleEvent](system, 8)
-        behavior = EventsourcedBehavior(
-          entityName,
-          DefaultScheduleAggregate.correlation,
-          DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
-          Tagging(eventTag),
-          journal,
-          Capture[F].capture(UUID.randomUUID()),
-          None,
-          NoopKeyValueStore[F, String, InternalState[ScheduleState]]
-        )
-        f <- runtime
-              .start(entityName, DefaultScheduleAggregate.correlation, behavior)
-
+        f <- runtime.start(
+              entityName,
+              DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
+              DefaultScheduleAggregate.correlation,
+              Tagging(eventTag)
+            )
       } yield ScheduleAggregate.fromFunctionK(f)
 
     def startProcess(aggregate: ScheduleAggregate[F]) = {
       val journal =
         DefaultScheduleEventJournal[F](consumerId, 8, offsetStore, aggregateJournal, eventTag)
+
       val process = ScheduleProcess(
         journal,
         dayZero,
         consumerId,
-        OffsetStore.uuidToLocalDateTime(offsetStore, clock.getZone),
+        uuidToLocalDateTime(offsetStore, clock.getZone),
         eventualConsistencyDelay,
         repository,
         aggregate,

@@ -2,7 +2,7 @@ package aecor.example
 
 import java.time.Clock
 
-import aecor.aggregate._
+import aecor.data.{ Committable, Tagging }
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
 import aecor.example.domain._
 import aecor.streaming._
@@ -22,6 +22,12 @@ import monix.execution.Scheduler.Implicits.global
 import aecor.effect.Async.ops._
 import monix.cats._
 import aecor.effect.monix._
+import aecor.runtime.akkapersistence.{
+  AkkaPersistenceRuntime,
+  CassandraAggregateJournal,
+  CassandraOffsetStore,
+  JournalEntry
+}
 
 object AppActor {
   def props: Props = Props(new AppActor)

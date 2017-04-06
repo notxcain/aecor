@@ -2,7 +2,7 @@ package aecor.schedule
 
 import java.time.LocalDateTime
 
-import aecor.aggregate._
+import aecor.data.CorrelationId
 import aecor.schedule.ScheduleOp.{ AddScheduleEntry, FireEntry }
 import cats.~>
 

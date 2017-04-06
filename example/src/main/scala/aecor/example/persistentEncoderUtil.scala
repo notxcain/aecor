@@ -3,7 +3,7 @@ package aecor.example
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import aecor.aggregate.serialization.{
+import aecor.runtime.akkapersistence.serialization.{
   DecodingFailure,
   PersistentDecoder,
   PersistentEncoder,

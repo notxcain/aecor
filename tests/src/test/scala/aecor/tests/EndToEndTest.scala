@@ -1,18 +1,17 @@
 package aecor.tests
 
 import java.time._
-import java.util.UUID
 
-import aecor.aggregate.Tagging
-import aecor.data.EventTag
+import aecor.data.{ EventTag, Tagging }
+import aecor.effect.Capture
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
-import aecor.effect.Capture
-import aecor.streaming.{ ConsumerId, OffsetStore }
+import aecor.streaming.ConsumerId
+import aecor.testkit.TestEventJournal.TestEventJournalState
+import aecor.testkit.{ E2eSupport, StateClock, TestOffsetStore }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
-import aecor.tests.e2e.TestEventJournal.TestEventJournalState
 import aecor.tests.e2e._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp, notificationOpHandler }
 import cats.data.StateT
@@ -34,10 +33,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
                        counterViewState: TestCounterViewRepositoryState,
                        time: Instant,
                        scheduleEntries: Vector[ScheduleEntry],
-                       offsetStoreState: Map[(String, ConsumerId), UUID])
+                       offsetStoreState: Map[(String, ConsumerId), LocalDateTime])
 
   val offsetStore =
-    TestOffsetStore[SpecF, SpecState, UUID](
+    TestOffsetStore[SpecF, SpecState, LocalDateTime](
       _.offsetStoreState,
       (s, os) => s.copy(offsetStoreState = os)
     )
@@ -101,7 +100,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     journal = wrappedEventJournal,
     dayZero = LocalDate.now(),
     consumerId = scheduleProcessConsumerId,
-    offsetStore = OffsetStore.uuidToLocalDateTime(offsetStore, ZoneOffset.UTC),
+    offsetStore = offsetStore,
     eventualConsistencyDelay = 1.second,
     repository = scheduleEntryRepository,
     scheduleAggregate = ScheduleAggregate.fromFunctionK(scheduleAggregate),

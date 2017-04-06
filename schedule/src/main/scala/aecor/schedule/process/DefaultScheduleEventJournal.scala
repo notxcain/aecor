@@ -3,9 +3,10 @@ package aecor.schedule.process
 import java.util.UUID
 
 import aecor.effect.Async.ops._
-import aecor.data.EventTag
+import aecor.data.{ Committable, EventTag }
 import aecor.schedule.ScheduleEvent
 import aecor.effect.{ Async, CaptureFuture }
+import aecor.runtime.akkapersistence.AggregateJournal
 import aecor.streaming._
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Keep, Sink }

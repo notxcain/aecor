@@ -3,21 +3,24 @@ package aecor.example
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
-import aecor.aggregate.runtime.EventsourcedBehavior
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
-import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{ Sink, Source }
+import akka.stream.scaladsl.{ Flow, Sink, Source }
 import cats.data.{ EitherT, Kleisli }
 import cats.implicits._
 import cats.{ Functor, MonadError }
 import Async.ops._
+import aecor.data.EventsourcedBehavior
+import aecor.runtime.akkapersistence.{ CassandraAggregateJournal, CassandraOffsetStore }
+import aecor.streaming.ConsumerId
+import aecor.streaming.process.{ DistributedProcessing, StreamingProcess }
+
 import scala.concurrent.Future
 import scala.concurrent.duration._
 object ScheduleApp extends App {
@@ -98,5 +101,14 @@ object ScheduleApp extends App {
   val app: EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, Unit] =
     mkApp[EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, ?]]
 
-  app.value.run(())
+  DistributedProcessing(system)
+    .start[Kleisli[Future, Unit, ?]](
+      "test",
+      10,
+      x =>
+        StreamingProcess(Source.tick(0.seconds, 2.seconds, x).take(5), Flow[Int].map { x =>
+          system.log.info(s"Worker $x")
+        })
+    )
+    .run(())
 }
