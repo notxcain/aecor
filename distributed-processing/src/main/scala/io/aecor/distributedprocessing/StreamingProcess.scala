@@ -1,11 +1,11 @@
-package aecor.streaming.process
+package io.aecor.distributedprocessing
 
 import aecor.effect.{ Capture, CaptureFuture }
-import aecor.streaming.process.DistributedProcessing.RunningProcess
 import akka.stream.scaladsl.{ Flow, Keep, Sink, Source }
 import akka.stream.{ KillSwitches, Materializer }
 import cats.Functor
 import cats.implicits._
+import io.aecor.distributedprocessing.DistributedProcessing.RunningProcess
 
 object StreamingProcess {
   def apply[F[_]: Functor: CaptureFuture: Capture, A, SM, FM](

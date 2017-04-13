@@ -15,7 +15,7 @@ import aecor.example.domain.CardAuthorizationAggregateEvent.{
   CardAuthorizationCreated,
   CardAuthorizationDeclined
 }
-import aecor.example.domain.CardAuthorizationAggregateOp._
+import aecor.example.domain.TransactionOp._
 import akka.Done
 import cats.{ Applicative, ~> }
 
@@ -64,26 +64,26 @@ object CardAuthorizationAggregate {
 
   }
 
-  def correlation: Correlation[CardAuthorizationAggregateOp] = _.cardAuthorizationId.value
+  def correlation: Correlation[TransactionOp] = _.cardAuthorizationId.value
 
   val entityName: String = "CardAuthorization"
 
   val entityNameTag: EventTag[CardAuthorizationAggregateEvent] = EventTag(entityName)
 
   def commandHandler[F[_]: Applicative] =
-    new (CardAuthorizationAggregateOp ~> Handler[F, State, Seq[CardAuthorizationAggregateEvent], ?]) {
+    new (TransactionOp ~> Handler[F, State, Seq[CardAuthorizationAggregateEvent], ?]) {
       def accept[R, E](events: E*): (Seq[E], Either[R, Done]) =
         (events.toVector, Right(Done))
 
       def reject[R, E](rejection: R): (Seq[E], Either[R, Done]) =
         (Seq.empty, Left(rejection))
       override def apply[A](
-        command: CardAuthorizationAggregateOp[A]
+        command: TransactionOp[A]
       ): Handler[F, State, Seq[CardAuthorizationAggregateEvent], A] =
         Handler.lift {
           case Initial =>
             command match {
-              case CreateCardAuthorization(
+              case CreateTransaction(
                   cardAuthorizationId,
                   accountId,
                   amount,
@@ -111,20 +111,20 @@ object CardAuthorizationAggregate {
                 accept(CardAuthorizationAccepted(id))
               case e: DeclineCardAuthorization =>
                 accept(CardAuthorizationDeclined(id, e.reason))
-              case e: CreateCardAuthorization =>
+              case e: CreateTransaction =>
                 reject(AlreadyExists)
             }
           case Accepted(id) =>
             command match {
               case e: AcceptCardAuthorization => reject(AlreadyAccepted)
               case e: DeclineCardAuthorization => reject(AlreadyAccepted)
-              case e: CreateCardAuthorization => reject(AlreadyExists)
+              case e: CreateTransaction => reject(AlreadyExists)
             }
           case Declined(id) =>
             command match {
               case e: AcceptCardAuthorization => reject(AlreadyDeclined)
               case e: DeclineCardAuthorization => reject(AlreadyDeclined)
-              case e: CreateCardAuthorization => reject(AlreadyExists)
+              case e: CreateTransaction => reject(AlreadyExists)
             }
         }
     }

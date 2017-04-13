@@ -5,10 +5,7 @@ import aecor.example.domain.CardAuthorizationAggregateEvent.{
   CardAuthorizationAccepted,
   CardAuthorizationDeclined
 }
-import aecor.example.domain.CardAuthorizationAggregateOp.{
-  CreateCardAuthorization,
-  CreateCardAuthorizationRejection
-}
+import aecor.example.domain.TransactionOp.{ CreateTransaction, CreateCardAuthorizationRejection }
 import aecor.example.domain._
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.model.StatusCodes
@@ -24,7 +21,7 @@ import scala.concurrent.{ ExecutionContext, Future }
 import monix.execution.Scheduler.Implicits.global
 import aecor.effect.monix._
 
-class AuthorizePaymentAPI(authorization: CardAuthorizationAggregateOp ~> Task,
+class AuthorizePaymentAPI(authorization: TransactionOp ~> Task,
                           eventStream: EventStream[CardAuthorizationAggregateEvent],
                           log: LoggingAdapter) {
 
@@ -35,7 +32,7 @@ class AuthorizePaymentAPI(authorization: CardAuthorizationAggregateOp ~> Task,
   ): Future[Either[CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] =
     dto match {
       case AuthorizePayment(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
-        val command = CreateCardAuthorization(
+        val command = CreateTransaction(
           CardAuthorizationId(cardAuthorizationId),
           AccountId(accountId),
           Amount(amount),

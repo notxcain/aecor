@@ -3,7 +3,7 @@ package aecor.example.domain
 import aecor.effect.Async.ops._
 import aecor.example.domain.AccountAggregateOp._
 import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
-import aecor.example.domain.CardAuthorizationAggregateOp._
+import aecor.example.domain.TransactionOp._
 import akka.stream.scaladsl.Flow
 import akka.{ Done, NotUsed }
 import cats.free.Free
@@ -15,7 +15,7 @@ import aecor.effect.monix._
 
 object AuthorizationProcess {
   type PRG =
-    AccountAggregateOp :|: CardAuthorizationAggregateOp :|: NilDSL
+    AccountAggregateOp :|: TransactionOp :|: NilDSL
 
   val PRG = DSL.Make[PRG]
 

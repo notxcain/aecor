@@ -3,7 +3,7 @@ package aecor.tests
 import aecor.aggregate.StateRuntime
 import aecor.data.StateBehavior
 import aecor.effect.monix._
-import aecor.runtime.akkacluster.GenericAkkaRuntime
+import aecor.runtime.akkacluster.AkkaClusterShardingRuntime
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -46,7 +46,8 @@ class ShardedRuntimeSpec
     Vector.empty[CounterEvent].pure[Task]
   )
 
-  val startRuntime = GenericAkkaRuntime(system).start("Counter", CounterOp.correlation, behavior)
+  val startRuntime =
+    AkkaClusterShardingRuntime(system).start("Counter", CounterOp.correlation, behavior)
 
   test("Runtime should work") {
     val program = for {

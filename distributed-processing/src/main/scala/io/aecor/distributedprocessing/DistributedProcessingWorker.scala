@@ -1,13 +1,13 @@
-package aecor.streaming.process
+package io.aecor.distributedprocessing
 
 import aecor.effect.Async
-import Async.ops._
-import aecor.streaming.process.DistributedProcessingWorker._
+import aecor.effect.Async.ops._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
 import cats.Functor
 import cats.implicits._
-import DistributedProcessing._
+import io.aecor.distributedprocessing.DistributedProcessing._
+import io.aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 
 private[aecor] object DistributedProcessingWorker {
   def props[F[_]: Async: Functor](processWithId: Int => F[RunningProcess[F]]): Props =

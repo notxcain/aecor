@@ -17,15 +17,18 @@ import cats.implicits._
 import cats.{ Functor, MonadError }
 import Async.ops._
 import aecor.data.EventsourcedBehavior
+import scala.collection.immutable._
 import aecor.runtime.akkapersistence.{ CassandraAggregateJournal, CassandraOffsetStore }
 import aecor.streaming.ConsumerId
-import aecor.streaming.process.{ DistributedProcessing, StreamingProcess }
+import io.aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
+import akka.pattern.after
+import io.aecor.distributedprocessing.DistributedProcessing.RunningProcess
 
 import scala.concurrent.Future
 import scala.concurrent.duration._
 object ScheduleApp extends App {
 
-  implicit val system = ActorSystem("aecor-example")
+  implicit val system = ActorSystem("test")
   implicit val materializer = ActorMaterializer()
 
   val clock = Clock.systemUTC()
@@ -101,14 +104,35 @@ object ScheduleApp extends App {
   val app: EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, Unit] =
     mkApp[EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, ?]]
 
-  DistributedProcessing(system)
-    .start[Kleisli[Future, Unit, ?]](
-      "test",
-      10,
-      x =>
-        StreamingProcess(Source.tick(0.seconds, 2.seconds, x).take(5), Flow[Int].map { x =>
-          system.log.info(s"Worker $x")
-        })
-    )
-    .run(())
+  object distribute {
+    trait MkDistribute[F[_]] {
+      def apply(f: Int => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]]
+    }
+    def apply[F[_]](count: Int) = new MkDistribute[F] {
+      override def apply(f: (Int) => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]] =
+        (0 until count).map(f)
+    }
+  }
+
+  val processes = distribute[Kleisli[Future, Unit, ?]](10) { x =>
+    StreamingProcess(Source.tick(0.seconds, 2.seconds, x), Flow[Int].map { x =>
+      system.log.info(s"Worker $x")
+      ()
+    })
+  }
+
+  val distributed = DistributedProcessing(system)
+    .start[Kleisli[Future, Unit, ?]]("TestProcesses", processes)
+
+  val app2: Kleisli[Future, Unit, Unit] = for {
+    killswtich <- distributed
+    x <- Kleisli((_: Unit) => after(10.seconds, system.scheduler)(killswtich.shutdown.run(())))
+    _ <- {
+      system.log.info(s"$x")
+      app2
+    }
+  } yield ()
+
+  app2.run(())
+
 }

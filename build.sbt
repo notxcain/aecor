@@ -43,7 +43,16 @@ lazy val aecor = project
   .settings(moduleName := "aecor", name := "Aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
-  .aggregate(core, example, schedule, effectMonix, effectFs2, tests)
+  .aggregate(
+    core,
+    akkaPersistence,
+    distributedProcessing,
+    example,
+    schedule,
+    effectMonix,
+    effectFs2,
+    tests
+  )
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
 lazy val core =
@@ -61,6 +70,14 @@ lazy val akkaPersistence = project
   .dependsOn(core)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
+
+lazy val distributedProcessing =
+  project
+    .in(file("distributed-processing"))
+    .settings(moduleName := "aecor-distributed-processing", name := "Aecor Distributed Processing")
+    .dependsOn(core)
+    .settings(aecorSettings)
+    .settings(distributedProcessingSettings)
 
 lazy val schedule = project
   .dependsOn(akkaPersistence)
@@ -96,7 +113,7 @@ lazy val tests = project
   .settings(testingSettings)
 
 lazy val example = project
-  .dependsOn(core, schedule, effectMonix)
+  .dependsOn(core, schedule, effectMonix, distributedProcessing)
   .settings(moduleName := "aecor-example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -116,6 +133,13 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
     "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
+  )
+)
+
+lazy val distributedProcessingSettings = Seq(
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
   )
 )
 
@@ -144,6 +168,7 @@ lazy val exampleSettings = {
     resolvers ++= Seq(Resolver.bintrayRepo("projectseptemberinc", "maven")),
     libraryDependencies ++=
       Seq(
+        "io.aecor" %% "liberator" % "0.3.0",
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-cats" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
@@ -190,7 +215,7 @@ lazy val commonScalacOptions = Seq(
   "-Ywarn-dead-code",
   "-Ywarn-numeric-widen",
   "-Ywarn-value-discard",
-  "-Ywarn-unused-import",
+//  "-Ywarn-unused-import",
   "-Ypartial-unification"
 )
 

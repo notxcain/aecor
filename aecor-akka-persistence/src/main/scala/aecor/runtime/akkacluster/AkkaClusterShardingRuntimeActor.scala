@@ -5,7 +5,7 @@ import java.util.UUID
 import aecor.data.Behavior
 import aecor.effect.Async
 import aecor.effect.Async.ops._
-import aecor.runtime.akkacluster.RuntimeActor.PerformOp
+import aecor.runtime.akkacluster.AkkaClusterShardingRuntimeActor.PerformOp
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
@@ -15,18 +15,19 @@ import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
-object RuntimeActor {
+object AkkaClusterShardingRuntimeActor {
   def props[F[_]: Async: Functor, Op[_]](behavior: Behavior[Op, F],
                                          idleTimeout: FiniteDuration): Props =
-    Props(new RuntimeActor(behavior, idleTimeout))
+    Props(new AkkaClusterShardingRuntimeActor(behavior, idleTimeout))
 
   final case class PerformOp[Op[_], A](op: Op[A])
   case object Stop
 }
 
-private[aecor] final class RuntimeActor[F[_]: Async, Op[_]](behavior: Behavior[Op, F],
-                                                            idleTimeout: FiniteDuration)
-    extends Actor
+private[aecor] final class AkkaClusterShardingRuntimeActor[F[_]: Async, Op[_]](
+  behavior: Behavior[Op, F],
+  idleTimeout: FiniteDuration
+) extends Actor
     with Stash
     with ActorLogging {
 
@@ -66,7 +67,7 @@ private[aecor] final class RuntimeActor[F[_]: Async, Op[_]](behavior: Behavior[O
       }
     case ReceiveTimeout =>
       passivate()
-    case RuntimeActor.Stop =>
+    case AkkaClusterShardingRuntimeActor.Stop =>
       context.stop(self)
     case Result(_, _) =>
       log.debug(
@@ -76,7 +77,7 @@ private[aecor] final class RuntimeActor[F[_]: Async, Op[_]](behavior: Behavior[O
 
   private def passivate(): Unit = {
     log.debug("Passivating...")
-    context.parent ! ShardRegion.Passivate(RuntimeActor.Stop)
+    context.parent ! ShardRegion.Passivate(AkkaClusterShardingRuntimeActor.Stop)
   }
 
   private def setIdleTimeout(): Unit = {
