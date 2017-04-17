@@ -87,7 +87,7 @@ object ScheduleApp extends App {
         .committableScheduleEvents("SubscriptionInvoicing", ConsumerId("println"))
         .mapAsync(1) { x =>
           println(x.value)
-          x.commit().unsafeRun
+          x.commit.unsafeRun
         }
         .runWith(Sink.ignore)
     }.void
@@ -115,10 +115,13 @@ object ScheduleApp extends App {
   }
 
   val processes = distribute[Kleisli[Future, Unit, ?]](10) { x =>
-    StreamingProcess(Source.tick(0.seconds, 2.seconds, x), Flow[Int].map { x =>
-      system.log.info(s"Worker $x")
-      ()
-    })
+    StreamingProcess[Kleisli[Future, Unit, ?]](
+      Source.tick(0.seconds, 2.seconds, x),
+      Flow[Int].map { x =>
+        system.log.info(s"Worker $x")
+        ()
+      }
+    )
   }
 
   val distributed = DistributedProcessing(system)

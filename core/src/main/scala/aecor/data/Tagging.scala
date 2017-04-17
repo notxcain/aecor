@@ -10,33 +10,20 @@ sealed abstract class Tagging[A] {
   */
 object Tagging {
 
-  def apply[A](tag1: EventTag[A]): Tagging[A] =
+  def const[A](tag1: EventTag[A]): Tagging[A] =
     new Tagging[A] {
       override def apply(e: A): Set[EventTag[A]] = Set(tag1)
     }
 
-  def apply[A](tag1: A => EventTag[A]): Tagging[A] =
+  def dynamic[A](tag1: A => EventTag[A]): Tagging[A] =
     new Tagging[A] {
       override def apply(e: A): Set[EventTag[A]] = Set(tag1(e))
     }
 
-  def apply[A](tag1: EventTag[A], tag2: EventTag[A]): Tagging[A] =
-    new Tagging[A] {
-      override def apply(e: A): Set[EventTag[A]] = Set(tag1, tag2)
-    }
-
-  def apply[A](tag1: A => EventTag[A], tag2: EventTag[A]): Tagging[A] =
-    new Tagging[A] {
-      override def apply(e: A): Set[EventTag[A]] = Set(tag1(e), tag2)
-    }
-
-  def apply[A](tag1: EventTag[A], tag2: EventTag[A], tag3: EventTag[A]): Tagging[A] =
-    new Tagging[A] {
-      override def apply(e: A): Set[EventTag[A]] = Set(tag1, tag2, tag3)
-    }
-
-  def apply[A](tag1: A => EventTag[A], tag2: EventTag[A], tag3: EventTag[A]): Tagging[A] =
-    new Tagging[A] {
-      override def apply(e: A): Set[EventTag[A]] = Set(tag1(e), tag2, tag3)
+  def partitioned[A](numberOfPartitions: Int,
+                     tag: EventTag[A])(partitionKey: A => String): Tagging[A] =
+    Tagging.dynamic[A] { a =>
+      val partition = scala.math.abs(partitionKey(a).hashCode % numberOfPartitions)
+      EventTag[A](s"${tag.value}$partition")
     }
 }

@@ -16,7 +16,7 @@ import scala.collection.immutable.Seq
 object EventsourcedBehavior {
   final case class InternalState[S](entityState: S, version: Long) {
     def step[E](e: E)(implicit S: Folder[Folded, E, S]): Folded[InternalState[S]] =
-      S.step(entityState, e).map(InternalState(_, version + 1))
+      S.reduce(entityState, e).map(InternalState(_, version + 1))
   }
   object InternalState {
     def zero[F[_], S](implicit S: Folder[F, _, S]): InternalState[S] = InternalState(S.zero, 0)

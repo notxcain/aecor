@@ -1,109 +1,77 @@
 package aecor.example
 
 import java.util.UUID
-import java.util.concurrent.TimeoutException
 
 import aecor.example.EventStream.ObserverControl
-import aecor.example.EventStreamObserverRegistry._
-import akka.Done
-import akka.actor.{Actor, ActorLogging, ActorSystem, Props}
+import aecor.example.DefaultEventStream.Observer
+import akka.NotUsed
 import akka.stream.Materializer
-import akka.stream.scaladsl.{Sink, Source}
-import akka.util.Timeout
+import akka.stream.scaladsl.{ Sink, Source }
+import monix.eval.{ MVar, Task }
+import monix.execution.Scheduler
 
+import scala.concurrent.Promise
 import scala.concurrent.duration.FiniteDuration
-import scala.concurrent.{Future, Promise}
 
 object EventStream {
 
-  case class ObserverControl[A](id: ObserverId, result: Future[A])
+  case class ObserverControl[F[_], A](id: ObserverId, result: F[A])
 
   type ObserverId = String
 }
 
-trait EventStream[Event] {
-  def registerObserver[A](timeout: FiniteDuration)(f: PartialFunction[Event, A]): Future[ObserverControl[A]]
+trait EventStream[F[_], Event] {
+  def registerObserver[A](timeout: FiniteDuration)(
+    f: PartialFunction[Event, A]
+  ): F[ObserverControl[F, A]]
 }
 
-class DefaultEventStream[Event](actorSystem: ActorSystem, source: Source[Event, Any])(implicit materializer: Materializer) extends EventStream[Event] {
+class DefaultEventStream[E](state: MVar[Map[String, Observer[E, _]]])
+    extends EventStream[Task, E] {
 
-  import akka.pattern.ask
-
-  val actor = actorSystem.actorOf(Props(new EventStreamObserverRegistry[Event]), "event-stream-observer-registry")
-  source.map(HandleEvent(_)).runWith(Sink.actorRefWithAck(actor, Init, Done, ShutDown))
-
-  override def registerObserver[A](timeout: FiniteDuration)(f: PartialFunction[Event, A]): Future[ObserverControl[A]] = {
-    import materializer.executionContext
-    implicit val askTimeout = Timeout(timeout)
-    (actor ? RegisterObserver(f, timeout)).mapTo[ObserverRegistered[A]].map(_.control)
-  }
+  override def registerObserver[A](
+    timeout: FiniteDuration
+  )(f: PartialFunction[E, A]): Task[ObserverControl[Task, A]] =
+    for {
+      observers <- state.take
+      id = UUID.randomUUID().toString
+      promise = Promise[A]
+      next = observers.updated(id, Observer(f, promise))
+      _ <- state.put(next)
+    } yield ObserverControl(id, Task.fromFuture(promise.future))
 }
 
-object EventStreamObserverRegistry {
+object DefaultEventStream {
 
-  sealed trait Command[+Event]
-
-  case object Init extends Command[Nothing]
-
-  case class RegisterObserver[Event, A](f: PartialFunction[Event, A], timeout: FiniteDuration) extends Command[Event]
-
-  case class DeregisterObserver(id: String) extends Command[Nothing]
-
-  case class HandleEvent[Event](event: Event) extends Command[Event]
-
-  case object ShutDown extends Command[Nothing]
-
-  case class ObserverRegistered[A](control: ObserverControl[A])
-
-}
-
-class EventStreamObserverRegistry[Event] extends Actor with ActorLogging {
-
-  import EventStreamObserverRegistry._
-
-  def scheduler = context.system.scheduler
-
-  implicit def executionContext = context.dispatcher
-
-  case class Observer(f: PartialFunction[Event, Any], promise: Promise[Any]) {
-    def handleEvent(event: Event): Boolean = {
-      val handled = f.isDefinedAt(event)
-      if (handled) {
-        promise.success(f(event))
+  case class Observer[E, A](f: PartialFunction[E, A], promise: Promise[A]) {
+    def handleEvent(event: E): Boolean =
+      f.lift(event) match {
+        case Some(x) =>
+          promise.success(x)
+          true
+        case None =>
+          false
       }
-      handled
-    }
   }
-
-  var observers = Map.empty[String, Observer]
-
-  override def receive: Receive = {
-    case command: Command[Event] => handleCommand(command)
-  }
-
-  def handleCommand(command: Command[Event]): Unit = command match {
-    case Init =>
-      sender() ! Done
-    case RegisterObserver(f, timeout) =>
-      val id = UUID.randomUUID().toString
-      val promise = Promise[Any]
-      observers = observers.updated(id, Observer(f.asInstanceOf[PartialFunction[Event, Any]], promise))
-      scheduler.scheduleOnce(timeout) {
-        if (!promise.isCompleted) {
-          promise.failure(new TimeoutException())
-          self ! DeregisterObserver(id)
-        }
-      }
-      sender() ! ObserverRegistered(ObserverControl(id, promise.future))
-    case HandleEvent(event) =>
-      observers = observers.filterNot {
-        case (id, observer) => observer.handleEvent(event)
-      }
-      sender() ! Done
-    case DeregisterObserver(id) =>
-      observers = observers - id
-    case ShutDown =>
-      observers.values.foreach(_.promise.failure(new TimeoutException()))
-      sender() ! Done
+  def run[E](source: Source[E, NotUsed])(implicit materializer: Materializer) = {
+    val state = MVar(Map.empty[String, Observer[E, _]])
+    for {
+      _ <- Task.defer {
+            Task.fromFuture {
+              source
+                .mapAsync(1) { x =>
+                  state.take
+                    .flatMap { c =>
+                      val next = c.filterNot {
+                        case (_, observer) => observer.handleEvent(x)
+                      }
+                      state.put(next)
+                    }
+                    .runAsync(Scheduler(materializer.executionContext))
+                }
+                .runWith(Sink.ignore)
+            }
+          }
+    } yield new DefaultEventStream[E](state)
   }
 }

@@ -113,7 +113,6 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Even
       case Left(cause) =>
         onRecoveryFailure(cause, Some(repr))
       case Right(event) =>
-        log.debug("[{}] Recovering [{}]", persistenceId, event)
         applyEvent(event)
         eventCount += 1
     }
@@ -227,17 +226,14 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Even
       }
     }
 
-  private def applyEvent(event: Event): Unit = {
+  private def applyEvent(event: Event): Unit =
     state = folder
-      .step(state, event)
+      .reduce(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
         log.error(error, error.getMessage)
         throw error
       }
-    if (recoveryFinished)
-      log.debug("[{}] Current state [{}]", persistenceId, state)
-  }
 
   private def markSnapshotAsPendingIfNeeded(): Unit =
     snapshotPolicy match {

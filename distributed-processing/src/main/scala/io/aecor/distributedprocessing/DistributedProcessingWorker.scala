@@ -32,9 +32,11 @@ private[aecor] class DistributedProcessingWorker[F[_]: Async: Functor](
 
   def receive: Receive = {
     case KeepRunning(workerId) =>
+      log.info("[{}] Starting process", workerId)
       processFor(workerId).map(ProcessStarted).unsafeRun pipeTo self
       context.become {
         case ProcessStarted(RunningProcess(watchTermination, terminate)) =>
+          log.info("[{}] Process started", workerId)
           killSwitch = Some(terminate)
           watchTermination.map(_ => ProcessTerminated).unsafeRun pipeTo self
           context.become {

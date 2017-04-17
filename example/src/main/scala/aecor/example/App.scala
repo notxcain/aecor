@@ -2,59 +2,54 @@ package aecor.example
 
 import java.time.Clock
 
-import aecor.data.{ Committable, Tagging }
-import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
+import aecor.data.{ Committable, Correlation, EventTag, Tagging }
+import aecor.effect.Async.ops._
+import aecor.effect.monix._
+import aecor.example.domain.TransactionProcess.{ TransactionProcessFailure, Input }
 import aecor.example.domain._
+import aecor.example.domain.account.{ AccountAggregate, EventsourcedAccountAggregate }
+import aecor.example.domain.transaction.{
+  EventsourcedTransactionAggregate,
+  TransactionAggregate,
+  TransactionEvent
+}
 import aecor.runtime.akkapersistence.{
   AkkaPersistenceRuntime,
   CassandraAggregateJournal,
   CassandraOffsetStore,
   JournalEntry
 }
+import io.aecor.liberator.syntax._
 import aecor.streaming.ConsumerId
 import akka.NotUsed
+
+import scala.collection.immutable._
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives.{ complete, get, path }
-import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ ActorMaterializer, Materializer }
-import akka.stream.scaladsl.{ Flow, Sink }
-import cats.~>
-import com.typesafe.config.{ Config, ConfigFactory }
-import monix.eval.Task
-import java.time.Clock
-
-import aecor.data.{ Committable, Tagging }
-import aecor.example.domain.CardAuthorizationAggregateEvent.CardAuthorizationCreated
-import aecor.example.domain._
-import aecor.streaming._
-import akka.NotUsed
-import akka.actor.{ Actor, ActorLogging, ActorSystem, Props }
-import akka.event.Logging
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.Directives.{ complete, get, path, _ }
 import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.scaladsl.{ Flow, Sink }
 import akka.stream.{ ActorMaterializer, Materializer }
 import cats.~>
-import com.typesafe.config.Config
+import com.typesafe.config.ConfigFactory
+import io.aecor.distributedprocessing.DistributedProcessing.RunningProcess
+import io.aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
+import io.aecor.liberator.{ Extract, Term }
+import io.aecor.liberator.data.ProductKK
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
-import aecor.effect.Async.ops._
 import monix.cats._
-import aecor.effect.monix._
-import aecor.runtime.akkapersistence.{
-  AkkaPersistenceRuntime,
-  CassandraAggregateJournal,
-  CassandraOffsetStore,
-  JournalEntry
-}
+import shapeless.Lazy
 
 object App {
   def main(args: Array[String]): Unit = {
+    implicit def liberatorRightExtractInstance[F[_[_]], G[_[_]], H[_[_]]](
+      implicit extract: Lazy[Extract[G, F]]
+    ): Extract[ProductKK[H, G, ?[_]], F] =
+      Extract.liberatorRightExtractInstance(extract.value)
+
     val config = ConfigFactory.load()
     implicit val system: ActorSystem = ActorSystem(config.getString("cluster.system-name"))
     system.registerOnTermination {
@@ -72,85 +67,96 @@ object App {
         CassandraOffsetStore.createTable(offsetStoreConfig)
       )
 
-    val startAuthorizationRegion: Task[TransactionOp ~> Task] =
-      AkkaPersistenceRuntime[Task](system).start(
-        CardAuthorizationAggregate.entityName,
-        CardAuthorizationAggregate.commandHandler,
-        CardAuthorizationAggregate.correlation,
-        Tagging(CardAuthorizationAggregate.entityNameTag)
-      )
-
-    val startAccountRegion: Task[AccountAggregateOp ~> Task] =
-      AkkaPersistenceRuntime[Task](system).start(
-        AccountAggregate.entityName,
-        AccountAggregate.commandHandler(Clock.systemUTC()),
-        AccountAggregate.correlation,
-        Tagging(AccountAggregate.entityNameTag)
-      )
-
-    def run(accountRegion: AccountAggregateOp ~> Task,
-            authorizationRegion: TransactionOp ~> Task): Task[Unit] =
-      Task {
-        val scheduleEntityName = "Schedule3"
-        val authEventJournal =
-          CassandraAggregateJournal[CardAuthorizationAggregateEvent](system)
-        val cardAuthorizationEventStream =
-          new DefaultEventStream(
-            system,
-            authEventJournal
-              .eventsByTag(CardAuthorizationAggregate.entityNameTag, Option.empty)
-              .map(_.event)
-          )
-
-        val authorizePaymentAPI = new AuthorizePaymentAPI(
-          authorizationRegion,
-          cardAuthorizationEventStream,
-          Logging(system, classOf[AuthorizePaymentAPI])
+    val startTransactions: Task[TransactionAggregate[Task]] =
+      AkkaPersistenceRuntime[Task](system)
+        .start(
+          "Transaction",
+          TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[Task]),
+          Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
+          Tagging.partitioned(20, EventTag[TransactionEvent]("Transaction"))(_.transactionId.value)
         )
-        val accountApi = new AccountAPI(accountRegion)
+        .map(TransactionAggregate.fromFunctionK)
 
-        import freek._
+    val startAccounts: Task[AccountAggregate[Task]] =
+      AkkaPersistenceRuntime[Task](system)
+        .start(
+          "Account",
+          AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[Task]),
+          Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
+          Tagging.partitioned(20, EventTag[AccountEvent]("Account"))(_.accountId.value)
+        )
+        .map(AccountAggregate.fromFunctionK)
 
-        def authorizationProcessFlow[PassThrough]
-          : Flow[(CardAuthorizationCreated, PassThrough), PassThrough, NotUsed] =
-          AuthorizationProcess.flow(8, accountRegion :&: authorizationRegion)
+    def startTransactionProcessing(
+      accounts: AccountAggregate[Task],
+      transactions: TransactionAggregate[Task]
+    ): Task[DistributedProcessing.ProcessKillSwitch[Task]] = {
+      val failure = TransactionProcessFailure.withMonadError[Task]
 
-        authEventJournal
-          .committableEventsByTag(
-            CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig),
-            CardAuthorizationAggregate.entityNameTag,
-            ConsumerId("processing")
+      val impl = transactions :&: accounts :&: failure
+
+      val process: (Input) => Task[Unit] =
+        TransactionProcess[Term[ProductKK[TransactionAggregate,
+                                          ProductKK[AccountAggregate,
+                                                    TransactionProcessFailure,
+                                                    ?[_]],
+                                          ?[_]], ?]].andThen(_(impl))
+
+      val transactionEventJournal =
+        CassandraAggregateJournal[TransactionEvent](system)
+
+      val processes =
+        DistributedProcessing.distribute[Task](20) { i =>
+          StreamingProcess[Task](
+            transactionEventJournal
+              .committableEventsByTag(
+                CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig),
+                EventTag[TransactionEvent](s"Transaction$i"),
+                ConsumerId("processing")
+              )
+              .map(_.map(_.event)),
+            Flow[Committable[Task, TransactionEvent]]
+              .mapAsync(30) {
+                _.traverse(process).runAsync
+              }
+              .mapAsync(1)(_.commit.runAsync)
           )
-          .collect {
-            case x @ Committable(_, JournalEntry(offset, _, _, e: CardAuthorizationCreated)) =>
-              (e, x)
-          }
-          .via(authorizationProcessFlow)
-          .mapAsync(1)(_.commit().unsafeRun)
-          .runWith(Sink.ignore)
+        }
 
-        val route = path("check") {
-          get {
-            complete(StatusCodes.OK)
-          }
-        } ~
-          AuthorizePaymentAPI.route(authorizePaymentAPI) ~
-          AccountAPI.route(accountApi)
+      DistributedProcessing(system).start[Task]("TransactionProcessing", processes)
+    }
 
-        Http()
-          .bindAndHandle(route, config.getString("http.interface"), config.getInt("http.port"))
-          .onComplete { result =>
-            log.info("Bind result [{}]", result)
-          }
+    def startHttpServer(accounts: AccountAggregate[Task],
+                        transactions: TransactionAggregate[Task]): Task[Http.ServerBinding] =
+      Task.defer {
+        Task.fromFuture {
+          val transactionEndpoint =
+            new TransactionEndpoint(transactions, Logging(system, classOf[TransactionEndpoint]))
+          val accountApi = new AccountEndpoint(accounts)
+
+          val route = path("check") {
+            get {
+              complete(StatusCodes.OK)
+            }
+          } ~
+            TransactionEndpoint.route(transactionEndpoint) ~
+            AccountEndpoint.route(accountApi)
+
+          Http()
+            .bindAndHandle(route, config.getString("http.interface"), config.getInt("http.port"))
+        }
       }
 
     val app = for {
-      authorizationRegion <- startAuthorizationRegion
-      accountRegion <- startAccountRegion
-      _ <- run(accountRegion, authorizationRegion)
+      transactions <- startTransactions
+      accounts <- startAccounts
+      _ <- startTransactionProcessing(accounts, transactions)
+      bindResult <- startHttpServer(accounts, transactions)
+      _ = system.log.info("Bind result [{}]", bindResult)
     } yield ()
 
     app.runAsync
+    ()
   }
 
 }

@@ -46,7 +46,7 @@ class DefaultScheduleEventJournal[F[_]: Async: CaptureFuture: Applicative](
         .committableCurrentEventsByTag(offsetStore, eventTag, consumerId)
         .mapAsync(parallelism)(_.map(_.event).traverse(f.andThen(_.unsafeRun)))
         .fold(Committable.unit[F])(Keep.right)
-        .mapAsync(1)(_.commit().unsafeRun)
+        .mapAsync(1)(_.commit.unsafeRun)
         .runWith(Sink.ignore)
     }.void
 }

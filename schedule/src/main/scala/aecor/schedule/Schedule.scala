@@ -16,7 +16,7 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import cats.MonadError
+import cats.Monad
 import cats.implicits._
 import com.datastax.driver.core.utils.UUIDs
 
@@ -34,8 +34,7 @@ trait Schedule[F[_]] {
 }
 
 object Schedule {
-  def start[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
-                                                            EventsourcedBehavior.BehaviorFailure]](
+  def start[F[_]: Async: CaptureFuture: Capture: Monad](
     entityName: String,
     clock: Clock,
     dayZero: LocalDate,
@@ -65,7 +64,7 @@ object Schedule {
               entityName,
               DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
               DefaultScheduleAggregate.correlation,
-              Tagging(eventTag)
+              Tagging.const(eventTag)
             )
       } yield ScheduleAggregate.fromFunctionK(f)
 

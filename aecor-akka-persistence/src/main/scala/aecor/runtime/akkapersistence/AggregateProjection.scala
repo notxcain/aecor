@@ -68,7 +68,7 @@ object AggregateProjection {
           }
         }
       }
-      .mapAsync(1)(_.commit().unsafeRun)
+      .mapAsync(1)(_.commit.unsafeRun)
       .named(s"AggregateProjection($a)")
   }
 }

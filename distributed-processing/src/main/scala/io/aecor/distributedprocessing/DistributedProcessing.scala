@@ -12,6 +12,7 @@ import cats.Functor
 import cats.implicits._
 import io.aecor.distributedprocessing.DistributedProcessing.{ ProcessKillSwitch, RunningProcess }
 import io.aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
+
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 
@@ -69,8 +70,20 @@ class DistributedProcessing(system: ActorSystem) {
 
 object DistributedProcessing {
   def apply(system: ActorSystem): DistributedProcessing = new DistributedProcessing(system)
+
   final case class ProcessKillSwitch[F[_]](shutdown: F[Unit])
-  final case class RunningProcess[F[_]](watchTermination: F[Unit], terminate: () => Unit)
+
+  final case class RunningProcess[F[_]](watchTermination: F[Unit], shutdown: () => Unit)
+
+  object distribute {
+    trait MkDistribute[F[_]] {
+      def apply(f: Int => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]]
+    }
+    def apply[F[_]](count: Int) = new MkDistribute[F] {
+      override def apply(f: (Int) => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]] =
+        (0 until count).map(f)
+    }
+  }
 }
 
 final case class DistributedProcessingSettings(minBackoff: FiniteDuration,

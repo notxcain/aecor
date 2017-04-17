@@ -5,7 +5,7 @@ import cats.{ Applicative, Eval, Functor, Monad, Traverse }
 
 import scala.util.{ Left, Right }
 
-final case class Committable[F[_], +A](commit: () => F[Unit], value: A) {
+final case class Committable[F[_], +A](commit: F[Unit], value: A) {
   def map[B](f: A => B): Committable[F, B] = copy(value = f(value))
   def traverse[G[_], B](f: A => G[B])(implicit G: Functor[G]): G[Committable[F, B]] =
     G.map(f(value))(b => copy(value = b))
@@ -45,7 +45,7 @@ object Committable {
 
       override def pure[A](x: A): Committable[F, A] = Committable.pure(x)
     }
-  def pure[F[_]: Applicative, A](a: A): Committable[F, A] = Committable(() => ().pure[F], a)
+  def pure[F[_]: Applicative, A](a: A): Committable[F, A] = Committable(().pure[F], a)
   def unit[F[_]: Applicative]: Committable[F, Unit] = pure(())
   def collector[F[_], A, B](
     pf: PartialFunction[A, B]

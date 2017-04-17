@@ -163,18 +163,21 @@ lazy val exampleSettings = {
   val circeVersion = "0.7.0"
   val akkaHttpVersion = "10.0.3"
   val akkaHttpJsonVersion = "1.11.0"
-  val freekVersion = "0.6.5"
   Seq(
-    resolvers ++= Seq(Resolver.bintrayRepo("projectseptemberinc", "maven")),
+    resolvers ++= Seq(
+      Resolver.bintrayRepo("projectseptemberinc", "maven"),
+      Resolver.sonatypeRepo("releases")
+    ),
     libraryDependencies ++=
       Seq(
+        compilerPlugin("org.scalameta" % "paradise" % "3.0.0-M7" cross CrossVersion.full),
+        "com.github.romix.akka" %% "akka-kryo-serialization" % "0.5.0",
         "io.aecor" %% "liberator" % "0.3.0",
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-cats" % monixVersion,
+        "io.monix" %% "monix-reactive" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
         "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
-        ("com.projectseptember" %% "freek" % freekVersion)
-          .exclude("org.typelevel", "cats-free_2.12.0-RC2"),
         "io.circe" %% "circe-core" % circeVersion,
         "io.circe" %% "circe-generic" % circeVersion,
         "io.circe" %% "circe-parser" % circeVersion,
