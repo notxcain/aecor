@@ -42,7 +42,7 @@ class CassandraOffsetStore[F[_]: Async: CaptureFuture](
     session.prepare(config.updateOffsetQuery)
 
   override def getOffset(tag: String, consumerId: ConsumerId): F[Option[UUID]] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       selectOffsetStatement
         .map(_.bind(consumerId.value, tag))
         .flatMap(session.selectOne)
@@ -50,7 +50,7 @@ class CassandraOffsetStore[F[_]: Async: CaptureFuture](
     }
 
   override def setOffset(tag: String, consumerId: ConsumerId, offset: UUID): F[Unit] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       updateOffsetStatement
         .map { stmt =>
           stmt

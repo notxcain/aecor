@@ -1,10 +1,9 @@
-package aecor.example.domain
+package aecor.example.domain.account
 
-import aecor.example.domain.account.{ AccountId, AccountTransactionId }
+import aecor.example.domain.Amount
 import aecor.example.persistentEncoderUtil
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
-import aecor.example.AnyValCirceEncoding._
-//import io.circe.generic.auto._
+import io.circe.generic.auto._
 
 sealed abstract class AccountEvent extends Product with Serializable {
   def accountId: AccountId

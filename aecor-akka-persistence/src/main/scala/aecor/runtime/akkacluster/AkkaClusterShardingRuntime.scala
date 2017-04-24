@@ -51,7 +51,7 @@ class AkkaClusterShardingRuntime(system: ActorSystem) {
       .map { shardRegionRef =>
         new (Op ~> F) {
           implicit private val timeout = Timeout(settings.askTimeout)
-          override def apply[A](fa: Op[A]): F[A] = CaptureFuture[F].captureF {
+          override def apply[A](fa: Op[A]): F[A] = CaptureFuture[F].captureFuture {
             (shardRegionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
           }
         }

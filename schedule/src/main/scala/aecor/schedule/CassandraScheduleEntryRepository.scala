@@ -33,7 +33,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
                                    scheduleBucket: String,
                                    entryId: String,
                                    dueDate: LocalDateTime): F[Unit] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       preparedInsertEntry
         .map(
           _.bind()
@@ -51,7 +51,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
   override def markScheduleEntryAsFired(scheduleName: String,
                                         scheduleBucket: String,
                                         entryId: String): F[Unit] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       preparedSelectEntry
         .map(
           _.bind()
@@ -121,7 +121,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
   override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
     f: (ScheduleEntry) => F[Unit]
   ): F[Option[ScheduleEntry]] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       getEntries(from, to)
         .mapAsync(parallelism)(x => f(x).unsafeRun.map(_ => x))
         .runWith(Sink.lastOption)

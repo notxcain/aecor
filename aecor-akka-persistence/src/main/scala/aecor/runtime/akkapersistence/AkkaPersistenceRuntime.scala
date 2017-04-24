@@ -24,6 +24,12 @@ object AkkaPersistenceRuntime {
   private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
 }
 
+final case class EventsourcedBehavior[F[_], Op[_], State, Event](
+  handler: Op ~> Handler[F, State, Seq[Event], ?],
+  zero: State,
+  reducer: (State, Event) => Folded[State]
+)
+
 class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {
   def start[Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
@@ -63,11 +69,12 @@ class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system:
       extractShardId = extractShardId
     )
 
-    Capture[F].capture(startShardRegion).map { regionRef =>
+    Capture[F].capture {
+      val regionRef = startShardRegion
       new (Op ~> F) {
         implicit private val timeout = Timeout(settings.askTimeout)
         override def apply[A](fa: Op[A]): F[A] =
-          CaptureFuture[F].captureF {
+          CaptureFuture[F].captureFuture {
             (regionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
           }
       }

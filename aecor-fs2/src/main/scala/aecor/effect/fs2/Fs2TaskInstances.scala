@@ -19,7 +19,7 @@ trait Fs2TaskInstances {
     E: scala.concurrent.ExecutionContext
   ): CaptureFuture[_root_.fs2.Task] =
     new CaptureFuture[_root_.fs2.Task] {
-      override def captureF[A](future: => Future[A]): _root_.fs2.Task[A] =
+      override def captureFuture[A](future: => Future[A]): _root_.fs2.Task[A] =
         _root_.fs2.Task.fromFuture(future)
     }
 

@@ -1,6 +1,7 @@
 package aecor.data
 
 import cats.arrow.FunctionK
+import cats.data.StateT
 import cats.{ FlatMap, Functor, ~> }
 import cats.implicits._
 

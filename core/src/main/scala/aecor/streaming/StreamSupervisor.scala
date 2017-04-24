@@ -35,7 +35,7 @@ class StreamSupervisor(system: ActorSystem) {
     )
     val ref = system.actorOf(props, name)
     StreamKillSwitch { implicit timeout: Timeout =>
-      CaptureFuture[F].captureF(ref ? StreamSupervisorActor.Shutdown).void
+      CaptureFuture[F].captureFuture(ref ? StreamSupervisorActor.Shutdown).void
     }
   }
 }

@@ -3,11 +3,16 @@ package aecor.example
 import java.time.Clock
 
 import aecor.data.{ Committable, Correlation, EventTag, Tagging }
+import aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
 import aecor.effect.Async.ops._
 import aecor.effect.monix._
-import aecor.example.domain.TransactionProcess.{ TransactionProcessFailure, Input }
+import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
-import aecor.example.domain.account.{ AccountAggregate, EventsourcedAccountAggregate }
+import aecor.example.domain.account.{
+  AccountAggregate,
+  AccountEvent,
+  EventsourcedAccountAggregate
+}
 import aecor.example.domain.transaction.{
   EventsourcedTransactionAggregate,
   TransactionAggregate,
@@ -34,8 +39,8 @@ import akka.stream.scaladsl.{ Flow, Sink }
 import akka.stream.{ ActorMaterializer, Materializer }
 import cats.~>
 import com.typesafe.config.ConfigFactory
-import io.aecor.distributedprocessing.DistributedProcessing.RunningProcess
-import io.aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
+import aecor.distributedprocessing.DistributedProcessing.RunningProcess
+import io.aecor.distributedprocessing.StreamingProcess
 import io.aecor.liberator.{ Extract, Term }
 import io.aecor.liberator.data.ProductKK
 import monix.eval.Task

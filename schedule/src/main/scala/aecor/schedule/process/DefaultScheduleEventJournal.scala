@@ -41,7 +41,7 @@ class DefaultScheduleEventJournal[F[_]: Async: CaptureFuture: Applicative](
   import materializer.executionContext
 
   override def processNewEvents(f: (ScheduleEvent) => F[Unit]): F[Unit] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       aggregateJournal
         .committableCurrentEventsByTag(offsetStore, eventTag, consumerId)
         .mapAsync(parallelism)(_.map(_.event).traverse(f.andThen(_.unsafeRun)))

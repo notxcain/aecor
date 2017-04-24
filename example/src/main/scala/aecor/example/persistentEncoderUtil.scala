@@ -10,6 +10,7 @@ import aecor.runtime.akkapersistence.serialization.{
   PersistentRepr
 }
 import io.circe.{ Decoder, Encoder, jawn }
+
 object persistentEncoderUtil {
   def circePersistentEncoder[A](implicit encoder: Encoder[A]): PersistentEncoder[A] =
     PersistentEncoder.instance(

@@ -1,9 +1,7 @@
-package io.aecor.distributedprocessing
+package aecor.distributedprocessing
 
 import akka.actor.{ Actor, ActorLogging, ActorRef, Props, Terminated }
 import akka.cluster.sharding.ShardRegion
-import io.aecor.distributedprocessing.DistributedProcessingSupervisor._
-import io.aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 
 import scala.concurrent.duration.{ FiniteDuration, _ }
 

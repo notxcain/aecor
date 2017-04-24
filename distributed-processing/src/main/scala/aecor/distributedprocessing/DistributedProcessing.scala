@@ -1,8 +1,10 @@
-package io.aecor.distributedprocessing
+package aecor.distributedprocessing
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
+import aecor.distributedprocessing.DistributedProcessing.{ ProcessKillSwitch, Process }
+import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import akka.actor.{ ActorSystem, SupervisorStrategy }
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
@@ -10,8 +12,6 @@ import akka.pattern.{ BackoffSupervisor, ask }
 import akka.util.Timeout
 import cats.Functor
 import cats.implicits._
-import io.aecor.distributedprocessing.DistributedProcessing.{ ProcessKillSwitch, RunningProcess }
-import io.aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
@@ -19,7 +19,7 @@ import scala.concurrent.duration.{ FiniteDuration, _ }
 class DistributedProcessing(system: ActorSystem) {
 
   def start[F[_]: Async: Capture: CaptureFuture: Functor](name: String,
-                                                          processes: Seq[F[RunningProcess[F]]],
+                                                          processes: Seq[Process[F]],
                                                           settings: DistributedProcessingSettings =
                                                             DistributedProcessingSettings(
                                                               minBackoff = 3.seconds,
@@ -60,7 +60,7 @@ class DistributedProcessing(system: ActorSystem) {
       )
 
       ProcessKillSwitch {
-        CaptureFuture[F].captureF {
+        CaptureFuture[F].captureFuture {
           implicit val timeout = Timeout(settings.shutdownTimeout)
           regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
         }.void
@@ -74,13 +74,14 @@ object DistributedProcessing {
   final case class ProcessKillSwitch[F[_]](shutdown: F[Unit])
 
   final case class RunningProcess[F[_]](watchTermination: F[Unit], shutdown: () => Unit)
+  final case class Process[F[_]](run: F[RunningProcess[F]])
 
   object distribute {
     trait MkDistribute[F[_]] {
-      def apply(f: Int => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]]
+      def apply(f: Int => Process[F]): Seq[Process[F]]
     }
     def apply[F[_]](count: Int) = new MkDistribute[F] {
-      override def apply(f: (Int) => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]] =
+      override def apply(f: (Int) => Process[F]): Seq[Process[F]] =
         (0 until count).map(f)
     }
   }

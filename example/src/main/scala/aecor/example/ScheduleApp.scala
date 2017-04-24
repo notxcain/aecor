@@ -17,12 +17,14 @@ import cats.implicits._
 import cats.{ Functor, MonadError }
 import Async.ops._
 import aecor.data.EventsourcedBehavior
+import aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
+
 import scala.collection.immutable._
 import aecor.runtime.akkapersistence.{ CassandraAggregateJournal, CassandraOffsetStore }
 import aecor.streaming.ConsumerId
-import io.aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
+import io.aecor.distributedprocessing.StreamingProcess
 import akka.pattern.after
-import io.aecor.distributedprocessing.DistributedProcessing.RunningProcess
+import aecor.distributedprocessing.DistributedProcessing.RunningProcess
 
 import scala.concurrent.Future
 import scala.concurrent.duration._

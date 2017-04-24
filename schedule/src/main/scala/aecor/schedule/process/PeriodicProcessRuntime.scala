@@ -43,7 +43,7 @@ class PeriodicProcessRuntime[F[_]: Async: CaptureFuture: Capture: Monad](
     } yield ()
 
   private def afterRefreshInterval[A](f: => F[A]): F[A] =
-    CaptureFuture[F].captureF {
+    CaptureFuture[F].captureFuture {
       val p = Promise[A]
       materializer.scheduleOnce(tickInterval, new Runnable {
         override def run(): Unit = {

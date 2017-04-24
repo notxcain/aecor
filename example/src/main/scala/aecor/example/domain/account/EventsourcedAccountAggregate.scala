@@ -1,7 +1,7 @@
 package aecor.example.domain.account
 
 import aecor.data.{ Folded, Handler }
-import aecor.example.domain.{ AccountEvent, Amount }
+import aecor.example.domain.Amount
 import aecor.example.domain.account.EventsourcedAccountAggregate.Account
 import cats.implicits._
 import AccountEvent._

@@ -1,24 +1,23 @@
-package io.aecor.distributedprocessing
+package aecor.distributedprocessing
 
+import aecor.distributedprocessing.DistributedProcessing._
+import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.effect.Async
 import aecor.effect.Async.ops._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
 import cats.Functor
 import cats.implicits._
-import io.aecor.distributedprocessing.DistributedProcessing._
-import io.aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 
 private[aecor] object DistributedProcessingWorker {
-  def props[F[_]: Async: Functor](processWithId: Int => F[RunningProcess[F]]): Props =
+  def props[F[_]: Async](processWithId: Int => Process[F]): Props =
     Props(new DistributedProcessingWorker[F](processWithId))
 
   final case class KeepRunning(workerId: Int)
 }
 
-private[aecor] class DistributedProcessingWorker[F[_]: Async: Functor](
-  processFor: Int => F[RunningProcess[F]]
-) extends Actor
+private[aecor] class DistributedProcessingWorker[F[_]: Async](processFor: Int => Process[F])
+    extends Actor
     with ActorLogging {
   import context.dispatcher
 
@@ -33,12 +32,12 @@ private[aecor] class DistributedProcessingWorker[F[_]: Async: Functor](
   def receive: Receive = {
     case KeepRunning(workerId) =>
       log.info("[{}] Starting process", workerId)
-      processFor(workerId).map(ProcessStarted).unsafeRun pipeTo self
+      processFor(workerId).unsafeRun.map(ProcessStarted) pipeTo self
       context.become {
         case ProcessStarted(RunningProcess(watchTermination, terminate)) =>
           log.info("[{}] Process started", workerId)
           killSwitch = Some(terminate)
-          watchTermination.map(_ => ProcessTerminated).unsafeRun pipeTo self
+          watchTermination.unsafeRun.map(_ => ProcessTerminated) pipeTo self
           context.become {
             case Status.Failure(e) =>
               log.error(e, "Process failed")

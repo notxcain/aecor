@@ -21,7 +21,7 @@ trait MonixTaskInstances {
     implicit scheduler: _root_.monix.execution.Scheduler
   ): CaptureFuture[_root_.monix.eval.Task] =
     new CaptureFuture[_root_.monix.eval.Task] {
-      override def captureF[A](future: => Future[A]): _root_.monix.eval.Task[A] =
+      override def captureFuture[A](future: => Future[A]): _root_.monix.eval.Task[A] =
         _root_.monix.eval.Task.defer(_root_.monix.eval.Task.fromFuture(future))
     }
 }

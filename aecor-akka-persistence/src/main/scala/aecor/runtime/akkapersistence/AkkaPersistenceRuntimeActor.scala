@@ -52,7 +52,7 @@ object SnapshotPolicy {
 
 object AkkaPersistenceRuntimeActor {
 
-  def props[F[_]: Async: Functor, Command[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def props[F[_]: Async, Command[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
     behavior: Command ~> Handler[F, State, Seq[Event], ?],
     snapshotPolicy: SnapshotPolicy[State],
@@ -76,7 +76,7 @@ object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
+final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
   behavior: Op ~> Handler[F, State, Seq[Event], ?],
   snapshotPolicy: SnapshotPolicy[State],
@@ -169,11 +169,11 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async: Functor, Op[_], State, Even
     val opId = UUID.randomUUID()
     behavior(command)
       .run(state)
+      .unsafeRun
       .map {
         case (events, reply) =>
           CommandResult(opId, events, reply)
       }
-      .unsafeRun
       .pipeTo(self)(sender)
     context.become {
       case CommandResult(`opId`, events, reply) =>
