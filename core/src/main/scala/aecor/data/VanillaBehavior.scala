@@ -11,10 +11,10 @@ object VanillaBehavior {
   }
 
   def shared[F[_]: Monad, Op[_], S, D](opHandler: Op ~> Handler[F, S, D, ?],
-                                       repository: EntityRepository[F, S, D]): Behavior[Op, F] = {
-    def mkBehavior(stateZero: S): Behavior[Op, F] = {
-      def rec(state: S): Behavior[Op, F] =
-        Behavior(Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { op =>
+                                       repository: EntityRepository[F, S, D]): Behavior[F, Op] = {
+    def mkBehavior(stateZero: S): Behavior[F, Op] = {
+      def rec(state: S): Behavior[F, Op] =
+        Behavior(Lambda[Op ~> PairT[F, Behavior[F, Op], ?]] { op =>
           opHandler(op).run(state).flatMap {
             case (stateChanges, reply) =>
               repository.applyChanges(state, stateChanges).map { nextState =>
@@ -24,7 +24,7 @@ object VanillaBehavior {
         })
       rec(stateZero)
     }
-    Behavior(Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { firstOp =>
+    Behavior(Lambda[Op ~> PairT[F, Behavior[F, Op], ?]] { firstOp =>
       for {
         state <- repository.loadState
         behavior = mkBehavior(state)
@@ -34,9 +34,9 @@ object VanillaBehavior {
   }
 
   def correlated[F[_]: Monad, Op[_], S, D](
-    entityBehavior: Op[_] => Behavior[Op, F]
-  ): Behavior[Op, F] =
-    Behavior(Lambda[Op ~> PairT[F, Behavior[Op, F], ?]] { firstOp =>
+    entityBehavior: Op[_] => Behavior[F, Op]
+  ): Behavior[F, Op] =
+    Behavior(Lambda[Op ~> PairT[F, Behavior[F, Op], ?]] { firstOp =>
       entityBehavior(firstOp).run(firstOp)
     })
 }

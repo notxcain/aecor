@@ -52,13 +52,13 @@ object SnapshotPolicy {
 
 object AkkaPersistenceRuntimeActor {
 
-  def props[F[_]: Async, Command[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def props[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Command ~> Handler[F, State, Seq[Event], ?],
+    behavior: EventsourcedBehavior[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
     idleTimeout: FiniteDuration
-  )(implicit folder: Folder[Folded, Event, State]): Props =
+  ): Props =
     Props(
       new AkkaPersistenceRuntimeActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout)
     )
@@ -78,12 +78,11 @@ object AkkaPersistenceRuntimeActor {
   */
 final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
   entityName: String,
-  behavior: Op ~> Handler[F, State, Seq[Event], ?],
+  behavior: EventsourcedBehavior[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
   idleTimeout: FiniteDuration
-)(implicit folder: Folder[Folded, Event, State])
-    extends PersistentActor
+) extends PersistentActor
     with ActorLogging
     with Stash {
 
@@ -103,7 +102,7 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = folder.zero
+  protected var state: State = behavior.folder.zero
 
   private var eventCount = 0L
   private var snapshotPending = false
@@ -167,7 +166,8 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
 
   private def handleCommand(command: Op[_]): Unit = {
     val opId = UUID.randomUUID()
-    behavior(command)
+    behavior
+      .handler(command)
       .run(state)
       .unsafeRun
       .map {
@@ -227,7 +227,7 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
     }
 
   private def applyEvent(event: Event): Unit =
-    state = folder
+    state = behavior.folder
       .reduce(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")

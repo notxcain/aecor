@@ -12,12 +12,12 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraAggregateJournal[E: PersistentDecoder](
+class CassandraEventJournalQuery[E: PersistentDecoder](
   system: ActorSystem,
   journalIdentifier: String,
   parallelism: Int
 )(implicit executionContext: ExecutionContext)
-    extends AggregateJournal[UUID, E] {
+    extends EventJournalQuery[UUID, E] {
 
   private val readJournal: CassandraReadJournal =
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
@@ -69,11 +69,11 @@ class CassandraAggregateJournal[E: PersistentDecoder](
 
 }
 
-object CassandraAggregateJournal {
+object CassandraEventJournalQuery {
   def apply[E: PersistentDecoder](
     system: ActorSystem,
     journalIdentifier: String = CassandraReadJournal.Identifier,
     parallelism: Int = 8
-  )(implicit executionContext: ExecutionContext): AggregateJournal[UUID, E] =
-    new CassandraAggregateJournal(system, journalIdentifier, parallelism)
+  )(implicit executionContext: ExecutionContext): EventJournalQuery[UUID, E] =
+    new CassandraEventJournalQuery(system, journalIdentifier, parallelism)
 }

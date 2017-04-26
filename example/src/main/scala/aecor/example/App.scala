@@ -2,7 +2,7 @@ package aecor.example
 
 import java.time.Clock
 
-import aecor.data.{ Committable, Correlation, EventTag, Tagging }
+import aecor.data._
 import aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
 import aecor.effect.Async.ops._
 import aecor.effect.monix._
@@ -20,7 +20,7 @@ import aecor.example.domain.transaction.{
 }
 import aecor.runtime.akkapersistence.{
   AkkaPersistenceRuntime,
-  CassandraAggregateJournal,
+  CassandraEventJournalQuery,
   CassandraOffsetStore,
   JournalEntry
 }
@@ -76,8 +76,8 @@ object App {
       AkkaPersistenceRuntime[Task](system)
         .start(
           "Transaction",
-          TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[Task]),
           Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
+          EventsourcedTransactionAggregate.behavior[Task],
           Tagging.partitioned(20, EventTag[TransactionEvent]("Transaction"))(_.transactionId.value)
         )
         .map(TransactionAggregate.fromFunctionK)
@@ -86,8 +86,8 @@ object App {
       AkkaPersistenceRuntime[Task](system)
         .start(
           "Account",
-          AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[Task]),
           Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
+          EventsourcedAccountAggregate.behavior[Task],
           Tagging.partitioned(20, EventTag[AccountEvent]("Account"))(_.accountId.value)
         )
         .map(AccountAggregate.fromFunctionK)
@@ -108,7 +108,7 @@ object App {
                                           ?[_]], ?]].andThen(_(impl))
 
       val transactionEventJournal =
-        CassandraAggregateJournal[TransactionEvent](system)
+        CassandraEventJournalQuery[TransactionEvent](system)
 
       val processes =
         DistributedProcessing.distribute[Task](20) { i =>

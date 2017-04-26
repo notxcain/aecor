@@ -42,7 +42,7 @@ object Schedule {
     refreshInterval: FiniteDuration,
     eventualConsistencyDelay: FiniteDuration,
     repository: ScheduleEntryRepository[F],
-    aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+    aggregateJournal: EventJournalQuery[UUID, ScheduleEvent],
     offsetStore: OffsetStore[F, UUID],
     consumerId: ConsumerId = ConsumerId("io.aecor.schedule.ScheduleProcess")
   )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] = {
@@ -62,8 +62,11 @@ object Schedule {
       for {
         f <- runtime.start(
               entityName,
-              DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
               DefaultScheduleAggregate.correlation,
+              EventsourcedBehavior(
+                DefaultScheduleAggregate(Capture[F].capture(ZonedDateTime.now(clock))).asFunctionK,
+                ScheduleState.folder
+              ),
               Tagging.const(eventTag)
             )
       } yield ScheduleAggregate.fromFunctionK(f)

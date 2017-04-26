@@ -6,7 +6,7 @@ import aecor.effect.Async.ops._
 import aecor.data.{ Committable, EventTag }
 import aecor.schedule.ScheduleEvent
 import aecor.effect.{ Async, CaptureFuture }
-import aecor.runtime.akkapersistence.AggregateJournal
+import aecor.runtime.akkapersistence.EventJournalQuery
 import aecor.streaming._
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Keep, Sink }
@@ -18,7 +18,7 @@ object DefaultScheduleEventJournal {
     consumerId: ConsumerId,
     parallelism: Int,
     offsetStore: OffsetStore[F, UUID],
-    aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+    aggregateJournal: EventJournalQuery[UUID, ScheduleEvent],
     eventTag: EventTag[ScheduleEvent]
   )(implicit materializer: Materializer): DefaultScheduleEventJournal[F] =
     new DefaultScheduleEventJournal(
@@ -34,7 +34,7 @@ class DefaultScheduleEventJournal[F[_]: Async: CaptureFuture: Applicative](
   consumerId: ConsumerId,
   parallelism: Int,
   offsetStore: OffsetStore[F, UUID],
-  aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+  aggregateJournal: EventJournalQuery[UUID, ScheduleEvent],
   eventTag: EventTag[ScheduleEvent]
 )(implicit materializer: Materializer)
     extends ScheduleEventJournal[F] {

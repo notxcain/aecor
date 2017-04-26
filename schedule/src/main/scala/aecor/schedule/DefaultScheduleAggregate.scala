@@ -143,6 +143,6 @@ private[aecor] object ScheduleState {
 
   case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
 
-  implicit val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
-    Folder.instance(initial)(_.update)
+  val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
+    Folder.curried(initial)(_.update)
 }

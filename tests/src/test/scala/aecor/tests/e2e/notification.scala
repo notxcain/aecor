@@ -32,7 +32,7 @@ object notification {
   case class NotificationState(sent: Boolean)
   object NotificationState {
     implicit def folder[F[_]: Applicative]: Folder[F, NotificationEvent, NotificationState] =
-      Folder.instance(NotificationState(false)) {
+      Folder.curried(NotificationState(false)) {
         case NotificationState(_) => {
           case NotificationCreated(_, _) => NotificationState(false).pure[F]
           case NotificationSent(_) => NotificationState(true).pure[F]

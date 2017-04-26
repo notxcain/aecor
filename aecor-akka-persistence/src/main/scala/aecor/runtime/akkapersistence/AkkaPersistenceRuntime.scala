@@ -1,7 +1,7 @@
 package aecor.runtime.akkapersistence
 
 import aecor.aggregate._
-import aecor.data.{ Correlation, Folded, Handler, Tagging }
+import aecor.data._
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime.CorrelatedCommand
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
@@ -9,6 +9,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
+import cats.data.{ Kleisli, Nested, StateT }
 import cats.implicits._
 import cats.{ Monad, ~> }
 
@@ -26,19 +27,26 @@ object AkkaPersistenceRuntime {
 
 final case class EventsourcedBehavior[F[_], Op[_], State, Event](
   handler: Op ~> Handler[F, State, Seq[Event], ?],
-  zero: State,
-  reducer: (State, Event) => Folded[State]
+  folder: Folder[Folded, Event, State]
 )
+
+object EventsourcedBehavior {
+  type Handler[F[_], State, Event, A] = Kleisli[PairT[F, Seq[Event], ?], State, ?]
+  def Handler[F[_], State, Event, A](
+    f: State => PairT[F, Seq[Event], A]
+  ): Handler[F, State, Event, A] =
+    Kleisli[PairT[F, Seq[Event], ?], State, A](f)
+}
 
 class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {
   def start[Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: Op ~> Handler[F, State, Seq[Event], ?],
     correlation: Correlation[Op],
+    behavior: EventsourcedBehavior[F, Op, State, Event],
     tagging: Tagging[Event],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit folder: Folder[Folded, Event, State]): F[Op ~> F] = {
+  ): F[Op ~> F] = {
 
     val props =
       AkkaPersistenceRuntimeActor.props(

@@ -9,9 +9,9 @@ import cats.implicits._
   * `Behavior[Op, F]` says that each operation `Op[A]` will cause effect `F`
   * producing a pair consisting of next `Behavior[Op, F]` and an `A`
   */
-final case class Behavior[Op[_], F[_]](run: Op ~> PairT[F, Behavior[Op, F], ?]) {
-  def mapK[G[_]: Functor](f: F ~> G): Behavior[Op, G] = Behavior[Op, G] {
-    def mk[A](op: Op[A]): PairT[G, Behavior[Op, G], A] =
+final case class Behavior[F[_], Op[_]](run: Op ~> PairT[F, Behavior[F, Op], ?]) {
+  def mapK[G[_]: Functor](f: F ~> G): Behavior[G, Op] = Behavior[G, Op] {
+    def mk[A](op: Op[A]): PairT[G, Behavior[G, Op], A] =
       f(run(op)).map {
         case (b, a) =>
           (b.mapK(f), a)
@@ -21,9 +21,9 @@ final case class Behavior[Op[_], F[_]](run: Op ~> PairT[F, Behavior[Op, F], ?]) 
 }
 
 object Behavior {
-  def roll[F[_]: FlatMap, Op[_]](f: F[Behavior[Op, F]]): Behavior[Op, F] =
-    Behavior[Op, F](new (Op ~> PairT[F, Behavior[Op, F], ?]) {
-      override def apply[A](op: Op[A]): PairT[F, Behavior[Op, F], A] =
+  def roll[F[_]: FlatMap, Op[_]](f: F[Behavior[F, Op]]): Behavior[F, Op] =
+    Behavior[F, Op](new (Op ~> PairT[F, Behavior[F, Op], ?]) {
+      override def apply[A](op: Op[A]): PairT[F, Behavior[F, Op], A] =
         FlatMap[F].flatMap(f)(_.run(op))
     })
 }

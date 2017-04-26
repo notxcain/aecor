@@ -15,11 +15,11 @@ import scala.collection.immutable.Seq
 
 object EventsourcedBehavior {
   final case class InternalState[S](entityState: S, version: Long) {
-    def step[E](e: E)(implicit S: Folder[Folded, E, S]): Folded[InternalState[S]] =
-      S.reduce(entityState, e).map(InternalState(_, version + 1))
+    def step[E](e: E)(reduce: (S, E) => Folded[S]): Folded[InternalState[S]] =
+      reduce(entityState, e).map(InternalState(_, version + 1))
   }
   object InternalState {
-    def zero[F[_], S](implicit S: Folder[F, _, S]): InternalState[S] = InternalState(S.zero, 0)
+    def zero[S](zeroEntityState: S): InternalState[S] = InternalState(zeroEntityState, 0)
   }
 
   sealed abstract class BehaviorFailure extends Exception
@@ -37,11 +37,11 @@ object EventsourcedBehavior {
     generateInstanceId: F[UUID],
     snapshotEach: Option[Long],
     snapshotStore: KeyValueStore[F, String, InternalState[S]]
-  )(implicit S: Folder[Folded, E, S]): Behavior[Op, F] = Behavior.roll {
+  )(implicit S: Folder[Folded, E, S]): Behavior[F, Op] = Behavior.roll {
     generateInstanceId.map { instanceId =>
       VanillaBehavior.correlated[F, Op, InternalState[S], Seq[E]] { op =>
         val entityId = s"$entityName-${correlation(op)}"
-        val r = repository(journal, snapshotEach, snapshotStore, tagging, instanceId, entityId)
+        val r = repository(S, journal, snapshotEach, snapshotStore, tagging, instanceId, entityId)
         VanillaBehavior
           .shared[F, Op, InternalState[S], Seq[E]](mkOpHandler(opHandler), r)
       }
@@ -56,21 +56,27 @@ object EventsourcedBehavior {
     }
 
   def repository[F[_]: MonadError[?[_], BehaviorFailure], S, E](
+    folder: Folder[Folded, E, S],
     journal: EventJournal[F, E],
     snapshotEach: Option[Long],
     snapshotStore: KeyValueStore[F, String, InternalState[S]],
     tagging: Tagging[E],
     instanceId: UUID,
     entityId: CorrelationId
-  )(implicit S: Folder[Folded, E, S]): EntityRepository[F, InternalState[S], Seq[E]] =
+  ): EntityRepository[F, InternalState[S], Seq[E]] =
     new EntityRepository[F, InternalState[S], Seq[E]] {
       override def loadState: F[InternalState[S]] =
         for {
           snapshot <- snapshotStore.getValue(entityId)
           offset = snapshot.map(_.version).getOrElse(0L)
-          zeroState = snapshot.getOrElse(InternalState.zero)
+          zeroState = snapshot.getOrElse(InternalState.zero(folder.zero))
           state <- journal
-                    .foldById(entityId, offset, zeroState, (_: InternalState[S]).step(_))
+                    .foldById(
+                      entityId,
+                      offset,
+                      zeroState,
+                      (_: InternalState[S]).step(_)(folder.reduce)
+                    )
                     .flatMap {
                       case Next(x) => x.pure[F]
                       case Impossible =>
@@ -87,7 +93,7 @@ object EventsourcedBehavior {
           val folded =
             events.toVector.foldM((false, state, Vector.empty[EventEnvelope[E]])) {
               case ((snap, s, es), e) =>
-                s.step(e).map { next =>
+                s.step(e)(folder.reduce).map { next =>
                   val snapshotNeeded = snap || snapshotEach
                     .map(next.version % _)
                     .contains(0)

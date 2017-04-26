@@ -16,9 +16,8 @@ object StateRuntime {
     * i.e. all operations are executed against common sequence of events
     *
     */
-  def shared[F[_]: Monad, Op[_], S, E](
-    behavior: Op ~> Handler[F, S, Seq[E], ?]
-  )(implicit folder: Folder[F, E, S]): Op ~> StateT[F, Vector[E], ?] =
+  def shared[F[_]: Monad, Op[_], S, E](behavior: Op ~> Handler[F, S, Seq[E], ?],
+                                       folder: Folder[F, E, S]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
       override def apply[A](fa: Op[A]): StateT[F, Vector[E], A] =
         for {

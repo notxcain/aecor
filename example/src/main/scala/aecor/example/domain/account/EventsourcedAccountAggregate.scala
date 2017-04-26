@@ -9,6 +9,8 @@ import aecor.aggregate.Folder
 import aecor.example.domain.account.AccountAggregate.{ AccountDoesNotExist, InsufficientFunds }
 import cats.Applicative
 import Folded.syntax._
+import aecor.runtime.akkapersistence.EventsourcedBehavior
+import monix.eval.Task
 
 import scala.collection.immutable._
 
@@ -63,7 +65,10 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
 }
 
 object EventsourcedAccountAggregate {
-
+  def behavior[F[_]: Applicative] = EventsourcedBehavior(
+    AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[F]),
+    Account.folder
+  )
   final val rootAccountId: AccountId = AccountId("ROOT")
   final case class Account(balance: Amount, processedTransactions: Set[AccountTransactionId]) {
     def hasFunds(amount: Amount): Boolean =
@@ -87,7 +92,7 @@ object EventsourcedAccountAggregate {
       case AccountOpened(_) => Account(Amount.zero, Set.empty).next
       case _ => impossible
     }
-    implicit def folder: Folder[Folded, AccountEvent, Option[Account]] =
+    def folder: Folder[Folded, AccountEvent, Option[Account]] =
       Folder.optionInstance(fromEvent)(x => x.applyEvent)
   }
 }

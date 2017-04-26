@@ -5,9 +5,9 @@ import cats.implicits._
 import cats.{ Monad, ~> }
 
 object StateBehavior {
-  def apply[F[_]: Monad, Op[_], S](f: Op ~> StateT[F, S, ?], state: F[S]): Behavior[Op, F] =
-    Behavior[Op, F](new (Op ~> PairT[F, Behavior[Op, F], ?]) {
-      override def apply[A](fa: Op[A]): PairT[F, Behavior[Op, F], A] =
+  def apply[F[_]: Monad, Op[_], S](f: Op ~> StateT[F, S, ?], state: F[S]): Behavior[F, Op] =
+    Behavior[F, Op](new (Op ~> PairT[F, Behavior[F, Op], ?]) {
+      override def apply[A](fa: Op[A]): PairT[F, Behavior[F, Op], A] =
         state.flatMap(f(fa).run).map {
           case (next, a) =>
             StateBehavior(f, next.pure[F]) -> a

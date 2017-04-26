@@ -5,7 +5,7 @@ import java.util.UUID
 
 import aecor.data.{ Committable, CorrelationId, EventTag }
 import aecor.effect.Async
-import aecor.runtime.akkapersistence.{ AggregateJournal, JournalEntry }
+import aecor.runtime.akkapersistence.{ EventJournalQuery, JournalEntry }
 import aecor.streaming.{ ConsumerId, OffsetStore }
 import akka.NotUsed
 import akka.stream.scaladsl.Source
@@ -16,7 +16,7 @@ private[schedule] class DefaultSchedule[F[_]: Async](
   clock: Clock,
   aggregate: ScheduleAggregate[F],
   bucketLength: FiniteDuration,
-  aggregateJournal: AggregateJournal[UUID, ScheduleEvent],
+  aggregateJournal: EventJournalQuery[UUID, ScheduleEvent],
   offsetStore: OffsetStore[F, UUID],
   eventTag: EventTag[ScheduleEvent]
 ) extends Schedule[F] {

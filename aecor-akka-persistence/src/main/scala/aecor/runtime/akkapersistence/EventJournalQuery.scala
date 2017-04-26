@@ -11,7 +11,7 @@ final case class JournalEntry[+O, +A](offset: O, persistenceId: String, sequence
   def mapOffset[I](f: O => I): JournalEntry[I, A] = copy(f(offset))
 }
 
-trait AggregateJournal[Offset, E] {
+trait EventJournalQuery[Offset, E] {
   def eventsByTag(tag: EventTag[E],
                   offset: Option[Offset]): Source[JournalEntry[Offset, E], NotUsed]
 

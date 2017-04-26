@@ -36,7 +36,7 @@ object CounterEvent {
 case class CounterState(value: Long)
 object CounterState {
   implicit def folder[F[_]: Applicative]: Folder[F, CounterEvent, CounterState] =
-    Folder.instance(CounterState(0)) {
+    Folder.curried(CounterState(0)) {
       case CounterState(x) => {
         case CounterIncremented(_) => CounterState(x + 1).pure[F]
         case CounterDecremented(_) => CounterState(x - 1).pure[F]

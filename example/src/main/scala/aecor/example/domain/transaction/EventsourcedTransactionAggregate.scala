@@ -21,6 +21,9 @@ import aecor.example.domain.transaction.TransactionEvent.{
 import cats.Applicative
 import cats.implicits._
 import aecor.data.Folded.syntax._
+import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction.fromEvent
+import aecor.runtime.akkapersistence.EventsourcedBehavior
+import monix.eval.Task
 
 import scala.collection.immutable._
 
@@ -108,6 +111,12 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
 }
 
 object EventsourcedTransactionAggregate {
+  def behavior[F[_]: Applicative]
+    : EventsourcedBehavior[F, TransactionAggregateOp, Option[Transaction], TransactionEvent] =
+    EventsourcedBehavior(
+      TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[F]),
+      Transaction.folder
+    )
   sealed abstract class TransactionStatus
   object TransactionStatus {
     case object Requested extends TransactionStatus
@@ -132,7 +141,7 @@ object EventsourcedTransactionAggregate {
         Transaction(TransactionStatus.Requested, fromAccount, toAccount, amount).next
       case _ => impossible
     }
-    implicit def folder: Folder[Folded, TransactionEvent, Option[Transaction]] =
+    def folder: Folder[Folded, TransactionEvent, Option[Transaction]] =
       Folder.optionInstance(fromEvent)(x => x.applyEvent)
   }
 

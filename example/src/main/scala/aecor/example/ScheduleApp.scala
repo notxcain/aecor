@@ -20,7 +20,7 @@ import aecor.data.EventsourcedBehavior
 import aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
 
 import scala.collection.immutable._
-import aecor.runtime.akkapersistence.{ CassandraAggregateJournal, CassandraOffsetStore }
+import aecor.runtime.akkapersistence.{ CassandraEventJournalQuery, CassandraOffsetStore }
 import aecor.streaming.ConsumerId
 import io.aecor.distributedprocessing.StreamingProcess
 import akka.pattern.after
@@ -62,7 +62,7 @@ object ScheduleApp extends App {
       eventualConsistencyDelay = 5.seconds,
       repository =
         CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries),
-      aggregateJournal = CassandraAggregateJournal(system),
+      aggregateJournal = CassandraEventJournalQuery(system),
       offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 
