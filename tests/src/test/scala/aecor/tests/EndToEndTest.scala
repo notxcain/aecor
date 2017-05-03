@@ -2,18 +2,17 @@ package aecor.tests
 
 import java.time._
 
-import aecor.data.{ EventTag, Tagging }
+import aecor.data.{ ConsumerId, EventTag, TagConsumerId, Tagging }
 import aecor.effect.Capture
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
-import aecor.streaming.ConsumerId
 import aecor.testkit.TestEventJournal.TestEventJournalState
-import aecor.testkit.{ E2eSupport, StateClock, TestOffsetStore }
+import aecor.testkit.{ E2eSupport, StateClock, StateKeyValueStore }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
 import aecor.tests.e2e._
-import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp, notificationOpHandler }
+import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp }
 import cats.data.StateT
 import cats.implicits._
 import cats.~>
@@ -33,10 +32,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
                        counterViewState: TestCounterViewRepositoryState,
                        time: Instant,
                        scheduleEntries: Vector[ScheduleEntry],
-                       offsetStoreState: Map[(String, ConsumerId), LocalDateTime])
+                       offsetStoreState: Map[TagConsumerId, LocalDateTime])
 
   val offsetStore =
-    TestOffsetStore[SpecF, SpecState, LocalDateTime](
+    StateKeyValueStore[SpecF, SpecState, TagConsumerId, LocalDateTime](
       _.offsetStoreState,
       (s, os) => s.copy(offsetStoreState = os)
     )
@@ -50,8 +49,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     mkBehavior(
       "Counter",
       CounterOp.correlation,
-      new CounterOpHandler[StateT[SpecF, SpecState, ?]],
-      Tagging(CounterEvent.tag),
+      CounterOpHandler.behavior[StateT[SpecF, SpecState, ?]],
+      Tagging.const(CounterEvent.tag),
       counterEventJournal
     )
 
@@ -65,8 +64,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     mkBehavior(
       "Notification",
       NotificationOp.correlation,
-      notificationOpHandler,
-      Tagging(NotificationEvent.tag),
+      notification.behavior,
+      Tagging.const(NotificationEvent.tag),
       notificationEventJournal
     )
 
@@ -76,8 +75,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val scheduleAggregate = mkBehavior(
     "Schedule",
     DefaultScheduleAggregate.correlation,
-    DefaultScheduleAggregate(clock.zonedDateTime(ZoneOffset.UTC)).asFunctionK,
-    Tagging(EventTag[ScheduleEvent]("Schedule")),
+    DefaultScheduleAggregate.behavior(clock.zonedDateTime(ZoneOffset.UTC)),
+    Tagging.const(EventTag[ScheduleEvent]("Schedule")),
     schduleEventJournal
   )
 

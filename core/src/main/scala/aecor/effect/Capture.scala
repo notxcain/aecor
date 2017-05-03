@@ -2,20 +2,16 @@ package aecor.effect
 
 import cats.data.{ EitherT, Kleisli }
 import cats.{ Applicative, Functor }
+import simulacrum.typeclass
 
+@typeclass
 trait Capture[F[_]] {
   def capture[A](a: => A): F[A]
 }
 
-object Capture {
-  def apply[F[_]](implicit instance: Capture[F]): Capture[F] = instance
+object Capture extends CaptureInstances
 
-  final class CaptureIdOps[A](self: => A) {
-    def capture[F[_]](implicit F: Capture[F]): F[A] = F.capture(self)
-  }
-  object ops {
-    implicit def toCaptureIdOps[A](a: => A): CaptureIdOps[A] = new CaptureIdOps(a)
-  }
+sealed trait CaptureInstances {
   implicit def kleisliCapture[F[_]: Applicative, B]: Capture[Kleisli[F, B, ?]] =
     new Capture[Kleisli[F, B, ?]] {
       override def capture[A](a: => A): Kleisli[F, B, A] = Kleisli(_ => Applicative[F].pure(a))

@@ -2,9 +2,9 @@ package aecor.schedule
 
 import java.time.{ Instant, LocalDateTime, ZonedDateTime }
 
-import aecor.aggregate.Folder
 import aecor.data.Folded.syntax._
-import aecor.data.{ Correlation, CorrelationId, Folded, Handler }
+import aecor.data._
+import aecor.effect.Capture
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.ScheduleState._
@@ -23,6 +23,11 @@ object DefaultScheduleAggregate {
 
   def correlation: Correlation[ScheduleOp] =
     c => CorrelationId.composite("-", c.scheduleName, c.scheduleBucket)
+
+  def behavior[F[_]: Functor](
+    clock: F[ZonedDateTime]
+  ): EventsourcedBehavior[F, ScheduleOp, ScheduleState, ScheduleEvent] =
+    EventsourcedBehavior(DefaultScheduleAggregate(clock).asFunctionK, ScheduleState.folder)
 
 }
 

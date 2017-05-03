@@ -3,10 +3,10 @@ package aecor.schedule
 import java.time.{ Clock, LocalDateTime }
 import java.util.UUID
 
-import aecor.data.{ Committable, CorrelationId, EventTag }
+import aecor.data._
 import aecor.effect.Async
 import aecor.runtime.akkapersistence.{ EventJournalQuery, JournalEntry }
-import aecor.streaming.{ ConsumerId, OffsetStore }
+import aecor.util.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
@@ -17,7 +17,7 @@ private[schedule] class DefaultSchedule[F[_]: Async](
   aggregate: ScheduleAggregate[F],
   bucketLength: FiniteDuration,
   aggregateJournal: EventJournalQuery[UUID, ScheduleEvent],
-  offsetStore: OffsetStore[F, UUID],
+  offsetStore: KeyValueStore[F, TagConsumerId, UUID],
   eventTag: EventTag[ScheduleEvent]
 ) extends Schedule[F] {
   override def addScheduleEntry(scheduleName: String,

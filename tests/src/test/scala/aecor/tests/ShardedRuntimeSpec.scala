@@ -1,9 +1,9 @@
 package aecor.tests
 
-import aecor.aggregate.StateRuntime
-import aecor.data.StateBehavior
+import aecor.data.Behavior
 import aecor.effect.monix._
-import aecor.runtime.akkacluster.GenericAkkaRuntime
+import aecor.experimental.{ StateBehavior, StateRuntime }
+import aecor.runtime.akkageneric.GenericAkkaRuntime
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -41,9 +41,9 @@ class ShardedRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val behavior = StateBehavior(
-    StateRuntime.shared(CounterOpHandler[Task]),
-    Vector.empty[CounterEvent].pure[Task]
+  val behavior: Behavior[Task, CounterOp] = StateBehavior(
+    Vector.empty[CounterEvent].pure[Task],
+    StateRuntime.shared(CounterOpHandler[Task])
   )
 
   val startRuntime =

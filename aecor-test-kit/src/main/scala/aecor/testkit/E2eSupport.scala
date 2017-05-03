@@ -2,10 +2,11 @@ package aecor.testkit
 
 import java.util.UUID
 
-import aecor.aggregate.Folder
-import aecor.data.EventsourcedBehavior.{ BehaviorFailure, InternalState }
 import aecor.data._
+import aecor.experimental.Eventsourced
+import aecor.experimental.Eventsourced.{ BehaviorFailure, RunningState }
 import aecor.testkit.TestEventJournal.TestEventJournalState
+import aecor.util.NoopKeyValueStore
 import cats.data.{ EitherT, StateT }
 import cats.implicits._
 import cats.{ Eval, Monad, ~> }
@@ -24,41 +25,42 @@ trait E2eSupport {
   final def mkBehavior[Op[_], S, E](
     name: String,
     correlation: Correlation[Op],
-    opHandler: Op ~> Handler[StateT[SpecF, SpecState, ?], S, Seq[E], ?],
+    behavior: EventsourcedBehavior[StateT[SpecF, SpecState, ?], Op, S, E],
     tagging: Tagging[E],
     journal: TestEventJournal[SpecF, SpecState, E]
-  )(implicit folder: Folder[Folded, E, S]): Op ~> StateT[SpecF, SpecState, ?] =
+  ): Op ~> StateT[SpecF, SpecState, ?] =
     new (Op ~> StateT[SpecF, SpecState, ?]) {
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
-        EventsourcedBehavior(
+        Eventsourced(
           name,
           correlation,
-          opHandler,
+          behavior,
           tagging,
           journal,
           StateT.inspect[SpecF, SpecState, UUID](_ => UUID.randomUUID()),
           Option.empty,
-          NoopKeyValueStore[StateT[SpecF, SpecState, ?], String, InternalState[S]]
+          NoopKeyValueStore[StateT[SpecF, SpecState, ?], String, RunningState[S]]
         ).run(fa)
           .map(_._2)
     }
 
-  final def wireProcess[F[_], S, In0](process: In0 => F[Unit],
-                                      sources: Processable[F, In0]*): WiredProcess[F] = {
+  final def wireProcess[F[_], S, In](process: In => F[Unit],
+                                     sources: Processable[F, In]*): WiredProcess[F] = {
     val process0 = process
     val sources0 = sources
+    type In0 = In
     new WiredProcess[F] {
       type In = In0
-      override val process: (In0) => F[Unit] = process0
-      override val sources: Vector[Processable[F, In0]] =
+      override val process: (In) => F[Unit] = process0
+      override val sources: Vector[Processable[F, In]] =
         sources0.toVector
     }
   }
 
-  sealed trait WiredProcess[F[_]] {
-    type In
-    val process: In => F[Unit]
-    val sources: Vector[Processable[F, In]]
+  sealed abstract class WiredProcess[F[_]] {
+    protected type In
+    protected val process: In => F[Unit]
+    protected val sources: Vector[Processable[F, In]]
     final def run(implicit F: Monad[F]): F[Unit] =
       sources
         .fold(Processable.empty[F, In])(_ merge _)

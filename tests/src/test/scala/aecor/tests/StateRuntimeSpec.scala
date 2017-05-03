@@ -1,6 +1,6 @@
 package aecor.tests
 
-import aecor.aggregate.StateRuntime
+import aecor.experimental.StateRuntime
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }

@@ -12,22 +12,18 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraEventJournalQuery[E: PersistentDecoder](
-  system: ActorSystem,
-  journalIdentifier: String,
-  parallelism: Int
-)(implicit executionContext: ExecutionContext)
+class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, parallelism: Int)
     extends EventJournalQuery[UUID, E] {
 
-  private val readJournal: CassandraReadJournal =
-    PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
+  private val readJournal =
+    PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
   private def createSource(
     inner: Source[EventEnvelope2, NotUsed]
   ): Source[JournalEntry[UUID, E], NotUsed] =
     inner.mapAsync(parallelism) {
       case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
-        Future(eventOffset).flatMap {
+        eventOffset match {
           case TimeBasedUUID(offsetValue) =>
             event match {
               case repr: PersistentRepr =>
@@ -70,10 +66,6 @@ class CassandraEventJournalQuery[E: PersistentDecoder](
 }
 
 object CassandraEventJournalQuery {
-  def apply[E: PersistentDecoder](
-    system: ActorSystem,
-    journalIdentifier: String = CassandraReadJournal.Identifier,
-    parallelism: Int = 8
-  )(implicit executionContext: ExecutionContext): EventJournalQuery[UUID, E] =
-    new CassandraEventJournalQuery(system, journalIdentifier, parallelism)
+  def apply[E: PersistentDecoder](system: ActorSystem): EventJournalQuery[UUID, E] =
+    new CassandraEventJournalQuery(system, 8)
 }

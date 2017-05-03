@@ -10,7 +10,6 @@ final case class From[A](value: A) extends AnyVal
 final case class To[A](value: A) extends AnyVal
 
 @algebra('transactionId)
-@term
 trait TransactionAggregate[F[_]] {
   def createTransaction(transactionId: TransactionId,
                         fromAccountId: From[AccountId],

@@ -71,6 +71,16 @@ lazy val akkaPersistence = project
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
+lazy val akkaGeneric = project
+  .in(file("aecor-akka-generic"))
+  .settings(
+    moduleName := "aecor-akka-generic",
+    name := "Aecor Runtime based on Akka Cluster Sharding"
+  )
+  .dependsOn(core)
+  .settings(aecorSettings)
+  .settings(akkaPersistenceSettings)
+
 lazy val distributedProcessing =
   project
     .in(file("distributed-processing"))
@@ -80,7 +90,7 @@ lazy val distributedProcessing =
     .settings(distributedProcessingSettings)
 
 lazy val schedule = project
-  .dependsOn(akkaPersistence)
+  .dependsOn(akkaPersistence, distributedProcessing)
   .settings(moduleName := "aecor-schedule", name := "Aecor Schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
@@ -99,21 +109,38 @@ lazy val effectFs2 = project
   .settings(aecorSettings)
   .settings(effectFs2Settings)
 
-lazy val testKit = project
-  .in(file("aecor-test-kit"))
-  .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
+lazy val experimental = project
+  .in(file("aecor-experimental"))
+  .settings(moduleName := "aecor-experimental", name := "Aecor Experimental")
   .dependsOn(core)
   .settings(aecorSettings)
 
+lazy val testKit = project
+  .in(file("aecor-test-kit"))
+  .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
+  .dependsOn(core, experimental)
+  .settings(aecorSettings)
+
 lazy val tests = project
-  .dependsOn(core, example, schedule, effectMonix, effectFs2, testKit, akkaPersistence)
+  .dependsOn(
+    core,
+    example,
+    schedule,
+    effectMonix,
+    effectFs2,
+    testKit,
+    akkaPersistence,
+    experimental,
+    distributedProcessing,
+    akkaGeneric
+  )
   .settings(moduleName := "aecor-tests", name := "Aecor Tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = project
-  .dependsOn(core, schedule, effectMonix, distributedProcessing)
+  .dependsOn(core, schedule, effectMonix, distributedProcessing, experimental)
   .settings(moduleName := "aecor-example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -136,7 +163,7 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   )
 )
 
-lazy val distributedProcessingSettings = Seq(
+lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
@@ -150,6 +177,13 @@ lazy val akkaPersistenceSettings = Seq(
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra
+  )
+)
+
+lazy val akkaGenericSettings = Seq(
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
   )
 )
 

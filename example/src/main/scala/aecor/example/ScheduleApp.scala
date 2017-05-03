@@ -3,9 +3,16 @@ package aecor.example
 import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
+import aecor.data.ConsumerId
+import aecor.distributedprocessing.DistributedProcessing.RunningProcess
+import aecor.distributedprocessing.{ DistributedProcessing, AkkaStreamProcess }
+import aecor.effect.Async.ops._
 import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.experimental.Eventsourced
+import aecor.runtime.akkapersistence.{ CassandraEventJournalQuery, CassandraOffsetStore }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import akka.actor.ActorSystem
+import akka.pattern.after
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
@@ -14,18 +21,9 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
 import cats.data.{ EitherT, Kleisli }
 import cats.implicits._
-import cats.{ Functor, MonadError }
-import Async.ops._
-import aecor.data.EventsourcedBehavior
-import aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
+import cats.{ Functor, Monad, MonadError }
 
 import scala.collection.immutable._
-import aecor.runtime.akkapersistence.{ CassandraEventJournalQuery, CassandraOffsetStore }
-import aecor.streaming.ConsumerId
-import io.aecor.distributedprocessing.StreamingProcess
-import akka.pattern.after
-import aecor.distributedprocessing.DistributedProcessing.RunningProcess
-
 import scala.concurrent.Future
 import scala.concurrent.duration._
 object ScheduleApp extends App {
@@ -49,17 +47,11 @@ object ScheduleApp extends App {
     )
   )
 
-  def runSchedule[F[_]: Async: CaptureFuture: Capture: MonadError[
-    ?[_],
-    EventsourcedBehavior.BehaviorFailure
-  ]]: F[Schedule[F]] =
+  def runSchedule[F[_]: Async: CaptureFuture: Capture: Monad]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
       clock = clock,
       dayZero = LocalDate.of(2016, 5, 10),
-      bucketLength = 1.day,
-      refreshInterval = 100.millis,
-      eventualConsistencyDelay = 5.seconds,
       repository =
         CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries),
       aggregateJournal = CassandraEventJournalQuery(system),
@@ -94,8 +86,7 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def mkApp[F[_]: Async: CaptureFuture: Capture: MonadError[?[_],
-                                                            EventsourcedBehavior.BehaviorFailure]]
+  def mkApp[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], Eventsourced.BehaviorFailure]]
     : F[Unit] =
     for {
       schedule <- runSchedule[F]
@@ -103,21 +94,11 @@ object ScheduleApp extends App {
       _ <- runEventWatch[F](schedule)
     } yield ()
 
-  val app: EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, Unit] =
-    mkApp[EitherT[Kleisli[Future, Unit, ?], EventsourcedBehavior.BehaviorFailure, ?]]
+  val app: EitherT[Kleisli[Future, Unit, ?], Eventsourced.BehaviorFailure, Unit] =
+    mkApp[EitherT[Kleisli[Future, Unit, ?], Eventsourced.BehaviorFailure, ?]]
 
-  object distribute {
-    trait MkDistribute[F[_]] {
-      def apply(f: Int => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]]
-    }
-    def apply[F[_]](count: Int) = new MkDistribute[F] {
-      override def apply(f: (Int) => F[RunningProcess[F]]): Seq[F[RunningProcess[F]]] =
-        (0 until count).map(f)
-    }
-  }
-
-  val processes = distribute[Kleisli[Future, Unit, ?]](10) { x =>
-    StreamingProcess[Kleisli[Future, Unit, ?]](
+  val processes = DistributedProcessing.distribute[Kleisli[Future, Unit, ?]](10) { x =>
+    AkkaStreamProcess[Kleisli[Future, Unit, ?]](
       Source.tick(0.seconds, 2.seconds, x),
       Flow[Int].map { x =>
         system.log.info(s"Worker $x")

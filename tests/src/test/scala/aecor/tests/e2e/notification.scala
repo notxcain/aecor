@@ -1,11 +1,11 @@
 package aecor.tests.e2e
 
-import aecor.aggregate.Folder
-import aecor.data.{ Correlation, EventTag, Handler }
+import aecor.data._
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
 import aecor.tests.e2e.notification.NotificationOp.{ CreateNotification, MarkAsSent }
 import cats.implicits._
 import cats.{ Applicative, ~> }
+import monix.reactive.MulticastStrategy.Behavior
 
 import scala.collection.immutable.Seq
 
@@ -31,7 +31,7 @@ object notification {
 
   case class NotificationState(sent: Boolean)
   object NotificationState {
-    implicit def folder[F[_]: Applicative]: Folder[F, NotificationEvent, NotificationState] =
+    def folder[F[_]: Applicative]: Folder[F, NotificationEvent, NotificationState] =
       Folder.curried(NotificationState(false)) {
         case NotificationState(_) => {
           case NotificationCreated(_, _) => NotificationState(false).pure[F]
@@ -56,4 +56,7 @@ object notification {
             }
         }
     }
+  def behavior[F[_]: Applicative]
+    : EventsourcedBehavior[F, NotificationOp, NotificationState, NotificationEvent] =
+    EventsourcedBehavior(notificationOpHandler[F], NotificationState.folder[Folded])
 }

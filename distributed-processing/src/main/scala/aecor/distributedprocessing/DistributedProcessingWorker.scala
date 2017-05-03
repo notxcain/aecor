@@ -2,6 +2,7 @@ package aecor.distributedprocessing
 
 import aecor.distributedprocessing.DistributedProcessing._
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
+import aecor.distributedprocessing.serialization.Message
 import aecor.effect.Async
 import aecor.effect.Async.ops._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
@@ -13,7 +14,7 @@ private[aecor] object DistributedProcessingWorker {
   def props[F[_]: Async](processWithId: Int => Process[F]): Props =
     Props(new DistributedProcessingWorker[F](processWithId))
 
-  final case class KeepRunning(workerId: Int)
+  final case class KeepRunning(workerId: Int) extends Message
 }
 
 private[aecor] class DistributedProcessingWorker[F[_]: Async](processFor: Int => Process[F])
@@ -32,7 +33,7 @@ private[aecor] class DistributedProcessingWorker[F[_]: Async](processFor: Int =>
   def receive: Receive = {
     case KeepRunning(workerId) =>
       log.info("[{}] Starting process", workerId)
-      processFor(workerId).unsafeRun.map(ProcessStarted) pipeTo self
+      processFor(workerId).run.unsafeRun.map(ProcessStarted) pipeTo self
       context.become {
         case ProcessStarted(RunningProcess(watchTermination, terminate)) =>
           log.info("[{}] Process started", workerId)

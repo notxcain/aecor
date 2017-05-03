@@ -1,13 +1,14 @@
-package aecor.data
+package aecor.experimental
 
+import aecor.data.{ Behavior, Handler, PairT }
 import cats.implicits._
 import cats.{ Monad, ~> }
 
 object VanillaBehavior {
 
-  trait EntityRepository[F[_], S, D] {
+  trait EntityRepository[F[_], S, E] {
     def loadState: F[S]
-    def applyChanges(state: S, changes: D): F[S]
+    def applyStateEffect(state: S, stateEffect: E): F[S]
   }
 
   def shared[F[_]: Monad, Op[_], S, D](opHandler: Op ~> Handler[F, S, D, ?],
@@ -17,7 +18,7 @@ object VanillaBehavior {
         Behavior(Lambda[Op ~> PairT[F, Behavior[F, Op], ?]] { op =>
           opHandler(op).run(state).flatMap {
             case (stateChanges, reply) =>
-              repository.applyChanges(state, stateChanges).map { nextState =>
+              repository.applyStateEffect(state, stateChanges).map { nextState =>
                 (rec(nextState), reply)
               }
           }

@@ -1,74 +1,71 @@
 package aecor.runtime.akkapersistence
 
-import java.util.UUID
-
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ Committable, Folded }
 import aecor.effect.Async
 import aecor.effect.Async.ops._
+import aecor.util.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Flow
-import cats.Monad
+import cats.{ Foldable, Monad, MonadError }
 import cats.implicits._
-import org.slf4j.LoggerFactory
 
-import scala.concurrent.{ ExecutionContext, Future }
+final case class VersionedState[A](version: Long, a: A) {
+  def next(a: A): VersionedState[A] = VersionedState(version + 1, a)
+}
+object VersionedState {
+  def first[A](a: A): VersionedState[A] = VersionedState(1, a)
+  implicit def projection[O, E, A](
+    implicit A: AggregateProjection[E, A]
+  ): AggregateProjection[JournalEntry[O, E], VersionedState[A]] =
+    new AggregateProjection[JournalEntry[O, E], VersionedState[A]] {
+      override def reduce(os: Option[VersionedState[A]],
+                          entry: JournalEntry[O, E]): Folded[VersionedState[A]] = {
+        val currentVersion = os.map(_.version).getOrElse(0L)
+        if (currentVersion < entry.sequenceNr) {
+          A.reduce(os.map(_.a), entry.event).map { next =>
+            os.map(_.next(next))
+              .getOrElse(first(next))
+          }
+        } else {
+          os.map(Folded.next).getOrElse(Folded.impossible)
+        }
+      }
+    }
+}
 
-trait AggregateProjection[F[_], A, E, S] {
-  def fetchVersionAndState(a: A)(event: E): F[(Long, Option[S])]
-
-  def saveNewVersion(a: A)(s: S, version: Long): F[Unit]
-
-  def applyEvent(a: A)(s: Option[S], event: E): Folded[Option[S]]
+trait AggregateProjection[E, S] {
+  def reduce(s: Option[S], event: E): Folded[S]
 }
 
 object AggregateProjection {
-  val logger = LoggerFactory.getLogger(getClass)
-
-  def flow[F[_]: Async: Monad, A, E, S](a: A)(
-    implicit A: AggregateProjection[F, A, E, S],
-    ec: ExecutionContext
-  ): Flow[Committable[F, JournalEntry[UUID, E]], Unit, NotUsed] = {
-    def applyEvent(event: E, sequenceNr: Long, state: Option[S]): F[Folded[Unit]] = {
-      val newVersion = A.applyEvent(a)(state, event)
-      logger.debug(s"New version [$newVersion]")
-      newVersion
-        .traverse {
-          case Some(x) =>
-            A.saveNewVersion(a)(x, sequenceNr + 1)
-          case None =>
-            ().pure[F]
-        }
-
+  def instance[S, E](f: Option[S] => E => Folded[S]): AggregateProjection[E, S] =
+    new AggregateProjection[E, S] {
+      override def reduce(s: Option[S], event: E): Folded[S] = f(s)(event)
     }
-    def applyJournalEntry(sequenceNr: Long, event: E): F[Either[String, Unit]] =
-      A.fetchVersionAndState(a)(event)
-        .flatMap {
-          case (currentVersion, currentState) =>
-            logger.debug(s"Current $currentVersion [$currentState]")
-            if (currentVersion < sequenceNr) {
-              applyEvent(event, currentVersion, currentState).map {
-                case Next(_) => ().asRight[String]
+  def flow[F[_]: Async: MonadError[?[_], Throwable], E, S](
+    store: KeyValueStore[F, E, S]
+  )(implicit S: AggregateProjection[E, S]): Flow[Committable[F, E], Unit, NotUsed] =
+    Flow[Committable[F, E]]
+      .map { c =>
+        c.traverse { event =>
+            store.getValue(event).flatMap { currentState =>
+              S.reduce(currentState, event) match {
+                case Next(nextState) =>
+                  if (currentState.contains(nextState))
+                    ().pure[F]
+                  else
+                    store.setValue(event, nextState)
                 case Impossible =>
-                  s"Projection failed for state = [$currentState], event = [$event]".asLeft[Unit]
+                  val error: Throwable =
+                    new IllegalStateException(
+                      s"Projection failed for state = [$currentState], event = [$event]"
+                    )
+                  error.raiseError[F, Unit]
               }
-            } else {
-              ().asRight[String].pure[F]
             }
-        }
-
-    Flow[Committable[F, JournalEntry[UUID, E]]]
-      .mapAsync(1) { c =>
-        c.traverse { entry =>
-          logger.debug(s"Entry [$entry]")
-          applyJournalEntry(entry.sequenceNr, entry.event).unsafeRun.flatMap {
-            case Right(_) => Future.successful(())
-            case Left(description) =>
-              Future.failed(new IllegalStateException(description))
           }
-        }
+          .flatMap(_.commit)
       }
-      .mapAsync(1)(_.commit.unsafeRun)
-      .named(s"AggregateProjection($a)")
-  }
+      .mapAsync(1)(_.unsafeRun)
 }

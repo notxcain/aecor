@@ -1,10 +1,7 @@
 package aecor.example
 
-import java.time.Clock
-
 import aecor.data._
-import aecor.distributedprocessing.{ DistributedProcessing, StreamingProcess }
-import aecor.effect.Async.ops._
+import aecor.distributedprocessing.{ DistributedProcessing, AkkaStreamProcess }
 import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
@@ -21,31 +18,22 @@ import aecor.example.domain.transaction.{
 import aecor.runtime.akkapersistence.{
   AkkaPersistenceRuntime,
   CassandraEventJournalQuery,
-  CassandraOffsetStore,
-  JournalEntry
+  CassandraOffsetStore
 }
-import io.aecor.liberator.syntax._
-import aecor.streaming.ConsumerId
-import akka.NotUsed
-
-import scala.collection.immutable._
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives.{ complete, get, path, _ }
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.scaladsl.{ Flow, Sink }
+import akka.stream.scaladsl.Flow
 import akka.stream.{ ActorMaterializer, Materializer }
-import cats.~>
 import com.typesafe.config.ConfigFactory
-import aecor.distributedprocessing.DistributedProcessing.RunningProcess
-import io.aecor.distributedprocessing.StreamingProcess
-import io.aecor.liberator.{ Extract, Term }
+import io.aecor.liberator.Extract
 import io.aecor.liberator.data.ProductKK
+import monix.cats._
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
-import monix.cats._
 import shapeless.Lazy
 
 object App {
@@ -98,21 +86,15 @@ object App {
     ): Task[DistributedProcessing.ProcessKillSwitch[Task]] = {
       val failure = TransactionProcessFailure.withMonadError[Task]
 
-      val impl = transactions :&: accounts :&: failure
-
       val process: (Input) => Task[Unit] =
-        TransactionProcess[Term[ProductKK[TransactionAggregate,
-                                          ProductKK[AccountAggregate,
-                                                    TransactionProcessFailure,
-                                                    ?[_]],
-                                          ?[_]], ?]].andThen(_(impl))
+        TransactionProcess(transactions, accounts, failure)
 
       val transactionEventJournal =
         CassandraEventJournalQuery[TransactionEvent](system)
 
       val processes =
         DistributedProcessing.distribute[Task](20) { i =>
-          StreamingProcess[Task](
+          AkkaStreamProcess[Task](
             transactionEventJournal
               .committableEventsByTag(
                 CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig),

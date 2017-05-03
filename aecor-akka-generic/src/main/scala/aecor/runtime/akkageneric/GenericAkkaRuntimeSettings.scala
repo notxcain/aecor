@@ -1,4 +1,4 @@
-package aecor.runtime.akkacluster
+package aecor.runtime.akkageneric
 
 import java.util.concurrent.TimeUnit
 

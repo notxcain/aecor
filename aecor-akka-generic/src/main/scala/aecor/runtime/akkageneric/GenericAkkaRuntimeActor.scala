@@ -1,23 +1,21 @@
-package aecor.runtime.akkacluster
+package aecor.runtime.akkageneric
 
 import java.util.UUID
 
 import aecor.data.Behavior
 import aecor.effect.Async
 import aecor.effect.Async.ops._
-import aecor.runtime.akkacluster.GenericAkkaRuntimeActor.PerformOp
+import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.PerformOp
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
-import cats.Functor
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
 object GenericAkkaRuntimeActor {
-  def props[F[_]: Async: Functor, Op[_]](behavior: Behavior[F, Op],
-                                         idleTimeout: FiniteDuration): Props =
+  def props[F[_]: Async, Op[_]](behavior: Behavior[F, Op], idleTimeout: FiniteDuration): Props =
     Props(new GenericAkkaRuntimeActor(behavior, idleTimeout))
 
   final case class PerformOp[Op[_], A](op: Op[A])

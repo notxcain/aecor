@@ -3,7 +3,7 @@ package aecor.distributedprocessing
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-import aecor.distributedprocessing.DistributedProcessing.{ ProcessKillSwitch, Process }
+import aecor.distributedprocessing.DistributedProcessing.{ Process, ProcessKillSwitch }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import akka.actor.{ ActorSystem, SupervisorStrategy }
@@ -12,13 +12,11 @@ import akka.pattern.{ BackoffSupervisor, ask }
 import akka.util.Timeout
 import cats.Functor
 import cats.implicits._
-
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 
 class DistributedProcessing(system: ActorSystem) {
-
-  def start[F[_]: Async: Capture: CaptureFuture: Functor](name: String,
+  def start[F[_]: Functor: Async: Capture: CaptureFuture](name: String,
                                                           processes: Seq[Process[F]],
                                                           settings: DistributedProcessingSettings =
                                                             DistributedProcessingSettings(
@@ -58,10 +56,9 @@ class DistributedProcessing(system: ActorSystem) {
         DistributedProcessingSupervisor.props(processes.size, region, settings.heartbeatInterval),
         "DistributedProcessingSupervisor-" + URLEncoder.encode(name, StandardCharsets.UTF_8.name())
       )
-
+      implicit val timeout = Timeout(settings.shutdownTimeout)
       ProcessKillSwitch {
         CaptureFuture[F].captureFuture {
-          implicit val timeout = Timeout(settings.shutdownTimeout)
           regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
         }.void
       }

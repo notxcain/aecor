@@ -1,16 +1,13 @@
 package aecor.example.domain.account
 
-import aecor.data.{ Folded, Handler }
+import aecor.data.Folded.syntax._
+import aecor.data.{ EventsourcedBehavior, Folded, Folder, Handler }
 import aecor.example.domain.Amount
-import aecor.example.domain.account.EventsourcedAccountAggregate.Account
-import cats.implicits._
-import AccountEvent._
-import aecor.aggregate.Folder
 import aecor.example.domain.account.AccountAggregate.{ AccountDoesNotExist, InsufficientFunds }
+import aecor.example.domain.account.AccountEvent._
+import aecor.example.domain.account.EventsourcedAccountAggregate.Account
 import cats.Applicative
-import Folded.syntax._
-import aecor.runtime.akkapersistence.EventsourcedBehavior
-import monix.eval.Task
+import cats.implicits._
 
 import scala.collection.immutable._
 

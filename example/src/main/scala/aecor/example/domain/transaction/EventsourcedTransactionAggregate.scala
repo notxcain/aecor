@@ -1,7 +1,7 @@
 package aecor.example.domain.transaction
 
-import aecor.aggregate.Folder
-import aecor.data.{ Folded, Handler }
+import aecor.data.Folded.syntax._
+import aecor.data.{ EventsourcedBehavior, Folded, Folder, Handler }
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction
@@ -11,7 +11,7 @@ import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transac
   Requested,
   Succeeded
 }
-import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
+import aecor.example.domain.transaction.TransactionAggregate._
 import aecor.example.domain.transaction.TransactionEvent.{
   TransactionAuthorized,
   TransactionCreated,
@@ -20,10 +20,6 @@ import aecor.example.domain.transaction.TransactionEvent.{
 }
 import cats.Applicative
 import cats.implicits._
-import aecor.data.Folded.syntax._
-import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction.fromEvent
-import aecor.runtime.akkapersistence.EventsourcedBehavior
-import monix.eval.Task
 
 import scala.collection.immutable._
 

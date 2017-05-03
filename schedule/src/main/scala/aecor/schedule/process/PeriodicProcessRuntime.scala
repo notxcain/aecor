@@ -1,16 +1,19 @@
 package aecor.schedule.process
 
 import aecor.effect.{ Async, Capture, CaptureFuture }
-import aecor.streaming.StreamSupervisor
-import aecor.streaming.StreamSupervisor.StreamKillSwitch
+
+import scala.collection.immutable._
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Source }
 import cats.Monad
 import Async.ops._
-import scala.concurrent.Promise
+import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
+import akka.NotUsed
+
 import scala.concurrent.duration.FiniteDuration
-import cats.implicits._
+
+import scala.concurrent.duration._
 
 object PeriodicProcessRuntime {
   def apply[F[_]: Async: CaptureFuture: Capture: Monad](
@@ -29,32 +32,12 @@ class PeriodicProcessRuntime[F[_]: Async: CaptureFuture: Capture: Monad](
 
   private def source =
     Source
-      .single(())
-      .mapAsync(1) { _ =>
-        eachRefreshInterval(processCycle).unsafeRun
-      }
+      .tick(0.seconds, tickInterval, processCycle)
+      .mapAsync(1)(_.unsafeRun)
+      .mapMaterializedValue(_ => NotUsed)
 
-  private def eachRefreshInterval(f: F[Unit]): F[Unit] =
-    for {
-      _ <- f
-      _ <- afterRefreshInterval {
-            eachRefreshInterval(f)
-          }
-    } yield ()
+  def run(system: ActorSystem): F[DistributedProcessing.ProcessKillSwitch[F]] =
+    DistributedProcessing(system)
+      .start[F](s"$name-Process", Seq(AkkaStreamProcess[F](source, Flow[Unit])))
 
-  private def afterRefreshInterval[A](f: => F[A]): F[A] =
-    CaptureFuture[F].captureFuture {
-      val p = Promise[A]
-      materializer.scheduleOnce(tickInterval, new Runnable {
-        override def run(): Unit = {
-          p.completeWith(f.unsafeRun)
-          ()
-        }
-      })
-      p.future
-    }
-
-  def run(system: ActorSystem): F[StreamKillSwitch[F]] =
-    StreamSupervisor(system)
-      .startClusterSingleton(s"$name-Process", source, Flow[Unit])
 }

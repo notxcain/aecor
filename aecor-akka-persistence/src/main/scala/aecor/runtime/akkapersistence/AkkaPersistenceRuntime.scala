@@ -1,6 +1,5 @@
 package aecor.runtime.akkapersistence
 
-import aecor.aggregate._
 import aecor.data._
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime.CorrelatedCommand
@@ -9,11 +8,8 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
-import cats.data.{ Kleisli, Nested, StateT }
-import cats.implicits._
 import cats.{ Monad, ~> }
 
-import scala.collection.immutable.Seq
 import scala.concurrent.Future
 
 object AkkaPersistenceRuntime {
@@ -23,19 +19,6 @@ object AkkaPersistenceRuntime {
     new AkkaPersistenceRuntime(system)
 
   private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
-}
-
-final case class EventsourcedBehavior[F[_], Op[_], State, Event](
-  handler: Op ~> Handler[F, State, Seq[Event], ?],
-  folder: Folder[Folded, Event, State]
-)
-
-object EventsourcedBehavior {
-  type Handler[F[_], State, Event, A] = Kleisli[PairT[F, Seq[Event], ?], State, ?]
-  def Handler[F[_], State, Event, A](
-    f: State => PairT[F, Seq[Event], A]
-  ): Handler[F, State, Event, A] =
-    Kleisli[PairT[F, Seq[Event], ?], State, A](f)
 }
 
 class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {

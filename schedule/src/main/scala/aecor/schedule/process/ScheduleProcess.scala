@@ -3,9 +3,10 @@ package aecor.schedule.process
 import java.time._
 import java.time.temporal.ChronoUnit
 
+import aecor.data.{ ConsumerId, TagConsumerId }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ ScheduleAggregate, ScheduleEntryRepository }
-import aecor.streaming._
+import aecor.util.KeyValueStore
 import cats.Monad
 import cats.implicits._
 
@@ -15,7 +16,7 @@ object ScheduleProcess {
   def apply[F[_]: Monad](journal: ScheduleEventJournal[F],
                          dayZero: LocalDate,
                          consumerId: ConsumerId,
-                         offsetStore: OffsetStore[F, LocalDateTime],
+                         offsetStore: KeyValueStore[F, TagConsumerId, LocalDateTime],
                          eventualConsistencyDelay: FiniteDuration,
                          repository: ScheduleEntryRepository[F],
                          scheduleAggregate: ScheduleAggregate[F],
@@ -23,7 +24,9 @@ object ScheduleProcess {
                          parallelism: Int): F[Unit] = {
     val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
 
-    def updateRepository: F[Unit] =
+    val tagConsumerId = TagConsumerId(scheduleEntriesTag, consumerId)
+
+    val updateRepository: F[Unit] =
       journal.processNewEvents {
         case ScheduleEntryAdded(scheduleName, scheduleBucket, entryId, _, dueDate, _) =>
           repository
@@ -41,13 +44,13 @@ object ScheduleProcess {
             .fireEntry(entry.scheduleName, entry.scheduleBucket, entry.entryId)
       }
 
-    def loadOffset: F[LocalDateTime] =
+    val loadOffset: F[LocalDateTime] =
       offsetStore
-        .getOffset(scheduleEntriesTag, consumerId)
+        .getValue(tagConsumerId)
         .map(_.getOrElse(dayZero.atStartOfDay()))
 
     def saveOffset(value: LocalDateTime): F[Unit] =
-      offsetStore.setOffset(scheduleEntriesTag, consumerId, value)
+      offsetStore.setValue(tagConsumerId, value)
 
     for {
       _ <- updateRepository

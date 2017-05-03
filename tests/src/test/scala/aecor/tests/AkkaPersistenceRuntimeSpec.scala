@@ -41,9 +41,9 @@ class AkkaPersistenceRuntimeSpec
 
   val startRuntime = AkkaPersistenceRuntime[Task](system).start(
     "Counter",
-    CounterOpHandler[Task],
     CounterOp.correlation,
-    Tagging(CounterEvent.tag)
+    CounterOpHandler.behavior[Task],
+    Tagging.const(CounterEvent.tag)
   )
 
   test("Runtime should work") {

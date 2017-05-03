@@ -1,12 +1,11 @@
 package aecor.tests.e2e
-import aecor.aggregate.Folder
-import aecor.data.{ Correlation, EventTag, Handler }
+import aecor.data._
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
 import cats.implicits._
-import cats.{ Applicative, ~> }
+import cats.{ Applicative, Id, ~> }
 import io.circe.generic.auto._
 
 import scala.collection.immutable.Seq
@@ -35,7 +34,7 @@ object CounterEvent {
 
 case class CounterState(value: Long)
 object CounterState {
-  implicit def folder[F[_]: Applicative]: Folder[F, CounterEvent, CounterState] =
+  def folder[F[_]: Applicative]: Folder[F, CounterEvent, CounterState] =
     Folder.curried(CounterState(0)) {
       case CounterState(x) => {
         case CounterIncremented(_) => CounterState(x + 1).pure[F]
@@ -47,6 +46,9 @@ object CounterState {
 object CounterOpHandler {
   def apply[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?] =
     new CounterOpHandler[F]
+
+  def behavior[F[_]: Applicative]: EventsourcedBehavior[F, CounterOp, CounterState, CounterEvent] =
+    EventsourcedBehavior(apply[F], CounterState.folder[Folded])
 }
 
 class CounterOpHandler[F[_]: Applicative]

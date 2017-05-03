@@ -2,8 +2,9 @@ package aecor.runtime.akkapersistence
 
 import java.util.UUID
 
+import aecor.data.TagConsumerId
 import aecor.effect.{ Async, CaptureFuture }
-import aecor.streaming.{ ConsumerId, OffsetStore }
+import aecor.util.KeyValueStore
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import com.datastax.driver.core.Session
@@ -29,38 +30,37 @@ object CassandraOffsetStore {
     config: CassandraOffsetStore.Config
   )(implicit executionContext: ExecutionContext): CassandraOffsetStore[F] =
     new CassandraOffsetStore(session, config)
+
 }
 
 class CassandraOffsetStore[F[_]: Async: CaptureFuture](
   session: CassandraSession,
   config: CassandraOffsetStore.Config
 )(implicit executionContext: ExecutionContext)
-    extends OffsetStore[F, UUID] {
+    extends KeyValueStore[F, TagConsumerId, UUID] {
   private val selectOffsetStatement =
     session.prepare(config.selectOffsetQuery)
   private val updateOffsetStatement =
     session.prepare(config.updateOffsetQuery)
 
-  override def getOffset(tag: String, consumerId: ConsumerId): F[Option[UUID]] =
-    CaptureFuture[F].captureFuture {
-      selectOffsetStatement
-        .map(_.bind(consumerId.value, tag))
-        .flatMap(session.selectOne)
-        .map(_.map(_.getUUID("offset")))
-    }
-
-  override def setOffset(tag: String, consumerId: ConsumerId, offset: UUID): F[Unit] =
+  override def setValue(key: TagConsumerId, value: UUID): F[Unit] =
     CaptureFuture[F].captureFuture {
       updateOffsetStatement
         .map { stmt =>
           stmt
             .bind()
-            .setUUID("offset", offset)
-            .setString("tag", tag)
-            .setString("consumer_id", consumerId.value)
+            .setUUID("offset", value)
+            .setString("tag", key.tag)
+            .setString("consumer_id", key.consumerId.value)
         }
         .flatMap(session.executeWrite)
         .map(_ => ())
     }
 
+  override def getValue(key: TagConsumerId): F[Option[UUID]] = CaptureFuture[F].captureFuture {
+    selectOffsetStatement
+      .map(_.bind(key.consumerId.value, key.tag))
+      .flatMap(session.selectOne)
+      .map(_.map(_.getUUID("offset")))
+  }
 }

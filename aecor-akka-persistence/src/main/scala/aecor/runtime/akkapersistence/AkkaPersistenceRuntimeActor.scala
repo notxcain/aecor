@@ -5,8 +5,7 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 import java.util.UUID
 
-import aecor.aggregate.Folder
-import aecor.data.{ Folded, Handler, Tagging }
+import aecor.data._
 import aecor.effect.Async
 import aecor.effect.Async.ops._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
