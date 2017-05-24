@@ -42,9 +42,9 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
     dueDate: LocalDateTime
   ): Handler[F, ScheduleState, Seq[ScheduleEvent], Unit] =
     Handler { state =>
-      clock.map { c =>
-        val timestamp = c.toInstant
-        val now = c.toLocalDateTime
+      clock.map { zdt =>
+        val timestamp = zdt.toInstant
+        val now = zdt.toLocalDateTime
         if (state.unfired.get(entryId).isDefined || state.fired.contains(entryId)) {
           Vector.empty -> (())
         } else {

@@ -1,5 +1,6 @@
 package aecor.tests
 
+import aecor.data.EventsourcedBehavior
 import aecor.experimental.StateRuntime
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
@@ -11,7 +12,9 @@ import org.scalatest.{ FunSuite, Matchers }
 class StateRuntimeSpec extends FunSuite with Matchers {
 
   val sharedRuntime =
-    StateRuntime.shared[Id, CounterOp, CounterState, CounterEvent](CounterOpHandler[Id])
+    StateRuntime.shared[Either[Throwable, ?], CounterOp, CounterState, CounterEvent](
+      EventsourcedBehavior(CounterOpHandler[Either[Throwable, ?]], CounterState.folder)
+    )
 
   val correlatedRuntime =
     StateRuntime.correlate(sharedRuntime, CounterOp.correlation)
@@ -26,7 +29,7 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   test("Shared runtime should execute all commands against shared sequence of events") {
     val program = mkProgram(sharedRuntime)
 
-    val (state, result) = program.run(Vector.empty)
+    val Right((state, result)) = program.run(Vector.empty)
 
     state shouldBe Vector(
       CounterIncremented("1"),
@@ -41,7 +44,7 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   ) {
     val program = mkProgram(correlatedRuntime)
 
-    val (state, result) = program.run(Map.empty)
+    val Right((state, result)) = program.run(Map.empty)
 
     state shouldBe Map(
       "1" -> Vector(CounterIncremented("1"), CounterDecremented("1")),

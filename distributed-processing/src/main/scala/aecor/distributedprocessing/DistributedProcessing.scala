@@ -49,6 +49,7 @@ class DistributedProcessing(system: ActorSystem) {
         },
         extractShardId = {
           case KeepRunning(workerId) => (workerId % settings.numberOfShards).toString
+          case other => throw new IllegalArgumentException(s"Unexpected messge [$other]")
         }
       )
 

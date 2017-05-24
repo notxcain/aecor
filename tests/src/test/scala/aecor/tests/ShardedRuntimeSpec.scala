@@ -1,15 +1,15 @@
 package aecor.tests
 
-import aecor.data.Behavior
+import aecor.data.{ Behavior, EventsourcedBehavior }
 import aecor.effect.monix._
 import aecor.experimental.{ StateBehavior, StateRuntime }
 import aecor.runtime.akkageneric.GenericAkkaRuntime
-import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
+import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.implicits._
 import com.typesafe.config.{ Config, ConfigFactory }
-import monix.cats.monixToCatsMonad
+import monix.cats.{ monixToCatsMonad, monixToCatsMonadError }
 import monix.eval.Task
 import monix.execution.Scheduler
 import org.scalatest.concurrent.ScalaFutures
@@ -43,7 +43,7 @@ class ShardedRuntimeSpec
 
   val behavior: Behavior[Task, CounterOp] = StateBehavior(
     Vector.empty[CounterEvent].pure[Task],
-    StateRuntime.shared(CounterOpHandler[Task])
+    StateRuntime.shared(EventsourcedBehavior(CounterOpHandler[Task], CounterState.folder))
   )
 
   val startRuntime =

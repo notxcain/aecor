@@ -19,7 +19,7 @@ object GenericAkkaRuntime {
 }
 
 class GenericAkkaRuntime[F[_]: Async: CaptureFuture: Capture](system: ActorSystem) {
-  def start[Op[_]](entityName: String,
+  def start[Op[_]](typeName: String,
                    correlation: Correlation[Op],
                    behavior: Behavior[F, Op],
                    settings: GenericAkkaRuntimeSettings =
@@ -36,16 +36,19 @@ class GenericAkkaRuntime[F[_]: Async: CaptureFuture: Capture](system: ActorSyste
         val extractShardId: ShardRegion.ExtractShardId = {
           case CorrelatedCommand(entityId, _) =>
             (scala.math.abs(entityId.hashCode) % numberOfShards).toString
+          case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
         }
+
         val props = GenericAkkaRuntimeActor.props(behavior, settings.idleTimeout)
 
         val shardRegionRef = ClusterSharding(system).start(
-          typeName = entityName,
+          typeName = typeName,
           entityProps = props,
           settings = settings.clusterShardingSettings,
           extractEntityId = extractEntityId,
           extractShardId = extractShardId
         )
+
         implicit val timeout = Timeout(settings.askTimeout)
         new (Op ~> F) {
           override def apply[A](fa: Op[A]): F[A] = CaptureFuture[F].captureFuture {

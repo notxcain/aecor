@@ -4,36 +4,35 @@ import java.time.{ Clock, LocalDate, LocalDateTime }
 import java.util.UUID
 
 import aecor.data.ConsumerId
-import aecor.distributedprocessing.DistributedProcessing.RunningProcess
-import aecor.distributedprocessing.{ DistributedProcessing, AkkaStreamProcess }
+import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.Async.ops._
+import aecor.effect.monix._
 import aecor.effect.{ Async, Capture, CaptureFuture }
 import aecor.experimental.Eventsourced
 import aecor.runtime.akkapersistence.{ CassandraEventJournalQuery, CassandraOffsetStore }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
+import akka.NotUsed
 import akka.actor.ActorSystem
-import akka.pattern.after
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
-import cats.data.{ EitherT, Kleisli }
+import cats.data.EitherT
 import cats.implicits._
 import cats.{ Functor, Monad, MonadError }
-
-import scala.collection.immutable._
-import scala.concurrent.Future
+import monix.eval.Task
+import monix.execution.Scheduler
+import monix.cats._
+import scala.concurrent.Await
 import scala.concurrent.duration._
 object ScheduleApp extends App {
 
   implicit val system = ActorSystem("test")
   implicit val materializer = ActorMaterializer()
-
+  implicit val scheduler = Scheduler(materializer.executionContext)
   val clock = Clock.systemUTC()
-
-  import materializer.executionContext
 
   val offsetStoreConfig = CassandraOffsetStore.Config("aecor_example")
   val scheduleEntryRepositoryQueries =
@@ -94,12 +93,12 @@ object ScheduleApp extends App {
       _ <- runEventWatch[F](schedule)
     } yield ()
 
-  val app: EitherT[Kleisli[Future, Unit, ?], Eventsourced.BehaviorFailure, Unit] =
-    mkApp[EitherT[Kleisli[Future, Unit, ?], Eventsourced.BehaviorFailure, ?]]
+  val app: EitherT[Task, Eventsourced.BehaviorFailure, Unit] =
+    mkApp[EitherT[Task, Eventsourced.BehaviorFailure, ?]]
 
-  val processes = DistributedProcessing.distribute[Kleisli[Future, Unit, ?]](10) { x =>
-    AkkaStreamProcess[Kleisli[Future, Unit, ?]](
-      Source.tick(0.seconds, 2.seconds, x),
+  val processes = DistributedProcessing.distribute[Task](10) { x =>
+    AkkaStreamProcess[Task](
+      Source.tick(0.seconds, 2.seconds, x).mapMaterializedValue(_ => NotUsed),
       Flow[Int].map { x =>
         system.log.info(s"Worker $x")
         ()
@@ -108,17 +107,16 @@ object ScheduleApp extends App {
   }
 
   val distributed = DistributedProcessing(system)
-    .start[Kleisli[Future, Unit, ?]]("TestProcesses", processes)
+    .start[Task]("TestProcesses", processes)
 
-  val app2: Kleisli[Future, Unit, Unit] = for {
+  val app2: Task[Unit] = for {
     killswtich <- distributed
-    x <- Kleisli((_: Unit) => after(10.seconds, system.scheduler)(killswtich.shutdown.run(())))
+    x <- killswtich.shutdown.delayExecution(10.seconds)
     _ <- {
       system.log.info(s"$x")
       app2
     }
   } yield ()
 
-  app2.run(())
-
+  Await.result(app.value.runAsync, Duration.Inf)
 }

@@ -11,10 +11,12 @@ class PersistentReprSerializer(val system: ExtendedActorSystem)
 
   override def toBinary(o: AnyRef): Array[Byte] = o match {
     case pr: PersistentRepr => pr.payload
+    case x => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
   }
 
   override def manifest(o: AnyRef): String = o match {
     case pr: PersistentRepr => pr.manifest
+    case x => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
   }
 
   override def fromBinary(bytes: Array[Byte], manifest: String): AnyRef =

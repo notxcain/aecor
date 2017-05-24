@@ -6,13 +6,11 @@ object Correlation {
 object CorrelationId {
   def composite(separator: String,
                 firstComponent: String,
+                secondComponent: String,
                 otherComponents: String*): CorrelationId = {
     val replacement = s"\\$separator"
-    val builder = new StringBuilder(firstComponent.replace(separator, replacement))
-    otherComponents.foreach { component =>
-      builder.append(separator)
-      builder.append(component.replace(separator, replacement))
-    }
-    builder.result()
+    (firstComponent +: secondComponent +: otherComponents)
+      .map(_.replace(separator, replacement))
+      .mkString(separator)
   }
 }

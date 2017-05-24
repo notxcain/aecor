@@ -50,6 +50,7 @@ class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system:
     def extractShardId: ShardRegion.ExtractShardId = {
       case CorrelatedCommand(entityId, _) =>
         (scala.math.abs(entityId.hashCode) % numberOfShards).toString
+      case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
     }
 
     def startShardRegion = ClusterSharding(system).start(

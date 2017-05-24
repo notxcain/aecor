@@ -7,10 +7,10 @@ import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, Persiste
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.{ EventEnvelope2, NoOffset, PersistenceQuery, TimeBasedUUID }
+import akka.persistence.query._
 import akka.stream.scaladsl.Source
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.Future
 
 class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, parallelism: Int)
     extends EventJournalQuery[UUID, E] {
@@ -19,11 +19,11 @@ class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, para
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
   private def createSource(
-    inner: Source[EventEnvelope2, NotUsed]
+    inner: Source[EventEnvelope, NotUsed]
   ): Source[JournalEntry[UUID, E], NotUsed] =
     inner.mapAsync(parallelism) {
-      case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
-        eventOffset match {
+      case EventEnvelope(offset, persistenceId, sequenceNr, event) =>
+        offset match {
           case TimeBasedUUID(offsetValue) =>
             event match {
               case repr: PersistentRepr =>

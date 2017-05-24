@@ -146,7 +146,7 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
       throw new IllegalStateException(s"Unexpected message during recovery [$other]")
   }
 
-  final override def receiveCommand: Receive = {
+  override def receiveCommand: Receive = {
     case HandleCommand(command) =>
       handleCommand(command.asInstanceOf[Op[_]])
     case ReceiveTimeout =>

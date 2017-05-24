@@ -2,7 +2,7 @@ package aecor.tests
 
 import java.time._
 
-import aecor.data.{ ConsumerId, EventTag, TagConsumerId, Tagging }
+import aecor.data._
 import aecor.effect.Capture
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
@@ -45,11 +45,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def counterEventJournal =
     mkJournal[CounterEvent](_.counterJournalState, (x, a) => x.copy(counterJournalState = a))
 
-  def counterBehavior: ~>[CounterOp, StateT[SpecF, SpecState, ?]] =
-    mkBehavior(
-      "Counter",
-      CounterOp.correlation,
+  def counterBehavior =
+    mkBehavior[CounterOp, CounterState, CounterEvent](
       CounterOpHandler.behavior[StateT[SpecF, SpecState, ?]],
+      _.id,
       Tagging.const(CounterEvent.tag),
       counterEventJournal
     )
@@ -62,9 +61,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   def notificationBehavior =
     mkBehavior(
-      "Notification",
-      NotificationOp.correlation,
       notification.behavior,
+      NotificationOp.correlation,
       Tagging.const(NotificationEvent.tag),
       notificationEventJournal
     )
@@ -72,10 +70,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def schduleEventJournal =
     mkJournal[ScheduleEvent](_.scheduleJournalState, (x, a) => x.copy(scheduleJournalState = a))
 
-  val scheduleAggregate = mkBehavior(
-    "Schedule",
-    DefaultScheduleAggregate.correlation,
+  val scheduleAggregate = mkBehavior[ScheduleOp, ScheduleState, ScheduleEvent](
     DefaultScheduleAggregate.behavior(clock.zonedDateTime(ZoneOffset.UTC)),
+    DefaultScheduleAggregate.correlation,
     Tagging.const(EventTag[ScheduleEvent]("Schedule")),
     schduleEventJournal
   )
@@ -151,7 +148,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       _ <- counter(Increment("2"))
     } yield ()
 
-    val (state, _) = program
+    val Right((state, _)) = program
       .run(
         SpecState(
           TestEventJournalState.init,
@@ -165,12 +162,11 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       )
       .value
       .value
-      .right
-      .get
 
     state.counterViewState.value shouldBe Map("1" -> 1L, "2" -> 2L)
+
     state.notificationJournalState.eventsById
-      .getOrElse("Notification-1-2", Vector.empty) should have size (2)
+      .getOrElse("1-2", Vector.empty) should have size (2)
   }
 
   test("Schedule should fire") {
@@ -191,7 +187,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
             }
       } yield ()
 
-    val (state, _) = program(100)
+    val Right((state, _)) = program(100)
       .run(
         SpecState(
           TestEventJournalState.init,
@@ -205,10 +201,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       )
       .value
       .value
-      .right
-      .get
 
-    println(state)
     state.scheduleEntries.exists(e => e.entryId == "e1" && e.fired) shouldBe true
     state.scheduleEntries.exists(e => e.entryId == "e2" && e.fired) shouldBe true
   }

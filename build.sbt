@@ -1,22 +1,24 @@
 import ReleaseTransformations._
 import sbtrelease.Version.Bump
 
-lazy val buildSettings = Seq(
-  organization := "io.aecor",
-  scalaVersion := "2.11.8",
-  scalaOrganization := "org.typelevel",
-  crossScalaVersions := Seq("2.11.8", "2.12.0")
+lazy val buildSettings = inThisBuild(
+  Seq(
+    organization := "io.aecor",
+    scalaVersion := "2.11.11-bin-typelevel-4",
+    scalaOrganization := "org.typelevel",
+    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.2-bin-typelevel-4")
+  )
 )
 
-lazy val akkaVersion = "2.4.17"
-lazy val akkaPersistenceCassandra = "0.25"
+lazy val akkaVersion = "2.5.1"
+lazy val akkaPersistenceCassandra = "0.53"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 
-lazy val monixVersion = "2.2.1"
-lazy val fs2Version = "0.9.4"
+lazy val monixVersion = "2.3.0"
+lazy val fs2Version = "0.9.6"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
@@ -25,11 +27,19 @@ lazy val kindProjectorVersion = "0.9.3"
 lazy val paradiseVersion = "2.1.0"
 lazy val simulacrumVersion = "0.10.0"
 
+// Example dependencies
+
+lazy val circeVersion = "0.8.0"
+lazy val akkaHttpVersion = "10.0.5"
+lazy val akkaHttpJsonVersion = "1.16.0"
+lazy val scalametaParadiseVersion = "3.0.0-M8"
+lazy val akkaKryoVersion = "0.5.0"
+lazy val liberatorVersion = "0.4.2"
+
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   libraryDependencies ++= Seq(
-    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
-    compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
+    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion)
   ),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
@@ -148,6 +158,7 @@ lazy val example = project
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
+    compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.patch),
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
@@ -175,7 +186,7 @@ lazy val akkaPersistenceSettings = Seq(
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra
   )
 )
@@ -194,19 +205,19 @@ lazy val effectMonixSettings = Seq(
 lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-core" % fs2Version))
 
 lazy val exampleSettings = {
-  val circeVersion = "0.7.0"
-  val akkaHttpVersion = "10.0.3"
-  val akkaHttpJsonVersion = "1.11.0"
   Seq(
     resolvers ++= Seq(
       Resolver.bintrayRepo("projectseptemberinc", "maven"),
       Resolver.sonatypeRepo("releases")
     ),
+    sources in (Compile, doc) := Nil,
     libraryDependencies ++=
       Seq(
-        compilerPlugin("org.scalameta" % "paradise" % "3.0.0-M7" cross CrossVersion.full),
-        "com.github.romix.akka" %% "akka-kryo-serialization" % "0.5.0",
-        "io.aecor" %% "liberator" % "0.3.0",
+        compilerPlugin(
+          "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
+        ),
+        "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion,
+        "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-cats" % monixVersion,
         "io.monix" %% "monix-reactive" % monixVersion,

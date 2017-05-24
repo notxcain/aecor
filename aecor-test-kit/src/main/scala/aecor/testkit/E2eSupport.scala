@@ -23,16 +23,14 @@ trait E2eSupport {
     TestEventJournal[SpecF, SpecState, E](extract, update)
 
   final def mkBehavior[Op[_], S, E](
-    name: String,
-    correlation: Correlation[Op],
     behavior: EventsourcedBehavior[StateT[SpecF, SpecState, ?], Op, S, E],
+    correlation: Correlation[Op],
     tagging: Tagging[E],
     journal: TestEventJournal[SpecF, SpecState, E]
   ): Op ~> StateT[SpecF, SpecState, ?] =
     new (Op ~> StateT[SpecF, SpecState, ?]) {
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
         Eventsourced(
-          name,
           correlation,
           behavior,
           tagging,

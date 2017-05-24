@@ -5,7 +5,7 @@ import aecor.data.{ Correlation, EventsourcedBehavior, Folder, Handler }
 import aecor.experimental.Eventsourced.BehaviorFailure
 import cats.data._
 import cats.implicits._
-import cats.{ Monad, ~> }
+import cats.{ Monad, MonadError, ~> }
 
 import scala.collection.immutable.Seq
 
@@ -18,23 +18,25 @@ object StateRuntime {
     * i.e. all operations are executed against common sequence of events
     *
     */
-  def shared[F[_]: Monad, Op[_], S, E](
+  def shared[F[_], Op[_], S, E](
     evensourcedBehavior: EventsourcedBehavior[F, Op, S, E]
-  ): Op ~> StateT[EitherT[F, BehaviorFailure, ?], Vector[E], ?] =
-    new (Op ~> StateT[EitherT[F, BehaviorFailure, ?], Vector[E], ?]) {
-      override def apply[A](op: Op[A]): StateT[EitherT[F, BehaviorFailure, ?], Vector[E], A] =
+  )(implicit F: MonadError[F, Throwable]): Op ~> StateT[F, Vector[E], ?] =
+    new (Op ~> StateT[F, Vector[E], ?]) {
+      override def apply[A](op: Op[A]): StateT[F, Vector[E], A] =
         for {
-          events <- StateT.get[EitherT[F, BehaviorFailure, ?], Vector[E]]
+          events <- StateT.get[F, Vector[E]]
           foldedState = evensourcedBehavior.folder.consume(events)
           result <- foldedState match {
                      case Next(state) =>
-                       val (es, r) = evensourcedBehavior.handler(op).run(state)
-                       StateT
-                         .modify[EitherT[F, BehaviorFailure, ?], Vector[E]](_ ++ es)
-                         .map(_ => r)
+                       StateT.lift(evensourcedBehavior.handler(op).run(state)).flatMap {
+                         case (es, r) =>
+                           StateT
+                             .modify[F, Vector[E]](_ ++ es)
+                             .map(_ => r)
+                       }
                      case Impossible =>
-                       StateT.lift[EitherT[F, BehaviorFailure, ?], Vector[E], A](
-                         EitherT.left(BehaviorFailure.illegalFold("unknown").pure[F])
+                       StateT.lift[F, Vector[E], A](
+                         F.raiseError(BehaviorFailure.illegalFold("unknown"))
                        )
                    }
 

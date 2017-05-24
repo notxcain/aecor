@@ -17,4 +17,6 @@ trait AnyValCirceEncoding {
 
 object AnyValCirceEncoding extends AnyValCirceEncoding
 
-object CirceSupport extends de.heikoseeberger.akkahttpcirce.CirceSupport with AnyValCirceEncoding
+object CirceSupport
+    extends de.heikoseeberger.akkahttpcirce.FailFastCirceSupport
+    with AnyValCirceEncoding
