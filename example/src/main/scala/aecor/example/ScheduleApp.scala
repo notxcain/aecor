@@ -8,7 +8,6 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.Async.ops._
 import aecor.effect.monix._
 import aecor.effect.{ Async, Capture, CaptureFuture }
-import aecor.experimental.Eventsourced
 import aecor.runtime.akkapersistence.{ CassandraEventJournalQuery, CassandraOffsetStore }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import akka.NotUsed
@@ -19,9 +18,8 @@ import akka.persistence.cassandra.{
 }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
-import cats.data.EitherT
 import cats.implicits._
-import cats.{ Functor, Monad, MonadError }
+import cats.{ Functor, Monad }
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.cats._
@@ -85,16 +83,15 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def mkApp[F[_]: Async: CaptureFuture: Capture: MonadError[?[_], Eventsourced.BehaviorFailure]]
-    : F[Unit] =
+  def mkApp[F[_]: Async: CaptureFuture: Capture: Monad]: F[Unit] =
     for {
       schedule <- runSchedule[F]
       _ <- runAdder[F](schedule)
       _ <- runEventWatch[F](schedule)
     } yield ()
 
-  val app: EitherT[Task, Eventsourced.BehaviorFailure, Unit] =
-    mkApp[EitherT[Task, Eventsourced.BehaviorFailure, ?]]
+  val app: Task[Unit] =
+    mkApp[Task]
 
   val processes = DistributedProcessing.distribute[Task](10) { x =>
     AkkaStreamProcess[Task](
@@ -118,5 +115,5 @@ object ScheduleApp extends App {
     }
   } yield ()
 
-  Await.result(app.value.runAsync, Duration.Inf)
+  Await.result(app.runAsync, Duration.Inf)
 }

@@ -119,16 +119,10 @@ lazy val effectFs2 = project
   .settings(aecorSettings)
   .settings(effectFs2Settings)
 
-lazy val experimental = project
-  .in(file("aecor-experimental"))
-  .settings(moduleName := "aecor-experimental", name := "Aecor Experimental")
-  .dependsOn(core)
-  .settings(aecorSettings)
-
 lazy val testKit = project
   .in(file("aecor-test-kit"))
   .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
-  .dependsOn(core, experimental)
+  .dependsOn(core)
   .settings(aecorSettings)
 
 lazy val tests = project
@@ -140,7 +134,6 @@ lazy val tests = project
     effectFs2,
     testKit,
     akkaPersistence,
-    experimental,
     distributedProcessing,
     akkaGeneric
   )
@@ -150,7 +143,7 @@ lazy val tests = project
   .settings(testingSettings)
 
 lazy val example = project
-  .dependsOn(core, schedule, effectMonix, distributedProcessing, experimental)
+  .dependsOn(core, schedule, effectMonix, distributedProcessing)
   .settings(moduleName := "aecor-example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -263,7 +256,7 @@ lazy val commonScalacOptions = Seq(
   "-Ywarn-dead-code",
   "-Ywarn-numeric-widen",
   "-Ywarn-value-discard",
-//  "-Ywarn-unused-import",
+  "-Ywarn-unused-import",
   "-Ypartial-unification"
 )
 

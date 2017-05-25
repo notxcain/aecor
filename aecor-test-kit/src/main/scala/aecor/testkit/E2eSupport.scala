@@ -1,11 +1,7 @@
 package aecor.testkit
 
-import java.util.UUID
-
 import aecor.data._
-import aecor.experimental.Eventsourced
-import aecor.experimental.Eventsourced.{ BehaviorFailure, RunningState }
-import aecor.testkit.TestEventJournal.TestEventJournalState
+import aecor.testkit.Eventsourced.{ BehaviorFailure, RunningState }
 import aecor.util.NoopKeyValueStore
 import cats.data.{ EitherT, StateT }
 import cats.implicits._
@@ -17,25 +13,24 @@ trait E2eSupport {
   final type SpecF[A] = EitherT[Eval, BehaviorFailure, A]
   type SpecState
   final def mkJournal[E](
-    extract: SpecState => TestEventJournalState[E],
-    update: (SpecState, TestEventJournalState[E]) => SpecState
-  ): TestEventJournal[SpecF, SpecState, E] =
-    TestEventJournal[SpecF, SpecState, E](extract, update)
+    extract: SpecState => StateEventJournal.State[E],
+    update: (SpecState, StateEventJournal.State[E]) => SpecState
+  ): StateEventJournal[SpecF, SpecState, E] =
+    StateEventJournal[SpecF, SpecState, E](extract, update)
 
   final def mkBehavior[Op[_], S, E](
     behavior: EventsourcedBehavior[StateT[SpecF, SpecState, ?], Op, S, E],
     correlation: Correlation[Op],
     tagging: Tagging[E],
-    journal: TestEventJournal[SpecF, SpecState, E]
+    journal: StateEventJournal[SpecF, SpecState, E]
   ): Op ~> StateT[SpecF, SpecState, ?] =
     new (Op ~> StateT[SpecF, SpecState, ?]) {
       override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
-        Eventsourced(
+        Eventsourced[StateT[SpecF, SpecState, ?], Op, S, E](
           correlation,
           behavior,
           tagging,
           journal,
-          StateT.inspect[SpecF, SpecState, UUID](_ => UUID.randomUUID()),
           Option.empty,
           NoopKeyValueStore[StateT[SpecF, SpecState, ?], String, RunningState[S]]
         ).run(fa)

@@ -6,9 +6,9 @@ sealed abstract class Tagging[A] {
 
 object Tagging {
 
-  def const[A](tag1: EventTag[A]): Tagging[A] =
+  def const[A](tag: EventTag[A]): Tagging[A] =
     new Tagging[A] {
-      override def apply(e: A): Set[EventTag[A]] = Set(tag1)
+      override def apply(e: A): Set[EventTag[A]] = Set(tag)
     }
 
   def dynamic[A](f: A => EventTag[A]): Tagging[A] =

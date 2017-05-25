@@ -1,13 +1,10 @@
-package aecor.experimental
+package aecor.testkit
 
 import aecor.data.Folded.{ Impossible, Next }
-import aecor.data.{ Correlation, EventsourcedBehavior, Folder, Handler }
-import aecor.experimental.Eventsourced.BehaviorFailure
+import aecor.data.{ Correlation, EventsourcedBehavior }
 import cats.data._
 import cats.implicits._
-import cats.{ Monad, MonadError, ~> }
-
-import scala.collection.immutable.Seq
+import cats.{ Functor, MonadError, ~> }
 
 object StateRuntime {
 
@@ -19,16 +16,16 @@ object StateRuntime {
     *
     */
   def shared[F[_], Op[_], S, E](
-    evensourcedBehavior: EventsourcedBehavior[F, Op, S, E]
+    behavior: EventsourcedBehavior[F, Op, S, E]
   )(implicit F: MonadError[F, Throwable]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
       override def apply[A](op: Op[A]): StateT[F, Vector[E], A] =
         for {
           events <- StateT.get[F, Vector[E]]
-          foldedState = evensourcedBehavior.folder.consume(events)
+          foldedState = behavior.folder.consume(events)
           result <- foldedState match {
                      case Next(state) =>
-                       StateT.lift(evensourcedBehavior.handler(op).run(state)).flatMap {
+                       StateT.lift(behavior.handler(op).run(state)).flatMap {
                          case (es, r) =>
                            StateT
                              .modify[F, Vector[E]](_ ++ es)
@@ -36,7 +33,7 @@ object StateRuntime {
                        }
                      case Impossible =>
                        StateT.lift[F, Vector[E], A](
-                         F.raiseError(BehaviorFailure.illegalFold("unknown"))
+                         F.raiseError(new IllegalStateException(s"Failed to fold $events"))
                        )
                    }
 
@@ -51,7 +48,7 @@ object StateRuntime {
     * sequence of events
     *
     */
-  def correlate[F[_]: Monad, O[_], E](
+  def correlate[F[_]: Functor, O[_], E](
     behavior: O ~> StateT[F, Vector[E], ?],
     correlation: Correlation[O]
   ): O ~> StateT[F, Map[String, Vector[E]], ?] =

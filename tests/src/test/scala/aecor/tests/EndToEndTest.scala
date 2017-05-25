@@ -7,8 +7,8 @@ import aecor.effect.Capture
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
-import aecor.testkit.TestEventJournal.TestEventJournalState
-import aecor.testkit.{ E2eSupport, StateClock, StateKeyValueStore }
+import aecor.testkit.StateEventJournal.State
+import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueStore }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
 import aecor.tests.e2e._
@@ -26,9 +26,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def instant[F[_]: Capture]: F[Instant] =
     Capture[F].capture(Instant.ofEpochMilli(System.currentTimeMillis()))
 
-  case class SpecState(counterJournalState: TestEventJournalState[CounterEvent],
-                       notificationJournalState: TestEventJournalState[NotificationEvent],
-                       scheduleJournalState: TestEventJournalState[ScheduleEvent],
+  case class SpecState(counterJournalState: StateEventJournal.State[CounterEvent],
+                       notificationJournalState: StateEventJournal.State[NotificationEvent],
+                       scheduleJournalState: StateEventJournal.State[ScheduleEvent],
                        counterViewState: TestCounterViewRepositoryState,
                        time: Instant,
                        scheduleEntries: Vector[ScheduleEntry],
@@ -151,9 +151,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     val Right((state, _)) = program
       .run(
         SpecState(
-          TestEventJournalState.init,
-          TestEventJournalState.init,
-          TestEventJournalState.init,
+          State.init,
+          State.init,
+          State.init,
           TestCounterViewRepositoryState.init,
           Instant.now(),
           Vector.empty,
@@ -190,9 +190,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     val Right((state, _)) = program(100)
       .run(
         SpecState(
-          TestEventJournalState.init,
-          TestEventJournalState.init,
-          TestEventJournalState.init,
+          State.init,
+          State.init,
+          State.init,
           TestCounterViewRepositoryState.init,
           Instant.now(Clock.systemUTC()),
           Vector.empty,

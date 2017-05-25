@@ -36,15 +36,15 @@ class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, para
                   .fold(Future.failed, Future.successful)
               case other =>
                 Future.failed(
-                  new RuntimeException(
-                    s"Unexpected persistent representation $other at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId]"
+                  new IllegalArgumentException(
+                    s"Unexpected persistent representation [$other] at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId]"
                   )
                 )
             }
           case other =>
             Future.failed(
-              new RuntimeException(
-                s"Unexpected offset of type ${other.getClass} at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId]"
+              new IllegalArgumentException(
+                s"Unexpected offset of type [${other.getClass}] at sequenceNr = [$sequenceNr], persistenceId = [$persistenceId]"
               )
             )
         }
@@ -66,6 +66,7 @@ class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, para
 }
 
 object CassandraEventJournalQuery {
-  def apply[E: PersistentDecoder](system: ActorSystem): EventJournalQuery[UUID, E] =
-    new CassandraEventJournalQuery(system, 8)
+  def apply[E: PersistentDecoder](system: ActorSystem,
+                                  decodingParallelism: Int = 8): EventJournalQuery[UUID, E] =
+    new CassandraEventJournalQuery(system, decodingParallelism)
 }

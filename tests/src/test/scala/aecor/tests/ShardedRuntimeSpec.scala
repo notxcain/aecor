@@ -2,8 +2,8 @@ package aecor.tests
 
 import aecor.data.{ Behavior, EventsourcedBehavior }
 import aecor.effect.monix._
-import aecor.experimental.{ StateBehavior, StateRuntime }
 import aecor.runtime.akkageneric.GenericAkkaRuntime
+import aecor.testkit.StateRuntime
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -41,8 +41,8 @@ class ShardedRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val behavior: Behavior[Task, CounterOp] = StateBehavior(
-    Vector.empty[CounterEvent].pure[Task],
+  val behavior: Behavior[Task, CounterOp] = Behavior.fromState(
+    Vector.empty[CounterEvent],
     StateRuntime.shared(EventsourcedBehavior(CounterOpHandler[Task], CounterState.folder))
   )
 

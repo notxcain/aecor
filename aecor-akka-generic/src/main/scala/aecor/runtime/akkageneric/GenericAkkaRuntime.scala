@@ -7,8 +7,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
-import cats.implicits._
-import cats.{ Functor, ~> }
+import cats.~>
 
 import scala.concurrent.Future
 
