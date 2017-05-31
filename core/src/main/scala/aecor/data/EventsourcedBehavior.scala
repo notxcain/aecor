@@ -5,7 +5,7 @@ import cats.~>
 import scala.collection.immutable.Seq
 
 final case class EventsourcedBehavior[F[_], Op[_], State, Event](
-  handler: Op ~> Handler[F, State, Seq[Event], ?],
+  handler: Op ~> Handler[F, State, Event, ?],
   folder: Folder[Folded, Event, State]
 )
 

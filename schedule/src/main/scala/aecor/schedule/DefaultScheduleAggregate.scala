@@ -11,13 +11,11 @@ import aecor.schedule.protobuf.ScheduleEventCodec
 import cats.Functor
 import cats.implicits._
 
-import scala.collection.immutable.Seq
-
 object DefaultScheduleAggregate {
 
   def apply[F[_]: Functor](
     clock: F[ZonedDateTime]
-  ): ScheduleAggregate[Handler[F, ScheduleState, Seq[ScheduleEvent], ?]] =
+  ): ScheduleAggregate[Handler[F, ScheduleState, ScheduleEvent, ?]] =
     new DefaultScheduleAggregate(clock)
 
   def correlation: Correlation[ScheduleOp] =
@@ -31,7 +29,7 @@ object DefaultScheduleAggregate {
 }
 
 class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
-    extends ScheduleAggregate[Handler[F, ScheduleState, Seq[ScheduleEvent], ?]] {
+    extends ScheduleAggregate[Handler[F, ScheduleState, ScheduleEvent, ?]] {
 
   override def addScheduleEntry(
     scheduleName: String,
@@ -39,7 +37,7 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
     entryId: String,
     correlationId: CorrelationId,
     dueDate: LocalDateTime
-  ): Handler[F, ScheduleState, Seq[ScheduleEvent], Unit] =
+  ): Handler[F, ScheduleState, ScheduleEvent, Unit] =
     Handler { state =>
       clock.map { zdt =>
         val timestamp = zdt.toInstant
@@ -70,7 +68,7 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
     }
   override def fireEntry(scheduleName: String,
                          scheduleBucket: String,
-                         entryId: String): Handler[F, ScheduleState, Seq[ScheduleEvent], Unit] =
+                         entryId: String): Handler[F, ScheduleState, ScheduleEvent, Unit] =
     Handler { state =>
       clock.map(_.toInstant).map { timestamp =>
         state

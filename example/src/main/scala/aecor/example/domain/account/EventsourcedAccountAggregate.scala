@@ -12,13 +12,13 @@ import cats.implicits._
 import scala.collection.immutable._
 
 class EventsourcedAccountAggregate[F[_]: Applicative]
-    extends AccountAggregate[Handler[F, Option[Account], Seq[AccountEvent], ?]] {
+    extends AccountAggregate[Handler[F, Option[Account], AccountEvent, ?]] {
 
   private def handle: Handler.MkLift[F, Option[Account]] = Handler.lift[F, Option[Account]]
 
   override def openAccount(
     accountId: AccountId
-  ): Handler[F, Option[Account], Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]] =
+  ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
     handle {
       case None => Seq(AccountOpened(accountId, 0)) -> ().asRight
       case Some(x) => Seq.empty -> AccountAggregate.AccountExists.asLeft
@@ -28,7 +28,7 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
     accountId: AccountId,
     transactionId: AccountTransactionId,
     amount: Amount
-  ): Handler[F, Option[Account], Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]] =
+  ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
     handle {
       case Some(account) =>
         if (account.processedTransactions.contains(transactionId)) {
@@ -44,7 +44,7 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
     accountId: AccountId,
     transactionId: AccountTransactionId,
     amount: Amount
-  ): Handler[F, Option[Account], Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]] =
+  ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
     handle {
       case Some(account) =>
         if (account.processedTransactions.contains(transactionId)) {

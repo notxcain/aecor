@@ -33,7 +33,7 @@ lazy val circeVersion = "0.8.0"
 lazy val akkaHttpVersion = "10.0.5"
 lazy val akkaHttpJsonVersion = "1.16.0"
 lazy val scalametaParadiseVersion = "3.0.0-M8"
-lazy val akkaKryoVersion = "0.5.0"
+lazy val akkaKryoVersion = "0.5.2"
 lazy val liberatorVersion = "0.4.2"
 
 lazy val commonSettings = Seq(

@@ -15,11 +15,7 @@ import aecor.example.domain.transaction.{
   TransactionAggregate,
   TransactionEvent
 }
-import aecor.runtime.akkapersistence.{
-  AkkaPersistenceRuntime2,
-  CassandraEventJournalQuery,
-  CassandraOffsetStore
-}
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime2, CassandraOffsetStore }
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.http.scaladsl.Http
@@ -29,19 +25,12 @@ import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.scaladsl.Flow
 import akka.stream.{ ActorMaterializer, Materializer }
 import com.typesafe.config.ConfigFactory
-import io.aecor.liberator.Extract
-import io.aecor.liberator.data.ProductKK
 import monix.cats._
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
-import shapeless.Lazy
 
 object App {
   def main(args: Array[String]): Unit = {
-    implicit def liberatorRightExtractInstance[F[_[_]], G[_[_]], H[_[_]]](
-      implicit extract: Lazy[Extract[G, F]]
-    ): Extract[ProductKK[H, G, ?[_]], F] =
-      Extract.liberatorRightExtractInstance(extract.value)
 
     val config = ConfigFactory.load()
     implicit val system: ActorSystem = ActorSystem(config.getString("cluster.system-name"))
@@ -94,9 +83,6 @@ object App {
 
       val process: (Input) => Task[Unit] =
         TransactionProcess(transactions, accounts, failure)
-
-      val transactionEventJournal =
-        CassandraEventJournalQuery[TransactionEvent](system)
 
       val processes =
         DistributedProcessing.distribute[Task](20) { i =>

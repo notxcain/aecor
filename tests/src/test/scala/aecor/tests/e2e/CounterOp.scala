@@ -44,7 +44,7 @@ object CounterState {
 }
 
 object CounterOpHandler {
-  def apply[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?] =
+  def apply[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, CounterEvent, ?] =
     new CounterOpHandler[F]
 
   def behavior[F[_]: Applicative]: EventsourcedBehavior[F, CounterOp, CounterState, CounterEvent] =
@@ -52,8 +52,8 @@ object CounterOpHandler {
 }
 
 class CounterOpHandler[F[_]: Applicative]
-    extends (CounterOp ~> Handler[F, CounterState, Seq[CounterEvent], ?]) {
-  override def apply[A](fa: CounterOp[A]): Handler[F, CounterState, Seq[CounterEvent], A] =
+    extends (CounterOp ~> Handler[F, CounterState, CounterEvent, ?]) {
+  override def apply[A](fa: CounterOp[A]): Handler[F, CounterState, CounterEvent, A] =
     fa match {
       case Increment(id) =>
         Handler.lift { x =>

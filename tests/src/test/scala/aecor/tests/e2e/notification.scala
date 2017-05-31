@@ -41,10 +41,10 @@ object notification {
   }
 
   def notificationOpHandler[F[_]: Applicative] =
-    new (NotificationOp ~> Handler[F, NotificationState, Seq[NotificationEvent], ?]) {
+    new (NotificationOp ~> Handler[F, NotificationState, NotificationEvent, ?]) {
       override def apply[A](
         fa: NotificationOp[A]
-      ): Handler[F, NotificationState, Seq[NotificationEvent], A] =
+      ): Handler[F, NotificationState, NotificationEvent, A] =
         fa match {
           case CreateNotification(nid, cid) =>
             Handler.lift { _ =>

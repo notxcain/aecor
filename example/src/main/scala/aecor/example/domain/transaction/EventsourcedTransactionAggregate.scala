@@ -24,7 +24,7 @@ import cats.implicits._
 import scala.collection.immutable._
 
 class EventsourcedTransactionAggregate[F[_]: Applicative]
-    extends TransactionAggregate[Handler[F, Option[Transaction], Seq[TransactionEvent], ?]] {
+    extends TransactionAggregate[Handler[F, Option[Transaction], TransactionEvent, ?]] {
   private def handle = Handler.lift[F, Option[Transaction]]
 
   override def createTransaction(
@@ -32,7 +32,7 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
     fromAccountId: From[AccountId],
     toAccountId: To[AccountId],
     amount: Amount
-  ): Handler[F, Option[Transaction], Seq[TransactionEvent], Unit] =
+  ): Handler[F, Option[Transaction], TransactionEvent, Unit] =
     handle {
       case None =>
         Seq(TransactionEvent.TransactionCreated(transactionId, fromAccountId, toAccountId, amount)) -> (())
@@ -41,7 +41,7 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
 
   override def authorizeTransaction(
     transactionId: TransactionId
-  ): Handler[F, Option[Transaction], Seq[TransactionEvent], Either[String, Unit]] =
+  ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
     handle {
       case Some(transaction) =>
         if (transaction.status == Requested) {
@@ -58,7 +58,7 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
   override def failTransaction(
     transactionId: TransactionId,
     reason: String
-  ): Handler[F, Option[Transaction], Seq[TransactionEvent], Either[String, Unit]] =
+  ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
     handle {
       case Some(transaction) =>
         if (transaction.status == Failed) {
@@ -72,7 +72,7 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
 
   override def succeedTransaction(
     transactionId: TransactionId
-  ): Handler[F, Option[Transaction], Seq[TransactionEvent], Either[String, Unit]] =
+  ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
     handle {
       case Some(transaction) =>
         if (transaction.status == Succeeded) {
@@ -88,7 +88,7 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
 
   override def getTransactionInfo(
     transactionId: TransactionId
-  ): Handler[F, Option[Transaction], Seq[TransactionEvent], Option[TransactionInfo]] =
+  ): Handler[F, Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
     handle(
       s =>
         Seq.empty -> s.map {
