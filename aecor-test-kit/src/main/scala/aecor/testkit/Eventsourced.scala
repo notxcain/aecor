@@ -1,14 +1,12 @@
 package aecor.testkit
 
-import java.util.UUID
-
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
 import aecor.util.KeyValueStore
 import akka.cluster.sharding.ShardRegion.EntityId
 import cats.data.{ NonEmptyVector, StateT }
 import cats.implicits._
-import cats.{ Monad, MonadError, ~> }
+import cats.{ MonadError, ~> }
 
 import scala.collection.immutable.{ Seq, Set }
 

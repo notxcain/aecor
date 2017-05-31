@@ -35,13 +35,8 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
   ): Handler[F, Option[Transaction], Seq[TransactionEvent], Unit] =
     handle {
       case None =>
-        (
-          Seq(
-            TransactionEvent.TransactionCreated(transactionId, fromAccountId, toAccountId, amount)
-          ),
-          ()
-        )
-      case Some(_) => (Seq.empty, ())
+        Seq(TransactionEvent.TransactionCreated(transactionId, fromAccountId, toAccountId, amount)) -> (())
+      case Some(_) => Seq.empty -> (())
     }
 
   override def authorizeTransaction(

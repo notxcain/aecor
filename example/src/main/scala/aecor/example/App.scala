@@ -1,7 +1,7 @@
 package aecor.example
 
 import aecor.data._
-import aecor.distributedprocessing.{ DistributedProcessing, AkkaStreamProcess }
+import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
@@ -16,7 +16,7 @@ import aecor.example.domain.transaction.{
   TransactionEvent
 }
 import aecor.runtime.akkapersistence.{
-  AkkaPersistenceRuntime,
+  AkkaPersistenceRuntime2,
   CassandraEventJournalQuery,
   CassandraOffsetStore
 }
@@ -60,24 +60,30 @@ object App {
         CassandraOffsetStore.createTable(offsetStoreConfig)
       )
 
+    val transactionAggregateRuntime = AkkaPersistenceRuntime2(
+      system,
+      "Transaction",
+      Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
+      EventsourcedTransactionAggregate.behavior[Task],
+      Tagging.partitioned(20, EventTag[TransactionEvent]("Transaction"))(_.transactionId.value)
+    )
+
     val startTransactions: Task[TransactionAggregate[Task]] =
-      AkkaPersistenceRuntime[Task](system)
-        .start(
-          "Transaction",
-          Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
-          EventsourcedTransactionAggregate.behavior[Task],
-          Tagging.partitioned(20, EventTag[TransactionEvent]("Transaction"))(_.transactionId.value)
-        )
+      transactionAggregateRuntime.start
         .map(TransactionAggregate.fromFunctionK)
 
+    val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
+
+    val accountAggregateRuntime = AkkaPersistenceRuntime2(
+      system,
+      "Account",
+      Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
+      EventsourcedAccountAggregate.behavior[Task],
+      Tagging.partitioned(20, EventTag[AccountEvent]("Account"))(_.accountId.value)
+    )
+
     val startAccounts: Task[AccountAggregate[Task]] =
-      AkkaPersistenceRuntime[Task](system)
-        .start(
-          "Account",
-          Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
-          EventsourcedAccountAggregate.behavior[Task],
-          Tagging.partitioned(20, EventTag[AccountEvent]("Account"))(_.accountId.value)
-        )
+      accountAggregateRuntime.start
         .map(AccountAggregate.fromFunctionK)
 
     def startTransactionProcessing(
@@ -95,12 +101,9 @@ object App {
       val processes =
         DistributedProcessing.distribute[Task](20) { i =>
           AkkaStreamProcess[Task](
-            transactionEventJournal
-              .committableEventsByTag(
-                CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig),
-                EventTag[TransactionEvent](s"Transaction$i"),
-                ConsumerId("processing")
-              )
+            transactionAggregateRuntime.journal
+              .committable(offsetStore)
+              .eventsByTag(EventTag[TransactionEvent](s"Transaction$i"), ConsumerId("processing"))
               .map(_.map(_.event)),
             Flow[Committable[Task, TransactionEvent]]
               .mapAsync(30) {

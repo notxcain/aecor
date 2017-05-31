@@ -44,7 +44,6 @@ object Schedule {
     dayZero: LocalDate,
     clock: Clock,
     repository: ScheduleEntryRepository[F],
-    aggregateJournal: EventJournalQuery[UUID, ScheduleEvent],
     offsetStore: KeyValueStore[F, TagConsumerId, UUID],
     settings: ScheduleSettings = ScheduleSettings(
       1.day,
@@ -56,7 +55,13 @@ object Schedule {
 
     val eventTag = EventTag[ScheduleEvent](entityName)
 
-    val runtime = AkkaPersistenceRuntime(system)
+    val runtime = AkkaPersistenceRuntime2(
+      system,
+      entityName,
+      DefaultScheduleAggregate.correlation,
+      DefaultScheduleAggregate.behavior(Capture[F].capture(ZonedDateTime.now(clock))),
+      Tagging.const(eventTag)
+    )
 
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumerId, LocalDateTime] =
       offsetStore.imap(
@@ -66,12 +71,7 @@ object Schedule {
 
     def startAggregate =
       for {
-        f <- runtime.start(
-              entityName,
-              DefaultScheduleAggregate.correlation,
-              DefaultScheduleAggregate.behavior(Capture[F].capture(ZonedDateTime.now(clock))),
-              Tagging.const(eventTag)
-            )
+        f <- runtime.start
       } yield ScheduleAggregate.fromFunctionK(f)
 
     def startProcess(aggregate: ScheduleAggregate[F]) = {
@@ -79,8 +79,7 @@ object Schedule {
         DefaultScheduleEventJournal[F](
           settings.consumerId,
           8,
-          offsetStore,
-          aggregateJournal,
+          runtime.journal.committable(offsetStore),
           eventTag
         )
 
@@ -103,8 +102,7 @@ object Schedule {
         clock,
         aggregate,
         settings.bucketLength,
-        aggregateJournal,
-        offsetStore,
+        runtime.journal.committable(offsetStore),
         eventTag
       )
 

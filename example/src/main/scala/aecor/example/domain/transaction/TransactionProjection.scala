@@ -1,7 +1,6 @@
 package aecor.example.domain.transaction
 
 import aecor.data.Folded
-import aecor.data.Folded.Next
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.TransactionStatus
@@ -17,9 +16,9 @@ final case class TransactionProjection(transactionId: TransactionId,
 object TransactionProjection {
   implicit def instance: AggregateProjection[TransactionEvent, TransactionProjection] =
     AggregateProjection.instance {
-      case Some(s) => {
-        case x => Folded.impossible
-      }
+      case Some(s) =>
+        _ =>
+          Folded.impossible
       case None => {
         case TransactionEvent.TransactionCreated(transactionId, from, to, amount) =>
           Folded.next(

@@ -3,7 +3,7 @@ package aecor.example.domain.transaction
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
-import io.aecor.liberator.macros.{ algebra, term }
+import io.aecor.liberator.macros.{ algebra }
 
 final case class TransactionId(value: String) extends AnyVal
 final case class From[A](value: A) extends AnyVal

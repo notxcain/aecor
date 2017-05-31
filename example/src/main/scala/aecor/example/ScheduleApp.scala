@@ -8,7 +8,7 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.Async.ops._
 import aecor.effect.monix._
 import aecor.effect.{ Async, Capture, CaptureFuture }
-import aecor.runtime.akkapersistence.{ CassandraEventJournalQuery, CassandraOffsetStore }
+import aecor.runtime.akkapersistence.{ CassandraOffsetStore }
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import akka.NotUsed
 import akka.actor.ActorSystem
@@ -51,7 +51,6 @@ object ScheduleApp extends App {
       dayZero = LocalDate.of(2016, 5, 10),
       repository =
         CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries),
-      aggregateJournal = CassandraEventJournalQuery(system),
       offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 

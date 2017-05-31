@@ -10,7 +10,7 @@ sealed abstract class AccountEvent extends Product with Serializable {
 }
 
 object AccountEvent {
-  case class AccountOpened(accountId: AccountId) extends AccountEvent
+  case class AccountOpened(accountId: AccountId, ts: Long) extends AccountEvent
 
   case class AccountDebited(accountId: AccountId,
                             transactionId: AccountTransactionId,

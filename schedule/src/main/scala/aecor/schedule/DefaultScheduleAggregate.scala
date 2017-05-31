@@ -4,7 +4,6 @@ import java.time.{ Instant, LocalDateTime, ZonedDateTime }
 
 import aecor.data.Folded.syntax._
 import aecor.data._
-import aecor.effect.Capture
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.ScheduleState._

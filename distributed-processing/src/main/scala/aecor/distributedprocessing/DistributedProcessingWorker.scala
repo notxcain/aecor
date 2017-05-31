@@ -7,8 +7,6 @@ import aecor.effect.Async
 import aecor.effect.Async.ops._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
-import cats.Functor
-import cats.implicits._
 
 private[aecor] object DistributedProcessingWorker {
   def props[F[_]: Async](processWithId: Int => Process[F]): Props =

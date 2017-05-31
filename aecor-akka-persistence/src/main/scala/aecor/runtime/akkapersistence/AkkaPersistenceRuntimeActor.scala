@@ -21,8 +21,6 @@ import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
-import cats.implicits._
-import cats.{ Functor, ~> }
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration

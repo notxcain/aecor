@@ -20,7 +20,7 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
     accountId: AccountId
   ): Handler[F, Option[Account], Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]] =
     handle {
-      case None => Seq(AccountOpened(accountId)) -> ().asRight
+      case None => Seq(AccountOpened(accountId, 0)) -> ().asRight
       case Some(x) => Seq.empty -> AccountAggregate.AccountExists.asLeft
     }
 
@@ -62,16 +62,18 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
 }
 
 object EventsourcedAccountAggregate {
-  def behavior[F[_]: Applicative] = EventsourcedBehavior(
-    AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[F]),
-    Account.folder
-  )
+  def behavior[F[_]: Applicative]
+    : EventsourcedBehavior[F, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
+    EventsourcedBehavior(
+      AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[F]),
+      Account.folder
+    )
   final val rootAccountId: AccountId = AccountId("ROOT")
   final case class Account(balance: Amount, processedTransactions: Set[AccountTransactionId]) {
     def hasFunds(amount: Amount): Boolean =
       balance >= amount
     def applyEvent(event: AccountEvent): Folded[Account] = event match {
-      case AccountOpened(_) => impossible
+      case AccountOpened(_, _) => impossible
       case AccountDebited(_, transactionId, amount) =>
         copy(
           balance = balance - amount,
@@ -86,7 +88,7 @@ object EventsourcedAccountAggregate {
   }
   object Account {
     def fromEvent(event: AccountEvent): Folded[Account] = event match {
-      case AccountOpened(_) => Account(Amount.zero, Set.empty).next
+      case AccountOpened(_, _) => Account(Amount.zero, Set.empty).next
       case _ => impossible
     }
     def folder: Folder[Folded, AccountEvent, Option[Account]] =

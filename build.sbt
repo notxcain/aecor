@@ -11,7 +11,7 @@ lazy val buildSettings = inThisBuild(
 )
 
 lazy val akkaVersion = "2.5.1"
-lazy val akkaPersistenceCassandra = "0.53"
+lazy val akkaPersistenceCassandra = "0.54"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
@@ -176,7 +176,6 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val akkaPersistenceSettings = Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
@@ -185,10 +184,7 @@ lazy val akkaPersistenceSettings = Seq(
 )
 
 lazy val akkaGenericSettings = Seq(
-  libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
-  )
+  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
 )
 
 lazy val effectMonixSettings = Seq(
@@ -199,10 +195,7 @@ lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-co
 
 lazy val exampleSettings = {
   Seq(
-    resolvers ++= Seq(
-      Resolver.bintrayRepo("projectseptemberinc", "maven"),
-      Resolver.sonatypeRepo("releases")
-    ),
+    resolvers += Resolver.sonatypeRepo("releases"),
     sources in (Compile, doc) := Nil,
     libraryDependencies ++=
       Seq(

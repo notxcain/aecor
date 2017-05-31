@@ -2,7 +2,7 @@ package aecor.data
 
 import cats.Applicative
 
-final case class Handler[F[_], State, Effect, A](run: State => F[(Effect, A)]) extends AnyVal
+final case class Handler[F[_], In, Effect, Out](run: In => F[(Effect, Out)]) extends AnyVal
 
 object Handler {
   final class MkLift[F[_], State] {
@@ -12,4 +12,5 @@ object Handler {
       Handler(s => F.pure(f(s)))
   }
   def lift[F[_], State]: MkLift[F, State] = new MkLift[F, State]
+
 }
