@@ -8,6 +8,7 @@ final case class Folder[F[_], A, B](zero: B, reduce: (B, A) => F[B]) {
   def consume[I[_]: Foldable](f: I[A])(implicit F: Monad[F]): F[B] = f.foldM(zero)(reduce)
   def imap[C](bc: B => C, cb: C => B)(implicit F: Functor[F]): Folder[F, A, C] =
     Folder[F, A, C](bc(zero), (b, a) => reduce(cb(b), a).map(bc))
+  def mapK[G[_]](f: F[B] => G[B]): Folder[G, A, B] = Folder(zero, (b, a) => f(reduce(b, a)))
 }
 
 object Folder {
@@ -21,4 +22,8 @@ object Folder {
       case None => none.andThen(_.map(Some(_)))
       case Some(b) => some(b).andThen(_.map(Some(_)))
     }
+}
+
+trait Eventsourced[A, E] {
+  def apply(a: Option[A], e: E): Folded[A]
 }

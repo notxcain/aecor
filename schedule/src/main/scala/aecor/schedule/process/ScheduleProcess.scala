@@ -1,7 +1,7 @@
 package aecor.schedule.process
 
-import java.time._
 import java.time.temporal.ChronoUnit
+import java.time.{ Clock => _, _ }
 
 import aecor.data.{ ConsumerId, TagConsumerId }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }

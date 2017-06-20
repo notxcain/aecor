@@ -7,9 +7,8 @@ import aecor.testkit.StateRuntime
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.implicits._
 import com.typesafe.config.{ Config, ConfigFactory }
-import monix.cats.{ monixToCatsMonad, monixToCatsMonadError }
+import monix.cats._
 import monix.eval.Task
 import monix.execution.Scheduler
 import org.scalatest.concurrent.ScalaFutures
@@ -47,7 +46,7 @@ class ShardedRuntimeSpec
   )
 
   val startRuntime =
-    GenericAkkaRuntime(system).start("Counter", CounterOp.correlation, behavior)
+    GenericAkkaRuntime[Task](system).start("Counter", CounterOp.correlation, behavior)
 
   test("Runtime should work") {
     val program = for {

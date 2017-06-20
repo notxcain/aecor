@@ -1,6 +1,6 @@
 package aecor.example
 
-import java.time.{ Clock, LocalDate, LocalDateTime }
+import java.time.{ Clock, LocalDate }
 import java.util.UUID
 
 import aecor.data.ConsumerId
@@ -8,8 +8,9 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.Async.ops._
 import aecor.effect.monix._
 import aecor.effect.{ Async, Capture, CaptureFuture }
-import aecor.runtime.akkapersistence.{ CassandraOffsetStore }
+import aecor.runtime.akkapersistence.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
+import aecor.util.JavaTimeClock
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.{
@@ -23,6 +24,7 @@ import cats.{ Functor, Monad }
 import monix.eval.Task
 import monix.execution.Scheduler
 import monix.cats._
+
 import scala.concurrent.Await
 import scala.concurrent.duration._
 object ScheduleApp extends App {
@@ -30,7 +32,7 @@ object ScheduleApp extends App {
   implicit val system = ActorSystem("test")
   implicit val materializer = ActorMaterializer()
   implicit val scheduler = Scheduler(materializer.executionContext)
-  val clock = Clock.systemUTC()
+  def clock[F[_]: Capture] = JavaTimeClock[F](Clock.systemUTC())
 
   val offsetStoreConfig = CassandraOffsetStore.Config("aecor_example")
   val scheduleEntryRepositoryQueries =
@@ -47,25 +49,28 @@ object ScheduleApp extends App {
   def runSchedule[F[_]: Async: CaptureFuture: Capture: Monad]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
-      clock = clock,
       dayZero = LocalDate.of(2016, 5, 10),
+      clock = clock,
       repository =
         CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries),
       offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 
-  def runAdder[F[_]: Async: Capture: Functor](schedule: Schedule[F]): F[Unit] =
+  def runAdder[F[_]: Async: Capture: Monad](schedule: Schedule[F]): F[Unit] =
     Capture[F].capture {
       Source
         .tick(0.seconds, 2.seconds, ())
         .mapAsync(1) { _ =>
           Async[F].unsafeRun {
-            schedule.addScheduleEntry(
-              "Test",
-              UUID.randomUUID().toString,
-              "test",
-              LocalDateTime.now(clock).plusSeconds(20)
-            )
+            clock[F].localDateTime.flatMap { now =>
+              schedule.addScheduleEntry(
+                "Test",
+                UUID.randomUUID().toString,
+                "test",
+                now.plusSeconds(20)
+              )
+            }
+
           }
         }
         .runWith(Sink.ignore)

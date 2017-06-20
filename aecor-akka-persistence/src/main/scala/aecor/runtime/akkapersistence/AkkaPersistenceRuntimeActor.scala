@@ -54,10 +54,18 @@ object AkkaPersistenceRuntimeActor {
     behavior: EventsourcedBehavior[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
+    onPersisted: Event => F[Unit],
     idleTimeout: FiniteDuration
   ): Props =
     Props(
-      new AkkaPersistenceRuntimeActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout)
+      new AkkaPersistenceRuntimeActor(
+        entityName,
+        behavior,
+        snapshotPolicy,
+        tagging,
+        onPersisted,
+        idleTimeout
+      )
     )
 
   final case class HandleCommand[C[_], A](command: C[A])
@@ -78,6 +86,7 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
   behavior: EventsourcedBehavior[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
+  onPersist: Event => F[Unit],
   idleTimeout: FiniteDuration
 ) extends PersistentActor
     with ActorLogging
@@ -209,6 +218,7 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
           eventCount += 1
           markSnapshotAsPendingIfNeeded()
           snapshotIfPending()
+          events.map(onPersist).foreach(_.unsafeRun)
         }
       } else {
         persistAll(envelopes) { _ =>
@@ -219,6 +229,7 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
             sender() ! reply
             snapshotIfPending()
           }
+          events.map(onPersist).foreach(_.unsafeRun)
         }
       }
     }

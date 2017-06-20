@@ -6,7 +6,7 @@ import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
 import cats.implicits._
-import cats.{ Id, Monad, ~> }
+import cats.{ Monad, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 
 class StateRuntimeSpec extends FunSuite with Matchers {

@@ -4,11 +4,10 @@ import aecor.example.AnyValCirceEncoding
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountAggregate.Rejection
 import aecor.example.domain.transaction.TransactionId
-import io.aecor.liberator.macros.{ algebra, term }
+import io.aecor.liberator.macros.algebra
 import io.circe.{ Decoder, Encoder }
 
 @algebra('accountId)
-@term
 trait AccountAggregate[F[_]] {
   def openAccount(accountId: AccountId): F[Either[Rejection, Unit]]
   def creditAccount(accountId: AccountId,
@@ -32,7 +31,7 @@ object AccountTransactionKind {
   implicit val decoder: Decoder[AccountTransactionKind] = Decoder[String].emap {
     case "Normal" => Right(Normal)
     case "Revert" => Right(Revert)
-    case _ => Left("Unknown AccountTransactionKind")
+    case _        => Left("Unknown AccountTransactionKind")
   }
   implicit val encoder: Encoder[AccountTransactionKind] = Encoder[String].contramap(_.toString)
 }

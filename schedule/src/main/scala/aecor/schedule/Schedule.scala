@@ -1,6 +1,6 @@
 package aecor.schedule
 
-import java.time._
+import java.time.{ Clock => _, _ }
 import java.util.UUID
 
 import aecor.data._
@@ -11,7 +11,7 @@ import aecor.schedule.process.{
   PeriodicProcessRuntime,
   ScheduleProcess
 }
-import aecor.util.KeyValueStore
+import aecor.util.{ Clock, KeyValueStore }
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
@@ -42,7 +42,7 @@ object Schedule {
   def start[F[_]: Async: CaptureFuture: Capture: Monad](
     entityName: String,
     dayZero: LocalDate,
-    clock: Clock,
+    clock: Clock[F],
     repository: ScheduleEntryRepository[F],
     offsetStore: KeyValueStore[F, TagConsumerId, UUID],
     settings: ScheduleSettings = ScheduleSettings(
@@ -59,7 +59,7 @@ object Schedule {
       system,
       entityName,
       DefaultScheduleAggregate.correlation,
-      DefaultScheduleAggregate.behavior(Capture[F].capture(ZonedDateTime.now(clock))),
+      DefaultScheduleAggregate.behavior(clock.zonedDateTime),
       Tagging.const(eventTag)
     )
 
@@ -74,7 +74,7 @@ object Schedule {
         f <- runtime.start
       } yield ScheduleAggregate.fromFunctionK(f)
 
-    def startProcess(aggregate: ScheduleAggregate[F]) = {
+    def startProcess(aggregate: ScheduleAggregate[F]) = clock.zone.map { zone =>
       val journal =
         DefaultScheduleEventJournal[F](
           settings.consumerId,
@@ -87,11 +87,11 @@ object Schedule {
         journal,
         dayZero,
         settings.consumerId,
-        uuidToLocalDateTime(clock.getZone),
+        uuidToLocalDateTime(zone),
         settings.eventualConsistencyDelay,
         repository,
         aggregate,
-        Capture[F].capture(LocalDateTime.now(clock)),
+        clock.localDateTime,
         8
       )
       PeriodicProcessRuntime(entityName, settings.refreshInterval, process).run(system)

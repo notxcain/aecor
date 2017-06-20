@@ -1,19 +1,21 @@
 package aecor.schedule
 
-import java.time.{ Clock, LocalDateTime }
+import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.data._
 import aecor.effect.Async
 import aecor.effect.Async.ops._
 import aecor.runtime.akkapersistence.{ CommittableEventJournalQuery, JournalEntry }
+import aecor.util.Clock
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-
+import cats.Monad
+import cats.implicits._
 import scala.concurrent.duration.FiniteDuration
 
-private[schedule] class DefaultSchedule[F[_]: Async](
-  clock: Clock,
+private[schedule] class DefaultSchedule[F[_]: Async: Monad](
+  clock: Clock[F],
   aggregate: ScheduleAggregate[F],
   bucketLength: FiniteDuration,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
@@ -22,12 +24,19 @@ private[schedule] class DefaultSchedule[F[_]: Async](
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,
                                 correlationId: CorrelationId,
-                                dueDate: LocalDateTime): F[Unit] = {
-    val scheduleBucket =
-      dueDate.atZone(clock.getZone).toEpochSecond / bucketLength.toSeconds
-    aggregate
-      .addScheduleEntry(scheduleName, scheduleBucket.toString, entryId, correlationId, dueDate)
-  }
+                                dueDate: LocalDateTime): F[Unit] =
+    for {
+      zone <- clock.zone
+      scheduleBucket = dueDate.atZone(zone).toEpochSecond / bucketLength.toSeconds
+      _ <- aggregate
+            .addScheduleEntry(
+              scheduleName,
+              scheduleBucket.toString,
+              entryId,
+              correlationId,
+              dueDate
+            )
+    } yield ()
 
   override def committableScheduleEvents(
     scheduleName: String,

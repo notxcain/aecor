@@ -15,7 +15,6 @@ import aecor.tests.e2e._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp }
 import cats.data.StateT
 import cats.implicits._
-import cats.~>
 import org.scalatest.{ FunSuite, Matchers }
 import shapeless.Coproduct
 
@@ -40,7 +39,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       (s, os) => s.copy(offsetStoreState = os)
     )
 
-  val clock = StateClock[SpecF, SpecState](_.time, (s, t) => s.copy(time = t))
+  val clock = StateClock[SpecF, SpecState](ZoneOffset.UTC, _.time, (s, t) => s.copy(time = t))
 
   def counterEventJournal =
     mkJournal[CounterEvent](_.counterJournalState, (x, a) => x.copy(counterJournalState = a))
@@ -71,7 +70,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     mkJournal[ScheduleEvent](_.scheduleJournalState, (x, a) => x.copy(scheduleJournalState = a))
 
   val scheduleAggregate = mkBehavior[ScheduleOp, ScheduleState, ScheduleEvent](
-    DefaultScheduleAggregate.behavior(clock.zonedDateTime(ZoneOffset.UTC)),
+    DefaultScheduleAggregate.behavior(clock.zonedDateTime),
     DefaultScheduleAggregate.correlation,
     Tagging.const(EventTag[ScheduleEvent]("Schedule")),
     schduleEventJournal
@@ -100,7 +99,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     eventualConsistencyDelay = 1.second,
     repository = scheduleEntryRepository,
     scheduleAggregate = ScheduleAggregate.fromFunctionK(scheduleAggregate),
-    clock = clock.localDateTime(ZoneOffset.UTC),
+    clock = clock.localDateTime,
     parallelism = 1
   )
 
@@ -175,7 +174,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
     def program(n: Int): StateT[SpecF, SpecState, Unit] =
       for {
-        now <- clock.localDateTime(ZoneOffset.UTC)
+        now <- clock.localDateTime
         _ <- schedule(ScheduleOp.AddScheduleEntry("foo", "b", "e1", "cid", now.plusSeconds(3)))
         _ <- schedule(ScheduleOp.AddScheduleEntry("foo", "b", "e2", "cid", now.plusSeconds(5)))
         _ <- tickSeconds(3)

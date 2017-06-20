@@ -30,5 +30,6 @@ trait MonixTaskInstances {
     new CaptureFuture[_root_.monix.eval.Task] {
       override def captureFuture[A](future: => Future[A]): _root_.monix.eval.Task[A] =
         _root_.monix.eval.Task.deferFuture(future)
+
     }
 }

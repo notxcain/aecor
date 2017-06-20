@@ -13,6 +13,7 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.1"
 lazy val akkaPersistenceCassandra = "0.54"
 lazy val catsVersion = "0.9.0"
+lazy val catsEffectVersion = "0.3"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -33,8 +34,8 @@ lazy val circeVersion = "0.8.0"
 lazy val akkaHttpVersion = "10.0.5"
 lazy val akkaHttpJsonVersion = "1.16.0"
 lazy val scalametaParadiseVersion = "3.0.0-M8"
-lazy val akkaKryoVersion = "0.5.2"
-lazy val liberatorVersion = "0.4.2"
+
+lazy val liberatorVersion = "0.4.3"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
@@ -156,6 +157,7 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion,
+    "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
   )
 )
@@ -194,7 +196,12 @@ lazy val effectMonixSettings = Seq(
 lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-core" % fs2Version))
 
 lazy val exampleSettings = {
+  val akkaKryoVersion = SettingKey[String]("akka-kryo-version", "")
+
   Seq(
+    akkaKryoVersion := {
+      if (scalaVersion.value startsWith "2.11") "0.5.0" else "0.5.1"
+    },
     resolvers += Resolver.sonatypeRepo("releases"),
     sources in (Compile, doc) := Nil,
     libraryDependencies ++=
@@ -202,7 +209,7 @@ lazy val exampleSettings = {
         compilerPlugin(
           "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
         ),
-        "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion,
+        "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion.value,
         "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-cats" % monixVersion,

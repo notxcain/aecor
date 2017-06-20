@@ -7,14 +7,13 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import aecor.effect.Async.ops._
 
-class CommittableEventJournalQuery[F[_]: Async, Offset, E](
-  underlying: EventJournalQuery[Offset, E],
-  offsetStore: KeyValueStore[F, TagConsumerId, Offset]
+final class CommittableEventJournalQuery[F[_]: Async, O, E](
+  underlying: EventJournalQuery[O, E],
+  offsetStore: KeyValueStore[F, TagConsumerId, O]
 ) {
-  final def eventsByTag(
-    tag: EventTag[E],
-    consumerId: ConsumerId
-  ): Source[Committable[F, JournalEntry[Offset, E]], NotUsed] = {
+
+  def eventsByTag(tag: EventTag[E],
+                  consumerId: ConsumerId): Source[Committable[F, JournalEntry[O, E]], NotUsed] = {
     val tagConsumerId = TagConsumerId(tag.value, consumerId)
     Source
       .single(NotUsed)
@@ -27,10 +26,10 @@ class CommittableEventJournalQuery[F[_]: Async, Offset, E](
       .map(x => Committable(offsetStore.setValue(tagConsumerId, x.offset), x))
   }
 
-  final def currentEventsByTag(
+  def currentEventsByTag(
     tag: EventTag[E],
     consumerId: ConsumerId
-  ): Source[Committable[F, JournalEntry[Offset, E]], NotUsed] = {
+  ): Source[Committable[F, JournalEntry[O, E]], NotUsed] = {
     val tagConsumerId = TagConsumerId(tag.value, consumerId)
     Source
       .single(NotUsed)
@@ -42,4 +41,12 @@ class CommittableEventJournalQuery[F[_]: Async, Offset, E](
       }
       .map(x => Committable(offsetStore.setValue(tagConsumerId, x.offset), x))
   }
+}
+
+object CommittableEventJournalQuery {
+  def apply[F[_]: Async, Offset, E](
+    underlying: EventJournalQuery[Offset, E],
+    offsetStore: KeyValueStore[F, TagConsumerId, Offset]
+  ): CommittableEventJournalQuery[F, Offset, E] =
+    new CommittableEventJournalQuery(underlying, offsetStore)
 }

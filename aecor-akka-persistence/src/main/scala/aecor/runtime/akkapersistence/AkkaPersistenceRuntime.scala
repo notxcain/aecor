@@ -24,11 +24,15 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system: ActorSystem) {
   import AkkaPersistenceRuntime._
+
+  private val pureUnit = Monad[F].pure(())
+
   def start[Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
     correlation: Correlation[Op],
     behavior: EventsourcedBehavior[F, Op, State, Event],
     tagging: Tagging[Event],
+    onPersist: Event => F[Unit] = (_: Event) => pureUnit,
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
   ): F[Op ~> F] = {
@@ -39,6 +43,7 @@ class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system:
         behavior,
         snapshotPolicy,
         tagging,
+        onPersist,
         settings.idleTimeout
       )
 
@@ -83,18 +88,22 @@ object AkkaPersistenceRuntime2 {
     correlation: Correlation[Op],
     behavior: EventsourcedBehavior[F, Op, State, Event],
     tagging: Tagging[Event],
+    onPersist: Option[Event => F[Unit]] = None,
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: Option[AkkaPersistenceRuntimeSettings] = None
-  ): AkkaPersistenceRuntime2[F, Op, State, Event] =
-    new AkkaPersistenceRuntime2(
+  ): AkkaPersistenceRuntime2[F, Op, State, Event] = {
+    val pureUnit = Monad[F].pure(())
+    new AkkaPersistenceRuntime2[F, Op, State, Event](
       system,
       entityName,
       correlation,
       behavior,
       tagging,
+      onPersist.getOrElse(_ => pureUnit),
       snapshotPolicy,
       settings
     )
+  }
 
   private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
 }
@@ -105,6 +114,7 @@ class AkkaPersistenceRuntime2[F[_]: Async: CaptureFuture: Capture: Monad, Op[_],
   correlation: Correlation[Op],
   behavior: EventsourcedBehavior[F, Op, State, Event],
   tagging: Tagging[Event],
+  onPersisted: Event => F[Unit],
   snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
   customSettings: Option[AkkaPersistenceRuntimeSettings] = None
 ) {
@@ -118,6 +128,7 @@ class AkkaPersistenceRuntime2[F[_]: Async: CaptureFuture: Capture: Monad, Op[_],
         behavior,
         snapshotPolicy,
         tagging,
+        onPersisted,
         settings.idleTimeout
       )
 

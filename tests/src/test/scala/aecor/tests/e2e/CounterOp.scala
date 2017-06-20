@@ -5,7 +5,7 @@ import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
 import cats.implicits._
-import cats.{ Applicative, Id, ~> }
+import cats.{ Applicative, ~> }
 import io.circe.generic.auto._
 
 import scala.collection.immutable.Seq

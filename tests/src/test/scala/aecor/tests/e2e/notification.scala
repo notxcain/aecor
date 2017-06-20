@@ -5,9 +5,6 @@ import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, Not
 import aecor.tests.e2e.notification.NotificationOp.{ CreateNotification, MarkAsSent }
 import cats.implicits._
 import cats.{ Applicative, ~> }
-import monix.reactive.MulticastStrategy.Behavior
-
-import scala.collection.immutable.Seq
 
 object notification {
   sealed trait NotificationOp[A] {
@@ -35,7 +32,7 @@ object notification {
       Folder.curried(NotificationState(false)) {
         case NotificationState(_) => {
           case NotificationCreated(_, _) => NotificationState(false).pure[F]
-          case NotificationSent(_) => NotificationState(true).pure[F]
+          case NotificationSent(_)       => NotificationState(true).pure[F]
         }
       }
   }

@@ -1,5 +1,7 @@
 package aecor.example.domain.account
 
+import java.time.Instant
+
 import aecor.data.Folded.syntax._
 import aecor.data.{ EventsourcedBehavior, Folded, Folder, Handler }
 import aecor.example.domain.Amount
@@ -14,13 +16,13 @@ import scala.collection.immutable._
 class EventsourcedAccountAggregate[F[_]: Applicative]
     extends AccountAggregate[Handler[F, Option[Account], AccountEvent, ?]] {
 
-  private def handle: Handler.MkLift[F, Option[Account]] = Handler.lift[F, Option[Account]]
+  private def handle = Handler.lift[F, Option[Account]]
 
   override def openAccount(
     accountId: AccountId
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
     handle {
-      case None => Seq(AccountOpened(accountId, 0)) -> ().asRight
+      case None    => Seq(AccountOpened(accountId, 0)) -> ().asRight
       case Some(x) => Seq.empty -> AccountAggregate.AccountExists.asLeft
     }
 
@@ -62,6 +64,33 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
 }
 
 object EventsourcedAccountAggregate {
+
+  final case class EventsourcedAccountAggregateState(value: Option[Account])
+      extends AccountAggregate[Lambda[a => (Instant => (Seq[AccountEvent], a))]] {
+    override def openAccount(
+      accountId: AccountId
+    ): (Instant) => (Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]) = value match {
+      case None =>
+        ts =>
+          Seq(AccountOpened(accountId, ts.getEpochSecond)) -> ().asRight
+      case Some(x) =>
+        _ =>
+          Seq.empty -> AccountAggregate.AccountExists.asLeft
+    }
+
+    override def creditAccount(
+      accountId: AccountId,
+      transactionId: AccountTransactionId,
+      amount: Amount
+    ): (Instant) => (Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]) = ???
+
+    override def debitAccount(
+      accountId: AccountId,
+      transactionId: AccountTransactionId,
+      amount: Amount
+    ): (Instant) => (Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]) = ???
+  }
+
   def behavior[F[_]: Applicative]
     : EventsourcedBehavior[F, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
     EventsourcedBehavior(
@@ -89,7 +118,7 @@ object EventsourcedAccountAggregate {
   object Account {
     def fromEvent(event: AccountEvent): Folded[Account] = event match {
       case AccountOpened(_, _) => Account(Amount.zero, Set.empty).next
-      case _ => impossible
+      case _                   => impossible
     }
     def folder: Folder[Folded, AccountEvent, Option[Account]] =
       Folder.optionInstance(fromEvent)(x => x.applyEvent)
