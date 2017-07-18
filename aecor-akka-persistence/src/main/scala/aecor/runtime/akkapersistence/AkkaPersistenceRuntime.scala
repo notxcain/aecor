@@ -10,6 +10,7 @@ import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
 import cats.{ Monad, ~> }
+import cats.implicits._
 
 import scala.concurrent.Future
 
@@ -47,29 +48,30 @@ class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad](system:
         settings.idleTimeout
       )
 
-    def extractEntityId: ShardRegion.ExtractEntityId = {
+    val extractEntityId: ShardRegion.ExtractEntityId = {
       case CorrelatedCommand(entityId, c) =>
         (entityId, AkkaPersistenceRuntimeActor.HandleCommand(c))
     }
 
     val numberOfShards = settings.numberOfShards
 
-    def extractShardId: ShardRegion.ExtractShardId = {
+    val extractShardId: ShardRegion.ExtractShardId = {
       case CorrelatedCommand(entityId, _) =>
         (scala.math.abs(entityId.hashCode) % numberOfShards).toString
       case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
     }
 
-    def startShardRegion = ClusterSharding(system).start(
-      typeName = entityName,
-      entityProps = props,
-      settings = settings.clusterShardingSettings,
-      extractEntityId = extractEntityId,
-      extractShardId = extractShardId
-    )
+    val startShardRegion = Capture[F].capture {
+      ClusterSharding(system).start(
+        typeName = entityName,
+        entityProps = props,
+        settings = settings.clusterShardingSettings,
+        extractEntityId = extractEntityId,
+        extractShardId = extractShardId
+      )
+    }
 
-    Capture[F].capture {
-      val regionRef = startShardRegion
+    startShardRegion.map { regionRef =>
       new (Op ~> F) {
         implicit private val timeout = Timeout(settings.askTimeout)
         override def apply[A](fa: Op[A]): F[A] =

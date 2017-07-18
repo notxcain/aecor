@@ -1,21 +1,20 @@
 package aecor.example
 
+import java.time.Clock
+
 import aecor.data._
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
-import aecor.example.domain.account.{
-  AccountAggregate,
-  AccountEvent,
-  EventsourcedAccountAggregate
-}
+import aecor.example.domain.account.{ AccountAggregate, AccountEvent, EventsourcedAccountAggregate }
 import aecor.example.domain.transaction.{
   EventsourcedTransactionAggregate,
   TransactionAggregate,
   TransactionEvent
 }
 import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime2, CassandraOffsetStore }
+import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.event.Logging
 import akka.http.scaladsl.Http
@@ -39,6 +38,8 @@ object App {
     }
     implicit val materializer: Materializer = ActorMaterializer()
 
+    val taskClock = JavaTimeClock[Task](Clock.systemUTC())
+
     val offsetStoreConfig =
       CassandraOffsetStore.Config(config.getString("cassandra-journal.keyspace"))
 
@@ -53,8 +54,8 @@ object App {
       system,
       "Transaction",
       Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
-      EventsourcedTransactionAggregate.behavior[Task],
-      Tagging.partitioned(20, EventTag[TransactionEvent]("Transaction"))(_.transactionId.value)
+      EventsourcedTransactionAggregate.behavior[Task](taskClock),
+      Tagging.partitioned[TransactionEvent](20, EventTag("Transaction"))(_.transactionId.value)
     )
 
     val startTransactions: Task[TransactionAggregate[Task]] =
@@ -67,8 +68,8 @@ object App {
       system,
       "Account",
       Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
-      EventsourcedAccountAggregate.behavior[Task],
-      Tagging.partitioned(20, EventTag[AccountEvent]("Account"))(_.accountId.value)
+      EventsourcedAccountAggregate.behavior[Task](taskClock),
+      Tagging.partitioned[AccountEvent](20, EventTag("Account"))(_.accountId.value)
     )
 
     val startAccounts: Task[AccountAggregate[Task]] =
@@ -89,7 +90,7 @@ object App {
           AkkaStreamProcess[Task](
             transactionAggregateRuntime.journal
               .committable(offsetStore)
-              .eventsByTag(EventTag[TransactionEvent](s"Transaction$i"), ConsumerId("processing"))
+              .eventsByTag(EventTag(s"Transaction$i"), ConsumerId("processing"))
               .map(_.map(_.event)),
             Flow[Committable[Task, TransactionEvent]]
               .mapAsync(30) {

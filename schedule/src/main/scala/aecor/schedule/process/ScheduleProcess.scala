@@ -3,7 +3,7 @@ package aecor.schedule.process
 import java.time.temporal.ChronoUnit
 import java.time.{ Clock => _, _ }
 
-import aecor.data.{ ConsumerId, TagConsumerId }
+import aecor.data.{ ConsumerId, EventTag, TagConsumer }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ ScheduleAggregate, ScheduleEntryRepository }
 import aecor.util.KeyValueStore
@@ -16,15 +16,15 @@ object ScheduleProcess {
   def apply[F[_]: Monad](journal: ScheduleEventJournal[F],
                          dayZero: LocalDate,
                          consumerId: ConsumerId,
-                         offsetStore: KeyValueStore[F, TagConsumerId, LocalDateTime],
+                         offsetStore: KeyValueStore[F, TagConsumer, LocalDateTime],
                          eventualConsistencyDelay: FiniteDuration,
                          repository: ScheduleEntryRepository[F],
                          scheduleAggregate: ScheduleAggregate[F],
                          clock: F[LocalDateTime],
                          parallelism: Int): F[Unit] = {
-    val scheduleEntriesTag = "io.aecor.ScheduleDueEntries"
+    val scheduleEntriesTag = EventTag("io.aecor.ScheduleDueEntries")
 
-    val tagConsumerId = TagConsumerId(scheduleEntriesTag, consumerId)
+    val tagConsumerId = TagConsumer(scheduleEntriesTag, consumerId)
 
     val updateRepository: F[Unit] =
       journal.processNewEvents {

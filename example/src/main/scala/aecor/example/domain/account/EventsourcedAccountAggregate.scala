@@ -1,29 +1,31 @@
 package aecor.example.domain.account
 
-import java.time.Instant
-
 import aecor.data.Folded.syntax._
 import aecor.data.{ EventsourcedBehavior, Folded, Folder, Handler }
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountAggregate.{ AccountDoesNotExist, InsufficientFunds }
 import aecor.example.domain.account.AccountEvent._
 import aecor.example.domain.account.EventsourcedAccountAggregate.Account
+import aecor.util.Clock
 import cats.Applicative
 import cats.implicits._
 
 import scala.collection.immutable._
 
-class EventsourcedAccountAggregate[F[_]: Applicative]
+class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicative[F])
     extends AccountAggregate[Handler[F, Option[Account], AccountEvent, ?]] {
 
-  private def handle = Handler.lift[F, Option[Account]]
+  import F._
 
   override def openAccount(
     accountId: AccountId
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
-    handle {
-      case None    => Seq(AccountOpened(accountId, 0)) -> ().asRight
-      case Some(x) => Seq.empty -> AccountAggregate.AccountExists.asLeft
+    Handler {
+      case None =>
+        clock.instant.map { now =>
+          Seq(AccountOpened(accountId, now)) -> ().asRight
+        }
+      case Some(x) => pure(Seq.empty -> AccountAggregate.AccountExists.asLeft)
     }
 
   override def creditAccount(
@@ -31,15 +33,17 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
     transactionId: AccountTransactionId,
     amount: Amount
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
-    handle {
+    Handler {
       case Some(account) =>
-        if (account.processedTransactions.contains(transactionId)) {
-          Seq.empty -> ().asRight
-        } else {
-          Seq(AccountCredited(accountId, transactionId, amount)) -> ().asRight
+        clock.instant.map { now =>
+          if (account.processedTransactions.contains(transactionId)) {
+            Seq.empty -> ().asRight
+          } else {
+            Seq(AccountCredited(accountId, transactionId, amount, now)) -> ().asRight
+          }
         }
       case None =>
-        Seq.empty -> AccountAggregate.AccountDoesNotExist.asLeft
+        pure(Seq.empty -> AccountAggregate.AccountDoesNotExist.asLeft)
     }
 
   override def debitAccount(
@@ -47,54 +51,31 @@ class EventsourcedAccountAggregate[F[_]: Applicative]
     transactionId: AccountTransactionId,
     amount: Amount
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
-    handle {
+    Handler {
       case Some(account) =>
-        if (account.processedTransactions.contains(transactionId)) {
-          Seq.empty -> ().asRight
-        } else {
-          if (account.hasFunds(amount) || accountId == EventsourcedAccountAggregate.rootAccountId) {
-            Seq(AccountDebited(accountId, transactionId, amount)) -> ().asRight
+        clock.instant.map { now =>
+          if (account.processedTransactions.contains(transactionId)) {
+            Seq.empty -> ().asRight
           } else {
-            Seq.empty -> InsufficientFunds.asLeft
+            if (account.hasFunds(amount) || accountId == EventsourcedAccountAggregate.rootAccountId) {
+              Seq(AccountDebited(accountId, transactionId, amount, now)) -> ().asRight
+            } else {
+              Seq.empty -> InsufficientFunds.asLeft
+            }
           }
         }
       case None =>
-        Seq.empty -> AccountDoesNotExist.asLeft
+        pure(Seq.empty -> AccountDoesNotExist.asLeft)
     }
 }
 
 object EventsourcedAccountAggregate {
 
-  final case class EventsourcedAccountAggregateState(value: Option[Account])
-      extends AccountAggregate[Lambda[a => (Instant => (Seq[AccountEvent], a))]] {
-    override def openAccount(
-      accountId: AccountId
-    ): (Instant) => (Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]) = value match {
-      case None =>
-        ts =>
-          Seq(AccountOpened(accountId, ts.getEpochSecond)) -> ().asRight
-      case Some(x) =>
-        _ =>
-          Seq.empty -> AccountAggregate.AccountExists.asLeft
-    }
-
-    override def creditAccount(
-      accountId: AccountId,
-      transactionId: AccountTransactionId,
-      amount: Amount
-    ): (Instant) => (Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]) = ???
-
-    override def debitAccount(
-      accountId: AccountId,
-      transactionId: AccountTransactionId,
-      amount: Amount
-    ): (Instant) => (Seq[AccountEvent], Either[AccountAggregate.Rejection, Unit]) = ???
-  }
-
-  def behavior[F[_]: Applicative]
-    : EventsourcedBehavior[F, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
+  def behavior[F[_]: Applicative](
+    clock: Clock[F]
+  ): EventsourcedBehavior[F, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
     EventsourcedBehavior(
-      AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[F]),
+      AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[F](clock)),
       Account.folder
     )
   final val rootAccountId: AccountId = AccountId("ROOT")
@@ -103,12 +84,12 @@ object EventsourcedAccountAggregate {
       balance >= amount
     def applyEvent(event: AccountEvent): Folded[Account] = event match {
       case AccountOpened(_, _) => impossible
-      case AccountDebited(_, transactionId, amount) =>
+      case AccountDebited(_, transactionId, amount, _) =>
         copy(
           balance = balance - amount,
           processedTransactions = processedTransactions + transactionId
         ).next
-      case AccountCredited(_, transactionId, amount) =>
+      case AccountCredited(_, transactionId, amount, _) =>
         copy(
           balance = balance + amount,
           processedTransactions = processedTransactions + transactionId

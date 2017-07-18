@@ -1,3 +1,3 @@
 package aecor.data
 
-final case class EventTag[E](value: String) extends AnyVal
+final case class EventTag(value: String) extends AnyVal

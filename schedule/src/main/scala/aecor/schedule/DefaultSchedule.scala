@@ -19,7 +19,7 @@ private[schedule] class DefaultSchedule[F[_]: Async: Monad](
   aggregate: ScheduleAggregate[F],
   bucketLength: FiniteDuration,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
-  eventTag: EventTag[ScheduleEvent]
+  eventTag: EventTag
 ) extends Schedule[F] {
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,

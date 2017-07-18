@@ -7,14 +7,13 @@ import cats.implicits._
 import cats.{ Applicative, ~> }
 
 object notification {
-  sealed trait NotificationOp[A] {
+  sealed abstract class NotificationOp[A] extends Product with Serializable {
     def notificationId: String
   }
-
   object NotificationOp {
-    case class CreateNotification(notificationId: String, counterId: String)
+    final case class CreateNotification(notificationId: String, counterId: String)
         extends NotificationOp[Unit]
-    case class MarkAsSent(notificationId: String) extends NotificationOp[Unit]
+    final case class MarkAsSent(notificationId: String) extends NotificationOp[Unit]
     val correlation: Correlation[NotificationOp] = Correlation[NotificationOp](_.notificationId)
   }
 
@@ -23,7 +22,7 @@ object notification {
     case class NotificationCreated(notificationId: String, counterId: String)
         extends NotificationEvent
     case class NotificationSent(notificationId: String) extends NotificationEvent
-    val tag: EventTag[NotificationEvent] = EventTag[NotificationEvent]("Notification")
+    val tag: EventTag = EventTag("Notification")
   }
 
   case class NotificationState(sent: Boolean)

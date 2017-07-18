@@ -33,7 +33,7 @@ lazy val simulacrumVersion = "0.10.0"
 lazy val circeVersion = "0.8.0"
 lazy val akkaHttpVersion = "10.0.5"
 lazy val akkaHttpJsonVersion = "1.16.0"
-lazy val scalametaParadiseVersion = "3.0.0-M8"
+lazy val scalametaParadiseVersion = "3.0.0-M9"
 
 lazy val liberatorVersion = "0.4.3"
 
@@ -219,6 +219,7 @@ lazy val exampleSettings = {
         "io.circe" %% "circe-core" % circeVersion,
         "io.circe" %% "circe-generic" % circeVersion,
         "io.circe" %% "circe-parser" % circeVersion,
+        "io.circe" %% "circe-java8" % circeVersion,
         "ch.qos.logback" % "logback-classic" % logbackVersion
       )
   )

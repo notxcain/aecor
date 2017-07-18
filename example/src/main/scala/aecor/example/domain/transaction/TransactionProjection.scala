@@ -20,7 +20,7 @@ object TransactionProjection {
         _ =>
           Folded.impossible
       case None => {
-        case TransactionEvent.TransactionCreated(transactionId, from, to, amount) =>
+        case TransactionEvent.TransactionCreated(transactionId, from, to, amount, _) =>
           Folded.next(
             TransactionProjection(transactionId, TransactionStatus.Requested, from, to, amount, 1)
           )

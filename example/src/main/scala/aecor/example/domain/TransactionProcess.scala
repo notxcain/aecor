@@ -31,7 +31,7 @@ object TransactionProcess {
   def apply[F[_]: Monad](transaction: TransactionAggregate[F],
                          account: AccountAggregate[F],
                          failure: TransactionProcessFailure[F]): Input => F[Unit] = {
-    case TransactionEvent.TransactionCreated(transactionId, from, to, amount) =>
+    case TransactionEvent.TransactionCreated(transactionId, from, to, amount, _) =>
       for {
         out <- account.debitAccount(
                 from.value,
@@ -45,7 +45,7 @@ object TransactionProcess {
                 transaction.authorizeTransaction(transactionId)
             }
       } yield ()
-    case TransactionEvent.TransactionAuthorized(transactionId) =>
+    case TransactionEvent.TransactionAuthorized(transactionId, _) =>
       for {
         txn <- transaction.getTransactionInfo(transactionId).flatMap {
                 case Some(x) => x.pure[F]

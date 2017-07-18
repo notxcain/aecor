@@ -9,12 +9,12 @@ import cats.{ Applicative, Monad }
 
 object StateEventJournal {
   case class State[E](eventsById: Map[String, Vector[EventEnvelope[E]]],
-                      eventsByTag: Map[EventTag[E], Vector[EventEnvelope[E]]],
-                      consumerOffsets: Map[(EventTag[E], ConsumerId), Int]) {
-    def getConsumerOffset(tag: EventTag[E], consumerId: ConsumerId): Int =
+                      eventsByTag: Map[EventTag, Vector[EventEnvelope[E]]],
+                      consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
+    def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
 
-    def setConsumerOffset(tag: EventTag[E], consumerId: ConsumerId, offset: Int): State[E] =
+    def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[E] =
       copy(consumerOffsets = consumerOffsets.updated(tag -> consumerId, offset))
 
     def appendEvents(id: String, events: NonEmptyVector[EventEnvelope[E]]): State[E] =
@@ -62,7 +62,7 @@ class StateEventJournal[F[_]: Monad, A, E](extract: A => State[E], update: (A, S
       .map(folder.consume(_))
       .transformS(extract, update)
 
-  def eventsByTag(tag: EventTag[E], consumerId: ConsumerId): Processable[StateT[F, A, ?], E] =
+  def eventsByTag(tag: EventTag, consumerId: ConsumerId): Processable[StateT[F, A, ?], E] =
     new Processable[StateT[F, A, ?], E] {
       override def process(f: (E) => StateT[F, A, Unit]): StateT[F, A, Unit] =
         for {

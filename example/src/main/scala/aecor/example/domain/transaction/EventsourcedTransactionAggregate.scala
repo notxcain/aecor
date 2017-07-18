@@ -18,14 +18,15 @@ import aecor.example.domain.transaction.TransactionEvent.{
   TransactionFailed,
   TransactionSucceeded
 }
+import aecor.util.Clock
 import cats.Applicative
 import cats.implicits._
 
 import scala.collection.immutable._
 
-class EventsourcedTransactionAggregate[F[_]: Applicative]
+class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applicative[F])
     extends TransactionAggregate[Handler[F, Option[Transaction], TransactionEvent, ?]] {
-  private def handle = Handler.lift[F, Option[Transaction]]
+  import F._
 
   override def createTransaction(
     transactionId: TransactionId,
@@ -33,79 +34,89 @@ class EventsourcedTransactionAggregate[F[_]: Applicative]
     toAccountId: To[AccountId],
     amount: Amount
   ): Handler[F, Option[Transaction], TransactionEvent, Unit] =
-    handle {
+    Handler {
       case None =>
-        Seq(TransactionEvent.TransactionCreated(transactionId, fromAccountId, toAccountId, amount)) -> (())
-      case Some(_) => Seq.empty -> (())
+        clock.instant.map { now =>
+          Seq(
+            TransactionEvent
+              .TransactionCreated(transactionId, fromAccountId, toAccountId, amount, now)
+          ) -> (())
+        }
+
+      case Some(_) => pure(Seq.empty -> (()))
     }
 
   override def authorizeTransaction(
     transactionId: TransactionId
   ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    handle {
+    Handler {
       case Some(transaction) =>
-        if (transaction.status == Requested) {
-          Seq(TransactionAuthorized(transactionId)) -> ().asRight
-        } else if (transaction.status == Authorized) {
-          Seq() -> ().asRight
-        } else {
-          Seq() -> "Illegal transition".asLeft
+        clock.instant.map { now =>
+          if (transaction.status == Requested) {
+            Seq(TransactionAuthorized(transactionId, now)) -> ().asRight
+          } else if (transaction.status == Authorized) {
+            Seq() -> ().asRight
+          } else {
+            Seq() -> "Illegal transition".asLeft
+          }
         }
       case None =>
-        Seq() -> "Transaction not found".asLeft
+        pure(Seq() -> "Transaction not found".asLeft)
     }
 
   override def failTransaction(
     transactionId: TransactionId,
     reason: String
   ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    handle {
+    Handler {
       case Some(transaction) =>
-        if (transaction.status == Failed) {
-          Seq.empty -> ().asRight
-        } else {
-          Seq(TransactionFailed(transactionId, reason)) -> ().asRight
+        clock.instant.map { now =>
+          if (transaction.status == Failed) {
+            Seq.empty -> ().asRight
+          } else {
+            Seq(TransactionFailed(transactionId, reason, now)) -> ().asRight
+          }
         }
       case None =>
-        Seq.empty -> "Transaction not found".asLeft
+        pure(Seq.empty -> "Transaction not found".asLeft)
     }
 
   override def succeedTransaction(
     transactionId: TransactionId
   ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    handle {
+    Handler {
       case Some(transaction) =>
-        if (transaction.status == Succeeded) {
-          Seq.empty -> ().asRight
-        } else if (transaction.status == Authorized) {
-          Seq(TransactionSucceeded(transactionId)) -> ().asRight
-        } else {
-          Seq.empty -> "Illegal transition".asLeft
+        clock.instant.map { now =>
+          if (transaction.status == Succeeded) {
+            Seq.empty -> ().asRight
+          } else if (transaction.status == Authorized) {
+            Seq(TransactionSucceeded(transactionId, now)) -> ().asRight
+          } else {
+            Seq.empty -> "Illegal transition".asLeft
+          }
         }
       case None =>
-        Seq.empty -> "Transaction not found".asLeft
+        pure(Seq.empty -> "Transaction not found".asLeft)
     }
 
   override def getTransactionInfo(
     transactionId: TransactionId
   ): Handler[F, Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
-    handle(
-      s =>
-        Seq.empty -> s.map {
-          case Transaction(status, from, to, amount) =>
-            TransactionInfo(transactionId, from, to, amount, Some(status).collect {
-              case Succeeded => true
-              case Failed => false
-            })
-      }
-    )
+    Handler.readOnly(_.map {
+      case Transaction(status, from, to, amount) =>
+        TransactionInfo(transactionId, from, to, amount, Some(status).collect {
+          case Succeeded => true
+          case Failed    => false
+        })
+    })
 }
 
 object EventsourcedTransactionAggregate {
-  def behavior[F[_]: Applicative]
-    : EventsourcedBehavior[F, TransactionAggregateOp, Option[Transaction], TransactionEvent] =
+  def behavior[F[_]: Applicative](
+    clock: Clock[F]
+  ): EventsourcedBehavior[F, TransactionAggregateOp, Option[Transaction], TransactionEvent] =
     EventsourcedBehavior(
-      TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[F]),
+      TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[F](clock)),
       Transaction.folder
     )
   sealed abstract class TransactionStatus
@@ -120,15 +131,15 @@ object EventsourcedTransactionAggregate {
                                to: To[AccountId],
                                amount: Amount) {
     def applyEvent(event: TransactionEvent): Folded[Transaction] = event match {
-      case TransactionCreated(_, _, _, _) => impossible
-      case TransactionAuthorized(_) => copy(status = TransactionStatus.Authorized).next
-      case TransactionFailed(_, _) => copy(status = TransactionStatus.Failed).next
-      case TransactionSucceeded(_) => copy(status = TransactionStatus.Succeeded).next
+      case TransactionCreated(_, _, _, _, _) => impossible
+      case TransactionAuthorized(_, _)       => copy(status = TransactionStatus.Authorized).next
+      case TransactionFailed(_, _, _)        => copy(status = TransactionStatus.Failed).next
+      case TransactionSucceeded(_, _)        => copy(status = TransactionStatus.Succeeded).next
     }
   }
   object Transaction {
     def fromEvent(event: TransactionEvent): Folded[Transaction] = event match {
-      case TransactionEvent.TransactionCreated(transactionId, fromAccount, toAccount, amount) =>
+      case TransactionEvent.TransactionCreated(transactionId, fromAccount, toAccount, amount, _) =>
         Transaction(TransactionStatus.Requested, fromAccount, toAccount, amount).next
       case _ => impossible
     }

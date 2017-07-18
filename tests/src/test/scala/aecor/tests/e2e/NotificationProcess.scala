@@ -9,6 +9,7 @@ import cats.implicits._
 
 object NotificationProcess {
   type Input = CounterEvent :+: NotificationEvent :+: CNil
+
   def apply[F[_]: Monad](counterFacade: CounterOp ~> F,
                          notificationFacade: NotificationOp ~> F): Input => F[Unit] =
     build {

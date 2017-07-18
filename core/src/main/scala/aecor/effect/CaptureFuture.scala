@@ -5,9 +5,6 @@ import cats.data.{ EitherT, Kleisli }
 import simulacrum.typeclass
 
 import scala.concurrent.Future
-
-// Greek alphabet letters & symbols (α,β,γ,δ,ε)
-
 @typeclass
 trait CaptureFuture[F[_]] {
   def captureFuture[A](future: => Future[A]): F[A]

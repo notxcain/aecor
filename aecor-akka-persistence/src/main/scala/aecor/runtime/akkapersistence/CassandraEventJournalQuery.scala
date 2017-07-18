@@ -50,13 +50,13 @@ class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, para
         }
     }
 
-  def eventsByTag(tag: EventTag[E], offset: Option[UUID]): Source[JournalEntry[UUID, E], NotUsed] =
+  def eventsByTag(tag: EventTag, offset: Option[UUID]): Source[JournalEntry[UUID, E], NotUsed] =
     createSource(
       readJournal
         .eventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
     )
 
-  override def currentEventsByTag(tag: EventTag[E],
+  override def currentEventsByTag(tag: EventTag,
                                   offset: Option[UUID]): Source[JournalEntry[UUID, E], NotUsed] =
     createSource(
       readJournal

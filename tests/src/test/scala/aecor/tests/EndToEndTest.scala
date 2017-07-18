@@ -31,10 +31,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
                        counterViewState: TestCounterViewRepositoryState,
                        time: Instant,
                        scheduleEntries: Vector[ScheduleEntry],
-                       offsetStoreState: Map[TagConsumerId, LocalDateTime])
+                       offsetStoreState: Map[TagConsumer, LocalDateTime])
 
   val offsetStore =
-    StateKeyValueStore[SpecF, SpecState, TagConsumerId, LocalDateTime](
+    StateKeyValueStore[SpecF, SpecState, TagConsumer, LocalDateTime](
       _.offsetStoreState,
       (s, os) => s.copy(offsetStoreState = os)
     )
@@ -72,7 +72,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val scheduleAggregate = mkBehavior[ScheduleOp, ScheduleState, ScheduleEvent](
     DefaultScheduleAggregate.behavior(clock.zonedDateTime),
     DefaultScheduleAggregate.correlation,
-    Tagging.const(EventTag[ScheduleEvent]("Schedule")),
+    Tagging.const(EventTag("Schedule")),
     schduleEventJournal
   )
 
@@ -87,7 +87,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       f: (ScheduleEvent) => StateT[SpecF, SpecState, Unit]
     ): StateT[SpecF, SpecState, Unit] =
       schduleEventJournal
-        .eventsByTag(EventTag[ScheduleEvent]("Schedule"), scheduleProcessConsumerId)
+        .eventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
         .process(f)
   }
 

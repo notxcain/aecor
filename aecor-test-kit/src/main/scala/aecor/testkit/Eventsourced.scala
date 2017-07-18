@@ -29,7 +29,7 @@ object Eventsourced {
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
-  final case class EventEnvelope[E](sequenceNr: Long, event: E, tags: Set[EventTag[E]])
+  final case class EventEnvelope[E](sequenceNr: Long, event: E, tags: Set[EventTag])
 
   def apply[F[_]: MonadError[?[_], BehaviorFailure], Op[_], S, E](
     correlation: Correlation[Op],

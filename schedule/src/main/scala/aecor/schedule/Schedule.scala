@@ -44,7 +44,7 @@ object Schedule {
     dayZero: LocalDate,
     clock: Clock[F],
     repository: ScheduleEntryRepository[F],
-    offsetStore: KeyValueStore[F, TagConsumerId, UUID],
+    offsetStore: KeyValueStore[F, TagConsumer, UUID],
     settings: ScheduleSettings = ScheduleSettings(
       1.day,
       10.seconds,
@@ -53,7 +53,7 @@ object Schedule {
     )
   )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] = {
 
-    val eventTag = EventTag[ScheduleEvent](entityName)
+    val eventTag = EventTag(entityName)
 
     val runtime = AkkaPersistenceRuntime2(
       system,
@@ -63,7 +63,7 @@ object Schedule {
       Tagging.const(eventTag)
     )
 
-    def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumerId, LocalDateTime] =
+    def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(
         uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
         value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli)

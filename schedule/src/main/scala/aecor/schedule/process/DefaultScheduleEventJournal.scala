@@ -18,7 +18,7 @@ object DefaultScheduleEventJournal {
     consumerId: ConsumerId,
     parallelism: Int,
     aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
-    eventTag: EventTag[ScheduleEvent]
+    eventTag: EventTag
   )(implicit materializer: Materializer): DefaultScheduleEventJournal[F] =
     new DefaultScheduleEventJournal(consumerId, parallelism, aggregateJournal, eventTag)
 }
@@ -27,7 +27,7 @@ class DefaultScheduleEventJournal[F[_]: Async: CaptureFuture: Applicative](
   consumerId: ConsumerId,
   parallelism: Int,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
-  eventTag: EventTag[ScheduleEvent]
+  eventTag: EventTag
 )(implicit materializer: Materializer)
     extends ScheduleEventJournal[F] {
   import materializer.executionContext

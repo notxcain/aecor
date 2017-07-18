@@ -25,7 +25,7 @@ sealed trait CounterEvent
 object CounterEvent {
   case class CounterIncremented(id: String) extends CounterEvent
   case class CounterDecremented(id: String) extends CounterEvent
-  val tag: EventTag[CounterEvent] = EventTag[CounterEvent]("Counter")
+  val tag: EventTag = EventTag("Counter")
   implicit def encoder: PersistentEncoder[CounterEvent] =
     PersistentEncoderCirce.circePersistentEncoder[CounterEvent]
   implicit def decoder: PersistentDecoder[CounterEvent] =
@@ -48,7 +48,7 @@ object CounterOpHandler {
     new CounterOpHandler[F]
 
   def behavior[F[_]: Applicative]: EventsourcedBehavior[F, CounterOp, CounterState, CounterEvent] =
-    EventsourcedBehavior(apply[F], CounterState.folder[Folded])
+    EventsourcedBehavior(CounterOpHandler[F], CounterState.folder[Folded])
 }
 
 class CounterOpHandler[F[_]: Applicative]
