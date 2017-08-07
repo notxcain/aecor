@@ -13,7 +13,7 @@ import aecor.example.domain.transaction.{
   TransactionAggregate,
   TransactionEvent
 }
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime2, CassandraOffsetStore }
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraOffsetStore }
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.event.Logging
@@ -50,12 +50,12 @@ object App {
         CassandraOffsetStore.createTable(offsetStoreConfig)
       )
 
-    val transactionAggregateRuntime = AkkaPersistenceRuntime2(
+    val transactionAggregateRuntime = AkkaPersistenceRuntime(
       system,
       "Transaction",
       Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
       EventsourcedTransactionAggregate.behavior[Task](taskClock),
-      Tagging.partitioned[TransactionEvent](20, EventTag("Transaction"))(_.transactionId.value)
+      EventsourcedTransactionAggregate.tagging
     )
 
     val startTransactions: Task[TransactionAggregate[Task]] =
@@ -64,7 +64,7 @@ object App {
 
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
 
-    val accountAggregateRuntime = AkkaPersistenceRuntime2(
+    val accountAggregateRuntime = AkkaPersistenceRuntime(
       system,
       "Account",
       Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
@@ -86,11 +86,11 @@ object App {
         TransactionProcess(transactions, accounts, failure)
 
       val processes =
-        DistributedProcessing.distribute[Task](20) { i =>
+        EventsourcedTransactionAggregate.tagging.tags.map { tag =>
           AkkaStreamProcess[Task](
             transactionAggregateRuntime.journal
               .committable(offsetStore)
-              .eventsByTag(EventTag(s"Transaction$i"), ConsumerId("processing"))
+              .eventsByTag(tag, ConsumerId("processing"))
               .map(_.map(_.event)),
             Flow[Committable[Task, TransactionEvent]]
               .mapAsync(30) {

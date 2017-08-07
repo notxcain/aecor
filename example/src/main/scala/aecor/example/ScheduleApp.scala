@@ -97,7 +97,7 @@ object ScheduleApp extends App {
   val app: Task[Unit] =
     mkApp[Task]
 
-  val processes = DistributedProcessing.distribute[Task](10) { x =>
+  val processes = (0 to 10).map { x =>
     AkkaStreamProcess[Task](
       Source.tick(0.seconds, 2.seconds, x).mapMaterializedValue(_ => NotUsed),
       Flow[Int].map { x =>

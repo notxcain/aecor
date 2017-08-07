@@ -39,7 +39,8 @@ class AkkaPersistenceRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val startRuntime = AkkaPersistenceRuntime[Task](system).start(
+  val runtime = AkkaPersistenceRuntime(
+    system,
     "Counter",
     CounterOp.correlation,
     CounterOpHandler.behavior[Task],
@@ -48,7 +49,7 @@ class AkkaPersistenceRuntimeSpec
 
   test("Runtime should work") {
     val program = for {
-      runtime <- startRuntime
+      runtime <- runtime.start
       _ <- runtime(CounterOp.Increment("1"))
       _ <- runtime(CounterOp.Increment("2"))
       _2 <- runtime(CounterOp.GetValue("2"))

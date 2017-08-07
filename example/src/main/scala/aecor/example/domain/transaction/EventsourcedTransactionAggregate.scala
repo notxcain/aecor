@@ -1,7 +1,7 @@
 package aecor.example.domain.transaction
 
 import aecor.data.Folded.syntax._
-import aecor.data.{ EventsourcedBehavior, Folded, Folder, Handler }
+import aecor.data._
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction
@@ -119,6 +119,9 @@ object EventsourcedTransactionAggregate {
       TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[F](clock)),
       Transaction.folder
     )
+
+  def tagging: Tagging.Partitioned[TransactionEvent] =
+    Tagging.partitioned[TransactionEvent](20, EventTag("Transaction"))(_.transactionId.value)
   sealed abstract class TransactionStatus
   object TransactionStatus {
     case object Requested extends TransactionStatus

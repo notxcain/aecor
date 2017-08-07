@@ -55,7 +55,7 @@ object Schedule {
 
     val eventTag = EventTag(entityName)
 
-    val runtime = AkkaPersistenceRuntime2(
+    val runtime = AkkaPersistenceRuntime(
       system,
       entityName,
       DefaultScheduleAggregate.correlation,

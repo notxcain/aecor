@@ -16,11 +16,11 @@ object Folder {
     Folder(b, (b, a) => reducer(b)(a))
 
   def optionInstance[F[_]: Functor, A, B](
-    none: A => F[B]
-  )(some: B => A => F[B]): Folder[F, A, Option[B]] =
+    init: A => F[B]
+  )(reduce: B => A => F[B]): Folder[F, A, Option[B]] =
     curried(Option.empty[B]) {
-      case None => none.andThen(_.map(Some(_)))
-      case Some(b) => some(b).andThen(_.map(Some(_)))
+      case None    => init.andThen(_.map(Some(_)))
+      case Some(b) => reduce(b).andThen(_.map(Some(_)))
     }
 }
 

@@ -49,7 +49,7 @@ class DistributedProcessing(system: ActorSystem) {
         },
         extractShardId = {
           case KeepRunning(workerId) => (workerId % settings.numberOfShards).toString
-          case other => throw new IllegalArgumentException(s"Unexpected messge [$other]")
+          case other                 => throw new IllegalArgumentException(s"Unexpected messge [$other]")
         }
       )
 
@@ -68,21 +68,9 @@ class DistributedProcessing(system: ActorSystem) {
 
 object DistributedProcessing {
   def apply(system: ActorSystem): DistributedProcessing = new DistributedProcessing(system)
-
   final case class ProcessKillSwitch[F[_]](shutdown: F[Unit])
-
   final case class RunningProcess[F[_]](watchTermination: F[Unit], shutdown: () => Unit)
   final case class Process[F[_]](run: F[RunningProcess[F]])
-
-  object distribute {
-    trait MkDistribute[F[_]] {
-      def apply(f: Int => Process[F]): Seq[Process[F]]
-    }
-    def apply[F[_]](count: Int) = new MkDistribute[F] {
-      override def apply(f: (Int) => Process[F]): Seq[Process[F]] =
-        (0 until count).map(f)
-    }
-  }
 }
 
 final case class DistributedProcessingSettings(minBackoff: FiniteDuration,
