@@ -3,13 +3,14 @@ package aecor.example
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 
-import aecor.aggregate.serialization.{
+import aecor.runtime.akkapersistence.serialization.{
   DecodingFailure,
   PersistentDecoder,
   PersistentEncoder,
   PersistentRepr
 }
 import io.circe.{ Decoder, Encoder, jawn }
+
 object persistentEncoderUtil {
   def circePersistentEncoder[A](implicit encoder: Encoder[A]): PersistentEncoder[A] =
     PersistentEncoder.instance(

@@ -1,52 +1,23 @@
 package aecor.tests
 
-import aecor.aggregate.{ Correlation, CorrelationIdF, Folder, StateRuntime }
-import aecor.data.Handler
-import cats.{ Id, Monad, ~> }
-import org.scalatest.{ FunSuite, Matchers }
+import aecor.data.EventsourcedBehavior
+import aecor.testkit.StateRuntime
+import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
+import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
+import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
 import cats.implicits._
+import cats.{ Monad, ~> }
+import org.scalatest.{ FunSuite, Matchers }
 
 class StateRuntimeSpec extends FunSuite with Matchers {
-  sealed trait CounterOp[A] {
-    def id: String
-  }
-  case class Increment(id: String) extends CounterOp[Long]
-  case class Decrement(id: String) extends CounterOp[Long]
-
-  val correlation = new (Correlation[CounterOp]) {
-    override def apply[A](fa: CounterOp[A]): CorrelationIdF[A] = fa.id
-  }
-
-  sealed trait CounterEvent
-  case class CounterIncremented(id: String) extends CounterEvent
-  case class CounterDecremented(id: String) extends CounterEvent
-  case class CounterState(value: Long)
-  object CounterState {
-    implicit val folder: Folder[Id, CounterEvent, CounterState] =
-      Folder.instance(CounterState(0)) {
-        case CounterState(x) => {
-          case CounterIncremented(_) => CounterState(x + 1)
-          case CounterDecremented(_) => CounterState(x - 1)
-        }
-      }
-  }
-  val behavior: CounterOp ~> Handler[CounterState, CounterEvent, ?] =
-    Lambda[CounterOp ~> Handler[CounterState, CounterEvent, ?]] {
-      case Increment(id) =>
-        Handler { x =>
-          Vector(CounterIncremented(id)) -> (x.value + 1)
-        }
-      case Decrement(id) =>
-        Handler { x =>
-          Vector(CounterDecremented(id)) -> (x.value - 1)
-        }
-    }
 
   val sharedRuntime =
-    StateRuntime.shared[CounterOp, CounterState, CounterEvent, Id](behavior)
+    StateRuntime.shared[Either[Throwable, ?], CounterOp, CounterState, CounterEvent](
+      EventsourcedBehavior(CounterOpHandler[Either[Throwable, ?]], CounterState.folder)
+    )
 
   val correlatedRuntime =
-    StateRuntime.correlated[CounterOp, CounterState, CounterEvent, Id](behavior, correlation)
+    StateRuntime.correlate(sharedRuntime, CounterOp.correlation)
 
   def mkProgram[F[_]: Monad](runtime: CounterOp ~> F): F[Long] =
     for {
@@ -58,7 +29,7 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   test("Shared runtime should execute all commands against shared sequence of events") {
     val program = mkProgram(sharedRuntime)
 
-    val (state, result) = program.run(Vector.empty)
+    val Right((state, result)) = program.run(Vector.empty)
 
     state shouldBe Vector(
       CounterIncremented("1"),
@@ -73,7 +44,7 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   ) {
     val program = mkProgram(correlatedRuntime)
 
-    val (state, result) = program.run(Map.empty)
+    val Right((state, result)) = program.run(Map.empty)
 
     state shouldBe Map(
       "1" -> Vector(CounterIncremented("1"), CounterDecremented("1")),

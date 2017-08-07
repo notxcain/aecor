@@ -2,11 +2,11 @@ package aecor.schedule.protobuf
 
 import java.time.{ Instant, LocalDateTime, ZoneOffset }
 
-import aecor.aggregate.serialization.Codec
+import aecor.runtime.akkapersistence.serialization.Codec
 import aecor.schedule.ScheduleEvent
 import aecor.schedule.serialization.protobuf.msg.{ ScheduleEntryAdded, ScheduleEntryFired }
 
-import scala.util.Try
+import scala.util.{ Failure, Try }
 
 object ScheduleEventCodec extends Codec[ScheduleEvent] {
   val ScheduleEntryAddedManifest = "A"
@@ -51,6 +51,7 @@ object ScheduleEventCodec extends Codec[ScheduleEvent] {
             Instant.ofEpochMilli(timestamp)
           )
       }
+    case other => Failure(new IllegalArgumentException(s"Unknown manifest [$other]"))
   }
 
   override def encode(o: ScheduleEvent): Array[Byte] = o match {

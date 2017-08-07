@@ -1,30 +1,38 @@
 package aecor.example
 
-import java.time.{ Clock, LocalDate, LocalDateTime }
+import java.time.{ Clock, LocalDate }
 import java.util.UUID
 
+import aecor.data.ConsumerId
+import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
+import aecor.effect.Async.ops._
+import aecor.effect.monix._
+import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.runtime.akkapersistence.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
-import aecor.streaming.{ CassandraAggregateJournal, CassandraOffsetStore, ConsumerId }
-import akka.Done
-import akka.actor.{ ActorSystem }
+import aecor.util.JavaTimeClock
+import akka.NotUsed
+import akka.actor.ActorSystem
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
-import akka.stream.{ ActorMaterializer }
-import akka.stream.scaladsl.{ Sink, Source }
-import cats.data.Reader
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.{ Flow, Sink, Source }
+import cats.implicits._
+import cats.{ Functor, Monad }
+import monix.eval.Task
+import monix.execution.Scheduler
+import monix.cats._
 
-import scala.concurrent.Future
+import scala.concurrent.Await
 import scala.concurrent.duration._
 object ScheduleApp extends App {
 
-  implicit val system = ActorSystem("aecor-example")
+  implicit val system = ActorSystem("test")
   implicit val materializer = ActorMaterializer()
-
-  val clock = Clock.systemUTC()
-
-  import materializer.executionContext
+  implicit val scheduler = Scheduler(materializer.executionContext)
+  def clock[F[_]: Capture] = JavaTimeClock[F](Clock.systemUTC())
 
   val offsetStoreConfig = CassandraOffsetStore.Config("aecor_example")
   val scheduleEntryRepositoryQueries =
@@ -37,56 +45,79 @@ object ScheduleApp extends App {
       CassandraScheduleEntryRepository.init(scheduleEntryRepositoryQueries)
     )
   )
-  val offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
-  val scheduleEntryRepository =
-    CassandraScheduleEntryRepository(cassandraSession, scheduleEntryRepositoryQueries)
 
-  def runSchedule: Reader[Unit, Schedule] =
+  def runSchedule[F[_]: Async: CaptureFuture: Capture: Monad]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
-      clock = clock,
       dayZero = LocalDate.of(2016, 5, 10),
-      bucketLength = 1.day,
-      refreshInterval = 100.millis,
-      eventualConsistencyDelay = 5.seconds,
-      repository = scheduleEntryRepository,
-      aggregateJournal = CassandraAggregateJournal(system),
-      offsetStore = offsetStore
+      clock = clock,
+      repository =
+        CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries),
+      offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 
-  def runAdder(schedule: Schedule): Reader[Unit, Any] =
-    Reader { _ =>
+  def runAdder[F[_]: Async: Capture: Monad](schedule: Schedule[F]): F[Unit] =
+    Capture[F].capture {
       Source
-        .tick(0.seconds, 200.millis, ())
+        .tick(0.seconds, 2.seconds, ())
         .mapAsync(1) { _ =>
-          schedule.addScheduleEntry(
-            "Test",
-            UUID.randomUUID().toString,
-            "test",
-            LocalDateTime.now(clock).plusSeconds(20)
-          )
+          Async[F].unsafeRun {
+            clock[F].localDateTime.flatMap { now =>
+              schedule.addScheduleEntry(
+                "Test",
+                UUID.randomUUID().toString,
+                "test",
+                now.plusSeconds(20)
+              )
+            }
+
+          }
         }
         .runWith(Sink.ignore)
-    }
+    }.void
 
-  def runEventWatch(schedule: Schedule): Reader[Unit, Future[Done]] =
-    Reader { _ =>
+  def runEventWatch[F[_]: Async: Capture: Functor](schedule: Schedule[F]): F[Unit] =
+    Capture[F].capture {
       schedule
         .committableScheduleEvents("SubscriptionInvoicing", ConsumerId("println"))
         .mapAsync(1) { x =>
           println(x.value)
-          x.commit()
+          x.commit.unsafeRun
         }
         .runWith(Sink.ignore)
-    }
+    }.void
 
-  val app: Reader[Unit, Unit] =
+  def mkApp[F[_]: Async: CaptureFuture: Capture: Monad]: F[Unit] =
     for {
-      schedule <- runSchedule
-      _ <- runAdder(schedule)
-//      _ <- runRepositoryScanStream
-//      _ <- runEventWatch(schedule)
+      schedule <- runSchedule[F]
+      _ <- runAdder[F](schedule)
+      _ <- runEventWatch[F](schedule)
     } yield ()
 
-  app.run(())
+  val app: Task[Unit] =
+    mkApp[Task]
+
+  val processes = (0 to 10).map { x =>
+    AkkaStreamProcess[Task](
+      Source.tick(0.seconds, 2.seconds, x).mapMaterializedValue(_ => NotUsed),
+      Flow[Int].map { x =>
+        system.log.info(s"Worker $x")
+        ()
+      }
+    )
+  }
+
+  val distributed = DistributedProcessing(system)
+    .start[Task]("TestProcesses", processes)
+
+  val app2: Task[Unit] = for {
+    killswtich <- distributed
+    x <- killswtich.shutdown.delayExecution(10.seconds)
+    _ <- {
+      system.log.info(s"$x")
+      app2
+    }
+  } yield ()
+
+  Await.result(app.runAsync, Duration.Inf)
 }

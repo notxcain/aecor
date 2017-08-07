@@ -1,6 +1,7 @@
 package aecor.data
 
 import aecor.data.Folded.{ Impossible, Next }
+
 import cats.kernel.Eq
 import cats.{
   Alternative,
@@ -55,6 +56,9 @@ object Folded extends FoldedInstances {
   final case class Next[+A](a: A) extends Folded[A]
   def impossible[A]: Folded[A] = Impossible
   def next[A](a: A): Folded[A] = Next(a)
+  def collectNext[A]: PartialFunction[Folded[A], Next[A]] = {
+    case next @ Next(_) => next
+  }
   object syntax {
     implicit class FoldedIdOps[A](val a: A) extends AnyVal {
       def next: Folded[A] = Folded.next(a)
