@@ -13,7 +13,6 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.3"
 lazy val akkaPersistenceCassandra = "0.54"
 lazy val catsVersion = "0.9.0"
-lazy val catsEffectVersion = "0.3"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -157,7 +156,6 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats" % catsVersion,
-    "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
   )
 )
