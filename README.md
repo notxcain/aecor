@@ -98,7 +98,7 @@ object SubscriptionOp {
   case class CancelSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
 }
 
-def behavior[F[_]](implicit F: Applicative[F]) = Lambda[SubscriptionOp ~> Handler[F, Option[Subscription], SubscriptionEvent, ?]] {
+def handler[F[_]](implicit F: Applicative[F]) = Lambda[SubscriptionOp ~> Handler[F, Option[Subscription], SubscriptionEvent, ?]] {
   case CreateSubscription(subscriptionId, userId, productId, planId) => {
     case Some(subscription) =>
       // Do nothing reply with ()
@@ -129,7 +129,7 @@ def behavior[F[_]](implicit F: Applicative[F]) = Lambda[SubscriptionOp ~> Handle
 ```
 
 Then you define a correlation function, entity name and a value provided by correlation function form unique primary key for aggregate.
-It should not be changed in the future, at least without prior event migration.
+It should not be changed between releases, at least without prior event migration.
 
 ```scala
 def correlation: Correlation[SubscriptionOp] = _.subscriptionId
@@ -150,7 +150,10 @@ val subscriptions: SubscriptionOp ~> Task =
     system,
     "Subscription",
     correlation,
-    behavior,
-    Tagging(EventTag("Payment"))
+    EventsourcedBehavior(
+      handler,
+      Subscription.folder
+    ),
+    Tagging.const[SubscriptionEvent](EventTag("Payment"))
   )
 ```
