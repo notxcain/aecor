@@ -3,13 +3,13 @@ import sbtrelease.Version.Bump
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
-  scalaVersion := "2.11.8",
+  scalaVersion := "2.11.11-bin-typelevel-4",
   scalaOrganization := "org.typelevel",
-  crossScalaVersions := Seq("2.11.8", "2.12.0")
+  crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.3-bin-typelevel-4")
 )
 
-lazy val akkaVersion = "2.4.17"
-lazy val akkaPersistenceCassandra = "0.23"
+lazy val akkaVersion = "2.5.4"
+lazy val akkaPersistenceCassandra = "0.55"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
@@ -19,14 +19,13 @@ lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.2"
-lazy val kindProjectorVersion = "0.9.3"
+lazy val kindProjectorVersion = "0.9.4"
 lazy val paradiseVersion = "2.1.0"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   libraryDependencies ++= Seq(
-    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
-    compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.full)
+    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion cross CrossVersion.binary)
   ),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
@@ -70,7 +69,7 @@ lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-query-experimental" % akkaVersion,
+    "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "com.chuusai" %% "shapeless" % shapelessVersion,
@@ -87,8 +86,8 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 
 lazy val exampleSettings = {
   val circeVersion = "0.6.1"
-  val akkaHttpVersion = "10.0.3"
-  val akkaHttpJsonVersion = "1.11.0"
+  val akkaHttpVersion = "10.0.10"
+  val akkaHttpJsonVersion = "1.17.0"
   val freekVersion = "0.6.5"
   Seq(
     resolvers ++= Seq(Resolver.bintrayRepo("projectseptemberinc", "maven")),

@@ -7,7 +7,7 @@ import aecor.data.EventTag
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
-import akka.persistence.query.{ EventEnvelope2, NoOffset, PersistenceQuery, TimeBasedUUID }
+import akka.persistence.query.{ EventEnvelope, NoOffset, PersistenceQuery, TimeBasedUUID }
 import akka.stream.scaladsl.Source
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -20,10 +20,10 @@ class CassandraAggregateJournal(system: ActorSystem, journalIdentifier: String, 
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](journalIdentifier)
 
   private def createSource[E: PersistentDecoder](
-    inner: Source[EventEnvelope2, NotUsed]
+    inner: Source[EventEnvelope, NotUsed]
   ): Source[JournalEntry[UUID, E], NotUsed] =
     inner.mapAsync(parallelism) {
-      case EventEnvelope2(eventOffset, persistenceId, sequenceNr, event) =>
+      case EventEnvelope(eventOffset, persistenceId, sequenceNr, event) =>
         Future(eventOffset).flatMap {
           case TimeBasedUUID(offsetValue) =>
             event match {

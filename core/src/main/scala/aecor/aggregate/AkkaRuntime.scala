@@ -47,6 +47,8 @@ class AkkaRuntime(system: ActorSystem) {
     def extractShardId: ShardRegion.ExtractShardId = {
       case CorrelatedCommand(entityId, _) =>
         (scala.math.abs(entityId.hashCode) % numberOfShards).toString
+      case x =>
+        throw new IllegalArgumentException(s"Expected message of type CorrelatedCommand, got [$x]")
     }
 
     val shardRegionRef = ClusterSharding(system).start(

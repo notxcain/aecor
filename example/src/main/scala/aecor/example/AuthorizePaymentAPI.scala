@@ -15,28 +15,24 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
 import cats.~>
-import de.heikoseeberger.akkahttpcirce.CirceSupport._
-import io.circe.generic.JsonCodec
+import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
+import io.circe.generic.auto._
+//import io.circe.generic.JsonCodec
 
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ ExecutionContext, Future }
 
-class AuthorizePaymentAPI(
-    authorization: CardAuthorizationAggregateOp ~> Future,
-    eventStream: EventStream[CardAuthorizationAggregateEvent],
-    log: LoggingAdapter) {
+class AuthorizePaymentAPI(authorization: CardAuthorizationAggregateOp ~> Future,
+                          eventStream: EventStream[CardAuthorizationAggregateEvent],
+                          log: LoggingAdapter) {
 
   import DTO._
 
   def authorizePayment(dto: AuthorizePayment)(
-      implicit ec: ExecutionContext): Future[
-    Either[CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] =
+    implicit ec: ExecutionContext
+  ): Future[Either[CreateCardAuthorizationRejection, AuthorizePaymentAPI.ApiResult]] =
     dto match {
-      case AuthorizePayment(cardAuthorizationId,
-                            accountId,
-                            amount,
-                            acquireId,
-                            terminalId) =>
+      case AuthorizePayment(cardAuthorizationId, accountId, amount, acquireId, terminalId) =>
         val command = CreateCardAuthorization(
           CardAuthorizationId(cardAuthorizationId),
           AccountId(accountId),
@@ -56,16 +52,20 @@ class AuthorizePaymentAPI(
               AuthorizePaymentAPI.ApiResult.Authorized
           }
           .flatMap { observer =>
-            authorization(command).flatMap {
-              case Left(rejection) => Future.successful(Left(rejection))
-              case _ => observer.result.map(Right(_))
-            }.map { x =>
-              log.debug("Command [{}] processed with result [{}] in [{}]",
-                        command,
-                        x,
-                        (System.nanoTime() - start) / 1000000)
-              x
-            }
+            authorization(command)
+              .flatMap {
+                case Left(rejection) => Future.successful(Left(rejection))
+                case _               => observer.result.map(Right(_))
+              }
+              .map { x =>
+                log.debug(
+                  "Command [{}] processed with result [{}] in [{}]",
+                  command,
+                  x,
+                  (System.nanoTime() - start) / 1000000
+                )
+                x
+              }
           }
 
     }
@@ -79,7 +79,7 @@ object AuthorizePaymentAPI {
     case class Declined(reason: String) extends ApiResult
   }
 
-  @JsonCodec sealed trait DTO
+  sealed trait DTO
 
   object DTO {
 

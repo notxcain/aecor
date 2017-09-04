@@ -51,6 +51,7 @@ object ScheduleEventCodec extends Codec[ScheduleEvent] {
             Instant.ofEpochMilli(timestamp)
           )
       }
+    case other => throw new IllegalArgumentException(s"Unexpected manifest [$other]")
   }
 
   override def encode(o: ScheduleEvent): Array[Byte] = o match {
