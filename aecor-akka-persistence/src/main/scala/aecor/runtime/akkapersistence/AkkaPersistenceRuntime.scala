@@ -13,54 +13,40 @@ import cats.{ Monad, ~> }
 
 import scala.concurrent.Future
 
-object AkkaPersistenceRuntime {
-  def apply[F[_]: Async: CaptureFuture: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-    system: ActorSystem,
-    entityName: String,
-    correlation: Correlation[Op],
-    behavior: EventsourcedBehavior[F, Op, State, Event],
-    tagging: Tagging[Event],
-    onPersisted: Option[Event => F[Unit]] = None,
-    snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
-    settings: Option[AkkaPersistenceRuntimeSettings] = None
-  ): AkkaPersistenceRuntime[F, Op, State, Event] = {
-    val pureUnit = Monad[F].pure(())
-    new AkkaPersistenceRuntime[F, Op, State, Event](
-      system,
-      entityName,
-      correlation,
-      behavior,
-      tagging,
-      onPersisted.getOrElse(_ => pureUnit),
-      snapshotPolicy,
-      settings
-    )
-  }
-
-  private final case class CorrelatedCommand[C[_], A](entityId: String, command: C[A])
-}
-
-class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-  system: ActorSystem,
+final case class AkkaPersistenceRuntimeUnit[F[_], Op[_], State, Event](
   entityName: String,
   correlation: Correlation[Op],
   behavior: EventsourcedBehavior[F, Op, State, Event],
   tagging: Tagging[Event],
-  onPersisted: Event => F[Unit],
+  onPersisted: Option[Event => F[Unit]] = None,
   snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
-  customSettings: Option[AkkaPersistenceRuntimeSettings] = None
-) {
+  settings: Option[AkkaPersistenceRuntimeSettings] = None
+)
 
+abstract class AkkaPersistenceRuntimeDeployment[F[_], Op[_], Event] {
+  def start: F[Op ~> F]
+  def journal: EventJournalQuery[UUID, Event]
+}
+
+private class DefaultAkkaPersistenceRuntimeDeployment[F[_]: Async: CaptureFuture: Capture: Monad, Op[
+  _
+], State, Event: PersistentEncoder: PersistentDecoder](
+  system: ActorSystem,
+  unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event]
+) extends AkkaPersistenceRuntimeDeployment[F, Op, Event] {
   import AkkaPersistenceRuntime._
+  import unit._
+
   def start: F[Op ~> F] = {
-    val settings = customSettings.getOrElse(AkkaPersistenceRuntimeSettings.default(system))
+    val settings = unit.settings.getOrElse(AkkaPersistenceRuntimeSettings.default(system))
+    val pureUnit = Monad[F].pure(())
     val props =
       AkkaPersistenceRuntimeActor.props(
         entityName,
         behavior,
         snapshotPolicy,
         tagging,
-        onPersisted,
+        onPersisted.getOrElse(_ => pureUnit),
         settings.idleTimeout
       )
 
@@ -98,4 +84,18 @@ class AkkaPersistenceRuntime[F[_]: Async: CaptureFuture: Capture: Monad, Op[_], 
   }
 
   def journal: EventJournalQuery[UUID, Event] = CassandraEventJournalQuery[Event](system)
+}
+
+object AkkaPersistenceRuntime {
+  def apply(system: ActorSystem): AkkaPersistenceRuntime = new AkkaPersistenceRuntime(system)
+
+  private[akkapersistence] final case class CorrelatedCommand[C[_], A](entityId: String,
+                                                                       command: C[A])
+}
+
+class AkkaPersistenceRuntime(system: ActorSystem) {
+  def deploy[F[_]: Async: CaptureFuture: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+    unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event]
+  ): AkkaPersistenceRuntimeDeployment[F, Op, Event] =
+    new DefaultAkkaPersistenceRuntimeDeployment[F, Op, State, Event](system, unit)
 }
