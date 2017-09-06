@@ -11,6 +11,7 @@ import aecor.effect.Async.ops._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.runtime.akkapersistence.serialization.{
+  Message,
   PersistentDecoder,
   PersistentEncoder,
   PersistentRepr
@@ -38,7 +39,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
       new AkkaPersistenceRuntimeActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout)
     )
 
-  final case class HandleCommand[C[_], A](command: C[A])
+  final case class HandleCommand[A](command: A) extends Message
   case object Stop
 }
 

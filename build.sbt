@@ -174,7 +174,7 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   )
 )
 
-lazy val akkaPersistenceSettings = Seq(
+lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
