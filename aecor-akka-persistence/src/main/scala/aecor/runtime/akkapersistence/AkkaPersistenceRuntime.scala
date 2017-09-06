@@ -18,9 +18,7 @@ final case class AkkaPersistenceRuntimeUnit[F[_], Op[_], State, Event](
   correlation: Correlation[Op],
   behavior: EventsourcedBehavior[F, Op, State, Event],
   tagging: Tagging[Event],
-  onPersisted: Option[Event => F[Unit]] = None,
-  snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
-  settings: Option[AkkaPersistenceRuntimeSettings] = None
+  snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never
 )
 
 abstract class AkkaPersistenceRuntimeDeployment[F[_], Op[_], Event] {
@@ -32,21 +30,19 @@ private class DefaultAkkaPersistenceRuntimeDeployment[F[_]: Async: CaptureFuture
   _
 ], State, Event: PersistentEncoder: PersistentDecoder](
   system: ActorSystem,
-  unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event]
+  unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event],
+  settings: AkkaPersistenceRuntimeSettings
 ) extends AkkaPersistenceRuntimeDeployment[F, Op, Event] {
   import AkkaPersistenceRuntime._
   import unit._
 
   def start: F[Op ~> F] = {
-    val settings = unit.settings.getOrElse(AkkaPersistenceRuntimeSettings.default(system))
-    val pureUnit = Monad[F].pure(())
     val props =
       AkkaPersistenceRuntimeActor.props(
         entityName,
         behavior,
         snapshotPolicy,
         tagging,
-        onPersisted.getOrElse(_ => pureUnit),
         settings.idleTimeout
       )
 
@@ -87,15 +83,21 @@ private class DefaultAkkaPersistenceRuntimeDeployment[F[_]: Async: CaptureFuture
 }
 
 object AkkaPersistenceRuntime {
-  def apply(system: ActorSystem): AkkaPersistenceRuntime = new AkkaPersistenceRuntime(system)
+  def apply(system: ActorSystem): AkkaPersistenceRuntime = {
+    val settings = AkkaPersistenceRuntimeSettings.default(system)
+    new AkkaPersistenceRuntime(system, settings)
+  }
+
+  def apply(system: ActorSystem, settings: AkkaPersistenceRuntimeSettings): AkkaPersistenceRuntime =
+    new AkkaPersistenceRuntime(system, settings)
 
   private[akkapersistence] final case class CorrelatedCommand[C[_], A](entityId: String,
                                                                        command: C[A])
 }
 
-class AkkaPersistenceRuntime(system: ActorSystem) {
+class AkkaPersistenceRuntime(system: ActorSystem, settings: AkkaPersistenceRuntimeSettings) {
   def deploy[F[_]: Async: CaptureFuture: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event]
   ): AkkaPersistenceRuntimeDeployment[F, Op, Event] =
-    new DefaultAkkaPersistenceRuntimeDeployment[F, Op, State, Event](system, unit)
+    new DefaultAkkaPersistenceRuntimeDeployment[F, Op, State, Event](system, unit, settings)
 }

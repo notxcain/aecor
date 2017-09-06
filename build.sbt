@@ -6,12 +6,12 @@ lazy val buildSettings = inThisBuild(
     organization := "io.aecor",
     scalaVersion := "2.11.11-bin-typelevel-4",
     scalaOrganization := "org.typelevel",
-    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.2-bin-typelevel-4")
+    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.3-bin-typelevel-4")
   )
 )
 
-lazy val akkaVersion = "2.5.3"
-lazy val akkaPersistenceCassandra = "0.54"
+lazy val akkaVersion = "2.5.4"
+lazy val akkaPersistenceCassandra = "0.55"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
@@ -23,16 +23,16 @@ lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.2"
-lazy val kindProjectorVersion = "0.9.3"
+lazy val kindProjectorVersion = "0.9.4"
 lazy val paradiseVersion = "2.1.0"
 lazy val simulacrumVersion = "0.10.0"
 
 // Example dependencies
 
 lazy val circeVersion = "0.8.0"
-lazy val akkaHttpVersion = "10.0.5"
+lazy val akkaHttpVersion = "10.0.10"
 lazy val akkaHttpJsonVersion = "1.16.0"
-lazy val scalametaParadiseVersion = "3.0.0-M9"
+lazy val scalametaParadiseVersion = "3.0.0-M10"
 
 lazy val liberatorVersion = "0.4.3"
 

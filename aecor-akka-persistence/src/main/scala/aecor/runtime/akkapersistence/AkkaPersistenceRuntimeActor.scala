@@ -10,7 +10,6 @@ import aecor.effect.Async
 import aecor.effect.Async.ops._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
-import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
 import aecor.runtime.akkapersistence.serialization.{
   PersistentDecoder,
   PersistentEncoder,
@@ -26,46 +25,17 @@ import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
 
-sealed abstract class SnapshotPolicy[+E] extends Product with Serializable
-
-object SnapshotPolicy {
-  def never[E]: SnapshotPolicy[E] = Never.asInstanceOf[SnapshotPolicy[E]]
-
-  def eachNumberOfEvents[E: PersistentEncoder: PersistentDecoder](
-    numberOfEvents: Int
-  ): SnapshotPolicy[E] = EachNumberOfEvents(numberOfEvents)
-
-  private[akkapersistence] case object Never extends SnapshotPolicy[Nothing]
-
-  private[akkapersistence] final case class EachNumberOfEvents[
-    State: PersistentEncoder: PersistentDecoder
-  ](numberOfEvents: Int)
-      extends SnapshotPolicy[State] {
-    def encode(state: State): PersistentRepr = PersistentEncoder[State].encode(state)
-    def decode(repr: PersistentRepr): DecodingResult[State] = PersistentDecoder[State].decode(repr)
-  }
-
-}
-
-object AkkaPersistenceRuntimeActor {
+private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   def props[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
     behavior: EventsourcedBehavior[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[Event],
-    onPersisted: Event => F[Unit],
     idleTimeout: FiniteDuration
   ): Props =
     Props(
-      new AkkaPersistenceRuntimeActor(
-        entityName,
-        behavior,
-        snapshotPolicy,
-        tagging,
-        onPersisted,
-        idleTimeout
-      )
+      new AkkaPersistenceRuntimeActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout)
     )
 
   final case class HandleCommand[C[_], A](command: C[A])
@@ -81,12 +51,11 @@ object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder] private[aecor] (
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
   behavior: EventsourcedBehavior[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[Event],
-  onPersist: Event => F[Unit],
   idleTimeout: FiniteDuration
 ) extends PersistentActor
     with ActorLogging
@@ -218,7 +187,6 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
           eventCount += 1
           markSnapshotAsPendingIfNeeded()
           snapshotIfPending()
-          events.map(onPersist).foreach(_.unsafeRun)
         }
       } else {
         persistAll(envelopes) { _ =>
@@ -229,7 +197,6 @@ final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: Persis
             sender() ! reply
             snapshotIfPending()
           }
-          events.map(onPersist).foreach(_.unsafeRun)
         }
       }
     }
