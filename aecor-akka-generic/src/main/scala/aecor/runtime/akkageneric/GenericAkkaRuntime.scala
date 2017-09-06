@@ -1,7 +1,7 @@
 package aecor.runtime.akkageneric
 
 import aecor.data.{ Behavior, Correlation }
-import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.effect.{ Async, Capture }
 import aecor.runtime.akkageneric.GenericAkkaRuntime.CorrelatedCommand
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
@@ -12,17 +12,18 @@ import cats.~>
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
-  def apply[F[_]: Async: CaptureFuture: Capture](system: ActorSystem): GenericAkkaRuntime[F] =
+  def apply[F[_]: Async: Capture](system: ActorSystem): GenericAkkaRuntime[F] =
     new GenericAkkaRuntime(system)
   private final case class CorrelatedCommand[A](entityId: String, command: A)
 }
 
-class GenericAkkaRuntime[F[_]: Async: CaptureFuture: Capture](system: ActorSystem) {
-  def start[Op[_]](typeName: String,
-                   correlation: Correlation[Op],
-                   behavior: Behavior[F, Op],
-                   settings: GenericAkkaRuntimeSettings =
-                     GenericAkkaRuntimeSettings.default(system)): F[Op ~> F] =
+class GenericAkkaRuntime[F[_]: Async: Capture](system: ActorSystem) {
+  def start[Op[_]](
+    typeName: String,
+    correlation: Correlation[Op],
+    behavior: Behavior[F, Op],
+    settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
+  ): F[Op ~> F] =
     Capture[F]
       .capture {
         val numberOfShards = settings.numberOfShards
@@ -50,7 +51,7 @@ class GenericAkkaRuntime[F[_]: Async: CaptureFuture: Capture](system: ActorSyste
 
         implicit val timeout = Timeout(settings.askTimeout)
         new (Op ~> F) {
-          override def apply[A](fa: Op[A]): F[A] = CaptureFuture[F].captureFuture {
+          override def apply[A](fa: Op[A]): F[A] = Capture[F].captureFuture {
             (shardRegionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
           }
         }

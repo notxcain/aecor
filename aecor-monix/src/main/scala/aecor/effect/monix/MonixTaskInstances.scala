@@ -1,6 +1,6 @@
 package aecor.effect.monix
 
-import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.effect.{ Async, Capture }
 import monix.eval.Task
 
 import scala.concurrent.Future
@@ -23,13 +23,8 @@ trait MonixTaskInstances {
   implicit def aecorEffectMonixCaptureInstanceForTask: Capture[_root_.monix.eval.Task] =
     new Capture[_root_.monix.eval.Task] {
       override def capture[A](a: => A): _root_.monix.eval.Task[A] = _root_.monix.eval.Task(a)
-    }
-
-  implicit def aecorEffectMonixCaptureFutureInstanceForTask
-    : CaptureFuture[_root_.monix.eval.Task] =
-    new CaptureFuture[_root_.monix.eval.Task] {
       override def captureFuture[A](future: => Future[A]): _root_.monix.eval.Task[A] =
         _root_.monix.eval.Task.deferFuture(future)
-
     }
+
 }

@@ -4,17 +4,16 @@ import java.util.UUID
 
 import aecor.data.{ Committable, ConsumerId, EventTag }
 import aecor.effect.Async.ops._
-import aecor.effect.{ Async, CaptureFuture }
-import aecor.runtime.akkapersistence.{ CommittableEventJournalQuery }
+import aecor.effect.{ Async, Capture }
+import aecor.runtime.akkapersistence.CommittableEventJournalQuery
 import aecor.schedule.ScheduleEvent
-
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Keep, Sink }
 import cats.Applicative
 import cats.implicits._
 
 object DefaultScheduleEventJournal {
-  def apply[F[_]: Async: CaptureFuture: Applicative](
+  def apply[F[_]: Async: Capture: Applicative](
     consumerId: ConsumerId,
     parallelism: Int,
     aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
@@ -23,7 +22,7 @@ object DefaultScheduleEventJournal {
     new DefaultScheduleEventJournal(consumerId, parallelism, aggregateJournal, eventTag)
 }
 
-class DefaultScheduleEventJournal[F[_]: Async: CaptureFuture: Applicative](
+class DefaultScheduleEventJournal[F[_]: Async: Capture: Applicative](
   consumerId: ConsumerId,
   parallelism: Int,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
@@ -32,7 +31,7 @@ class DefaultScheduleEventJournal[F[_]: Async: CaptureFuture: Applicative](
     extends ScheduleEventJournal[F] {
   import materializer.executionContext
   override def processNewEvents(f: (ScheduleEvent) => F[Unit]): F[Unit] =
-    CaptureFuture[F].captureFuture {
+    Capture[F].captureFuture {
       aggregateJournal
         .currentEventsByTag(eventTag, consumerId)
         .mapAsync(parallelism)(_.map(_.event).traverse(f.andThen(_.unsafeRun)))

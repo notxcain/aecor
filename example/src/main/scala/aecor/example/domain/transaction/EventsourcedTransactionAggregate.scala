@@ -22,7 +22,6 @@ import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeUnit
 import aecor.util.Clock
 import cats.Applicative
 import cats.implicits._
-import monix.eval.Task
 
 import scala.collection.immutable._
 
@@ -122,13 +121,14 @@ object EventsourcedTransactionAggregate {
       Transaction.folder
     )
 
-  def unit: AkkaPersistenceRuntimeUnit[Task, TransactionAggregate.TransactionAggregateOp, Option[
-    Transaction
-  ], TransactionEvent] =
+  def unit[F[_]: Applicative](clock: Clock[F])
+    : AkkaPersistenceRuntimeUnit[F, TransactionAggregate.TransactionAggregateOp, Option[
+      Transaction
+    ], TransactionEvent] =
     AkkaPersistenceRuntimeUnit(
       "Transaction",
       Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
-      behavior[Task](taskClock),
+      behavior[F](clock),
       tagging
     )
 

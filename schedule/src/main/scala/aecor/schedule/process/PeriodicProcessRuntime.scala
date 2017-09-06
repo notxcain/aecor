@@ -1,22 +1,19 @@
 package aecor.schedule.process
 
-import aecor.effect.{ Async, Capture, CaptureFuture }
-
-import scala.collection.immutable._
+import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
+import aecor.effect.Async.ops._
+import aecor.effect.{ Async, Capture }
+import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Source }
 import cats.Monad
-import Async.ops._
-import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import akka.NotUsed
 
-import scala.concurrent.duration.FiniteDuration
-
-import scala.concurrent.duration._
+import scala.collection.immutable._
+import scala.concurrent.duration.{ FiniteDuration, _ }
 
 object PeriodicProcessRuntime {
-  def apply[F[_]: Async: CaptureFuture: Capture: Monad](
+  def apply[F[_]: Async: Capture: Monad](
     name: String,
     tickInterval: FiniteDuration,
     processCycle: F[Unit]
@@ -24,7 +21,7 @@ object PeriodicProcessRuntime {
     new PeriodicProcessRuntime[F](name, tickInterval, processCycle)
 }
 
-class PeriodicProcessRuntime[F[_]: Async: CaptureFuture: Capture: Monad](
+class PeriodicProcessRuntime[F[_]: Async: Capture: Monad](
   name: String,
   tickInterval: FiniteDuration,
   processCycle: F[Unit]

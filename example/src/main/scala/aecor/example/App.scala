@@ -7,17 +7,13 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
-import aecor.example.domain.account.{ AccountAggregate, AccountEvent, EventsourcedAccountAggregate }
+import aecor.example.domain.account.{ AccountAggregate, EventsourcedAccountAggregate }
 import aecor.example.domain.transaction.{
   EventsourcedTransactionAggregate,
   TransactionAggregate,
   TransactionEvent
 }
-import aecor.runtime.akkapersistence.{
-  AkkaPersistenceRuntime,
-  AkkaPersistenceRuntimeUnit,
-  CassandraOffsetStore
-}
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraOffsetStore }
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.event.Logging
@@ -56,32 +52,18 @@ object App {
         CassandraOffsetStore.createTable(offsetStoreConfig)
       )
 
-    val transactionAggregateDeploy = runtime.deploy(EventsourcedTransactionAggregate.unit)
-
-    val transactionAggregateRuntime = AkkaPersistenceRuntime(
-      system,
-      "Transaction",
-      Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
-      EventsourcedTransactionAggregate.behavior[Task](taskClock),
-      EventsourcedTransactionAggregate.tagging
-    )
+    val transactionAggregate = runtime.deploy(EventsourcedTransactionAggregate.unit(taskClock))
 
     val startTransactions: Task[TransactionAggregate[Task]] =
-      transactionAggregateRuntime.start
+      transactionAggregate.start
         .map(TransactionAggregate.fromFunctionK)
 
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
 
-    val accountAggregateRuntime = AkkaPersistenceRuntime(
-      system,
-      "Account",
-      Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
-      EventsourcedAccountAggregate.behavior[Task](taskClock),
-      Tagging.partitioned[AccountEvent](20, EventTag("Account"))(_.accountId.value)
-    )
+    val accountAggregate = runtime.deploy(EventsourcedAccountAggregate.unit(taskClock))
 
     val startAccounts: Task[AccountAggregate[Task]] =
-      accountAggregateRuntime.start
+      accountAggregate.start
         .map(AccountAggregate.fromFunctionK)
 
     def startTransactionProcessing(
@@ -96,7 +78,7 @@ object App {
       val processes =
         EventsourcedTransactionAggregate.tagging.tags.map { tag =>
           AkkaStreamProcess[Task](
-            transactionAggregateRuntime.journal
+            transactionAggregate.journal
               .committable(offsetStore)
               .eventsByTag(tag, ConsumerId("processing"))
               .map(_.map(_.event)),

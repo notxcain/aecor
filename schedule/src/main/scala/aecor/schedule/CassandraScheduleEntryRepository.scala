@@ -5,7 +5,7 @@ import java.time.format.DateTimeFormatter
 
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
-import aecor.effect.{ Async, CaptureFuture }
+import aecor.effect.{ Async, Capture }
 import akka.NotUsed
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
@@ -18,7 +18,7 @@ import Async.ops._
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
+class CassandraScheduleEntryRepository[F[_]: Async: Capture](
   cassandraSession: CassandraSession,
   queries: Queries
 )(implicit materializer: Materializer)
@@ -33,7 +33,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
                                    scheduleBucket: String,
                                    entryId: String,
                                    dueDate: LocalDateTime): F[Unit] =
-    CaptureFuture[F].captureFuture {
+    Capture[F].captureFuture {
       preparedInsertEntry
         .map(
           _.bind()
@@ -51,7 +51,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
   override def markScheduleEntryAsFired(scheduleName: String,
                                         scheduleBucket: String,
                                         entryId: String): F[Unit] =
-    CaptureFuture[F].captureFuture {
+    Capture[F].captureFuture {
       preparedSelectEntry
         .map(
           _.bind()
@@ -121,7 +121,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
   override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
     f: (ScheduleEntry) => F[Unit]
   ): F[Option[ScheduleEntry]] =
-    CaptureFuture[F].captureFuture {
+    Capture[F].captureFuture {
       getEntries(from, to)
         .mapAsync(parallelism)(x => f(x).unsafeRun.map(_ => x))
         .runWith(Sink.lastOption)
@@ -140,7 +140,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: CaptureFuture](
 
 object CassandraScheduleEntryRepository {
 
-  def apply[F[_]: Async: CaptureFuture](cassandraSession: CassandraSession, queries: Queries)(
+  def apply[F[_]: Async: Capture](cassandraSession: CassandraSession, queries: Queries)(
     implicit materializer: Materializer
   ): CassandraScheduleEntryRepository[F] =
     new CassandraScheduleEntryRepository(cassandraSession, queries)

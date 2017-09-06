@@ -3,7 +3,7 @@ package aecor.runtime.akkapersistence
 import java.util.UUID
 
 import aecor.data.TagConsumer
-import aecor.effect.{ Async, CaptureFuture }
+import aecor.effect.{ Async, Capture }
 import aecor.util.KeyValueStore
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
@@ -25,15 +25,14 @@ object CassandraOffsetStore {
     implicit executionContext: ExecutionContext
   ): Session => Future[Unit] = _.executeAsync(config.createTableQuery).asScala.map(_ => ())
 
-  def apply[F[_]: Async: CaptureFuture](
-    session: CassandraSession,
-    config: CassandraOffsetStore.Config
-  )(implicit executionContext: ExecutionContext): CassandraOffsetStore[F] =
+  def apply[F[_]: Async: Capture](session: CassandraSession, config: CassandraOffsetStore.Config)(
+    implicit executionContext: ExecutionContext
+  ): CassandraOffsetStore[F] =
     new CassandraOffsetStore(session, config)
 
 }
 
-class CassandraOffsetStore[F[_]: Async: CaptureFuture](
+class CassandraOffsetStore[F[_]: Async: Capture](
   session: CassandraSession,
   config: CassandraOffsetStore.Config
 )(implicit executionContext: ExecutionContext)
@@ -44,7 +43,7 @@ class CassandraOffsetStore[F[_]: Async: CaptureFuture](
     session.prepare(config.updateOffsetQuery)
 
   override def setValue(key: TagConsumer, value: UUID): F[Unit] =
-    CaptureFuture[F].captureFuture {
+    Capture[F].captureFuture {
       updateOffsetStatement
         .map { stmt =>
           stmt
@@ -57,7 +56,7 @@ class CassandraOffsetStore[F[_]: Async: CaptureFuture](
         .map(_ => ())
     }
 
-  override def getValue(key: TagConsumer): F[Option[UUID]] = CaptureFuture[F].captureFuture {
+  override def getValue(key: TagConsumer): F[Option[UUID]] = Capture[F].captureFuture {
     selectOffsetStatement
       .map(_.bind(key.consumerId.value, key.tag.value))
       .flatMap(session.selectOne)

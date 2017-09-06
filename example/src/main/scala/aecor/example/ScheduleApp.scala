@@ -7,7 +7,7 @@ import aecor.data.ConsumerId
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.Async.ops._
 import aecor.effect.monix._
-import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.effect.{ Async, Capture }
 import aecor.runtime.akkapersistence.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.util.JavaTimeClock
@@ -46,7 +46,7 @@ object ScheduleApp extends App {
     )
   )
 
-  def runSchedule[F[_]: Async: CaptureFuture: Capture: Monad]: F[Schedule[F]] =
+  def runSchedule[F[_]: Async: Capture: Monad]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
       dayZero = LocalDate.of(2016, 5, 10),
@@ -87,7 +87,7 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def mkApp[F[_]: Async: CaptureFuture: Capture: Monad]: F[Unit] =
+  def mkApp[F[_]: Async: Capture: Monad]: F[Unit] =
     for {
       schedule <- runSchedule[F]
       _ <- runAdder[F](schedule)

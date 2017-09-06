@@ -4,7 +4,7 @@ import java.time.{ Clock => _, _ }
 import java.util.UUID
 
 import aecor.data._
-import aecor.effect.{ Async, Capture, CaptureFuture }
+import aecor.effect.{ Async, Capture }
 import aecor.runtime.akkapersistence._
 import aecor.schedule.process.{
   DefaultScheduleEventJournal,
@@ -39,7 +39,7 @@ object Schedule {
                                     eventualConsistencyDelay: FiniteDuration,
                                     consumerId: ConsumerId)
 
-  def start[F[_]: Async: CaptureFuture: Capture: Monad](
+  def start[F[_]: Async: Capture: Monad](
     entityName: String,
     dayZero: LocalDate,
     clock: Clock[F],
@@ -55,13 +55,16 @@ object Schedule {
 
     val eventTag = EventTag(entityName)
 
-    val runtime = AkkaPersistenceRuntime(
-      system,
+    val runtime = AkkaPersistenceRuntime(system)
+
+    val unit = AkkaPersistenceRuntimeUnit(
       entityName,
       DefaultScheduleAggregate.correlation,
       DefaultScheduleAggregate.behavior(clock.zonedDateTime),
       Tagging.const(eventTag)
     )
+
+    val deploy = runtime.deploy(unit)
 
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(
@@ -71,7 +74,7 @@ object Schedule {
 
     def startAggregate =
       for {
-        f <- runtime.start
+        f <- deploy.start
       } yield ScheduleAggregate.fromFunctionK(f)
 
     def startProcess(aggregate: ScheduleAggregate[F]) = clock.zone.map { zone =>
@@ -79,7 +82,7 @@ object Schedule {
         DefaultScheduleEventJournal[F](
           settings.consumerId,
           8,
-          runtime.journal.committable(offsetStore),
+          deploy.journal.committable(offsetStore),
           eventTag
         )
 
@@ -102,7 +105,7 @@ object Schedule {
         clock,
         aggregate,
         settings.bucketLength,
-        runtime.journal.committable(offsetStore),
+        deploy.journal.committable(offsetStore),
         eventTag
       )
 
