@@ -21,7 +21,7 @@ object DistributedSourceWorkerSpec {
 }
 
 class DistributedSourceWorkerSpec
-    extends TestKit(ActorSystem("test", ShardedRuntimeSpec.conf))
+    extends TestKit(ActorSystem("test", GenericRuntimeSpec.conf))
     with FunSuiteLike
     with Matchers
     with ScalaFutures

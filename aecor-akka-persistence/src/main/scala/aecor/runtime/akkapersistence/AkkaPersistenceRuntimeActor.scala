@@ -143,7 +143,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, Op
   private def handleCommand(command: Op[_]): Unit = {
     val opId = UUID.randomUUID()
     behavior
-      .handler(command)
+      .handlerSelector(command)
       .run(state)
       .unsafeRun
       .map {

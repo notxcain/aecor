@@ -95,7 +95,7 @@ object Eventsourced {
             override def apply[A](op: Op[A]): StateT[F, RunningState[S], A] =
               StateT { state =>
                 for {
-                  x <- entityBehavior.handler(op).run(state.entityState)
+                  x <- entityBehavior.handlerSelector(op).run(state.entityState)
                   (events, reply) = x
                   nextState <- updateState(state, events)
                 } yield (nextState, reply)

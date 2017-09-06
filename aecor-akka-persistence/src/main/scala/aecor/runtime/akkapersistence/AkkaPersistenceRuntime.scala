@@ -93,7 +93,8 @@ object AkkaPersistenceRuntime {
                                                                        command: C[A])
 }
 
-class AkkaPersistenceRuntime(system: ActorSystem, settings: AkkaPersistenceRuntimeSettings) {
+class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
+                                                       settings: AkkaPersistenceRuntimeSettings) {
   def deploy[F[_]: Async: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event]
   ): AkkaPersistenceRuntimeDeployment[F, Op, Event] =

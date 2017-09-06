@@ -44,6 +44,7 @@ object App {
       CassandraOffsetStore.Config(config.getString("cassandra-journal.keyspace"))
 
     val runtime = AkkaPersistenceRuntime(system)
+    val distributedProcessing = DistributedProcessing(system)
 
     val cassandraSession =
       DefaultJournalCassandraSession(
@@ -71,10 +72,8 @@ object App {
       transactions: TransactionAggregate[Task]
     ): Task[DistributedProcessing.ProcessKillSwitch[Task]] = {
       val failure = TransactionProcessFailure.withMonadError[Task]
-
-      val process: (Input) => Task[Unit] =
+      val processStep: (Input) => Task[Unit] =
         TransactionProcess(transactions, accounts, failure)
-
       val processes =
         EventsourcedTransactionAggregate.tagging.tags.map { tag =>
           AkkaStreamProcess[Task](
@@ -84,13 +83,12 @@ object App {
               .map(_.map(_.event)),
             Flow[Committable[Task, TransactionEvent]]
               .mapAsync(30) {
-                _.traverse(process).runAsync
+                _.traverse(processStep).runAsync
               }
               .mapAsync(1)(_.commit.runAsync)
           )
         }
-
-      DistributedProcessing(system).start[Task]("TransactionProcessing", processes)
+      distributedProcessing.start[Task]("TransactionProcessing", processes)
     }
 
     def startHttpServer(accounts: AccountAggregate[Task],

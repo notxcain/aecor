@@ -20,7 +20,7 @@ object GenericAkkaRuntimeSettings {
     * @return default settings
     */
   def default(system: ActorSystem): GenericAkkaRuntimeSettings = {
-    val config = system.settings.config.getConfig("aecor.akka-runtime")
+    val config = system.settings.config.getConfig("aecor.generic-akka-runtime")
     def getMillisDuration(path: String): FiniteDuration =
       Duration(config.getDuration(path, TimeUnit.MILLISECONDS), TimeUnit.MILLISECONDS)
 

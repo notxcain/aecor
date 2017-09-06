@@ -25,7 +25,7 @@ object StateRuntime {
           foldedState = behavior.folder.consume(events)
           result <- foldedState match {
                      case Next(state) =>
-                       StateT.lift(behavior.handler(op).run(state)).flatMap {
+                       StateT.lift(behavior.handlerSelector(op).run(state)).flatMap {
                          case (es, r) =>
                            StateT
                              .modify[F, Vector[E]](_ ++ es)

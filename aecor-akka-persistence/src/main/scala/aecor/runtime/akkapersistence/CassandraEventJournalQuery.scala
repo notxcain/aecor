@@ -15,6 +15,8 @@ import scala.concurrent.Future
 class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, parallelism: Int)
     extends EventJournalQuery[UUID, E] {
 
+  private val decoder = PersistentDecoder[E]
+
   private val readJournal =
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
 
@@ -27,7 +29,7 @@ class CassandraEventJournalQuery[E: PersistentDecoder](system: ActorSystem, para
           case TimeBasedUUID(offsetValue) =>
             event match {
               case repr: PersistentRepr =>
-                PersistentDecoder[E]
+                decoder
                   .decode(repr)
                   .right
                   .map { event =>

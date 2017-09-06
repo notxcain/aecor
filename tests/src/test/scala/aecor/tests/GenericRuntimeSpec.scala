@@ -16,18 +16,18 @@ import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike, Matchers }
 
 import scala.concurrent.duration._
 
-object ShardedRuntimeSpec {
+object GenericRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
         cluster.system-name=test
         akka.persistence.journal.plugin=akka.persistence.journal.inmem
         akka.persistence.snapshot-store.plugin=akka.persistence.no-snapshot-store
-        aecor.akka-runtime.idle-timeout = 1s
-                                                  cluster.seed-nodes = ["akka://test@127.0.0.1:51000"]
+        aecor.generic-akka-runtime.idle-timeout = 1s
+        cluster.seed-nodes = ["akka://test@127.0.0.1:51000"]
      """).withFallback(ConfigFactory.load())
 }
 
-class ShardedRuntimeSpec
-    extends TestKit(ActorSystem("test", ShardedRuntimeSpec.conf))
+class GenericRuntimeSpec
+    extends TestKit(ActorSystem("test", GenericRuntimeSpec.conf))
     with FunSuiteLike
     with Matchers
     with ScalaFutures
@@ -53,15 +53,15 @@ class ShardedRuntimeSpec
       runtime <- startRuntime
       _ <- runtime(CounterOp.Increment("1"))
       _ <- runtime(CounterOp.Increment("2"))
-      second <- runtime(CounterOp.GetValue("2"))
       _ <- runtime(CounterOp.Decrement("1"))
-      _1 <- runtime(CounterOp.GetValue("1"))
+      first <- runtime(CounterOp.GetValue("1"))
+      second <- runtime(CounterOp.GetValue("2"))
       secondAfterPassivation <- runtime(CounterOp.GetValue("2")).delayExecution(2.seconds)
-    } yield (_1, second, secondAfterPassivation)
+    } yield (first, second, secondAfterPassivation)
 
-    val (_1, _2, afterPassivation) = program.runAsync.futureValue
-    _1 shouldBe 0L
-    _2 shouldBe 1L
+    val (first, second, afterPassivation) = program.runAsync.futureValue
+    first shouldBe 0L
+    second shouldBe 1L
     afterPassivation shouldBe 0
   }
 }
