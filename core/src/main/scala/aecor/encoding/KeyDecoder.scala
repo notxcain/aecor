@@ -1,9 +1,6 @@
 package aecor.encoding
-
 import java.util.UUID
-
 import cats.MonadError
-
 import scala.annotation.tailrec
 
 abstract class KeyDecoder[A] { self =>
@@ -30,8 +27,12 @@ abstract class KeyDecoder[A] { self =>
     final def apply(key: String): Option[B] = self(key).flatMap(a => f(a)(key))
   }
 
+  /**
+    * Construct an instance for type `B` from an instance for type `A`
+    * by applying partial function.
+    */
   def collect[B](f: PartialFunction[A, B]): KeyDecoder[B] = new KeyDecoder[B] {
-    override def apply(key: String) = self(key).collect(f)
+    override def apply(key: String): Option[B] = self(key).collect(f)
   }
 }
 

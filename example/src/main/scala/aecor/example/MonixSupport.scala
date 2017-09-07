@@ -3,6 +3,7 @@ package aecor.example
 import akka.http.scaladsl.marshalling.{ Marshaller, ToResponseMarshallable, ToResponseMarshaller }
 import monix.eval.Task
 import monix.execution.Scheduler
+
 trait MonixSupport {
   implicit def taskToResponseMarshallable[A](
     task: Task[A]
