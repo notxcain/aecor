@@ -7,23 +7,21 @@ import aecor.example.domain.transaction.TransactionId
 import io.aecor.liberator.macros.algebra
 import io.circe.{ Decoder, Encoder }
 
-@algebra('accountId)
+@algebra
 trait AccountAggregate[F[_]] {
-  def openAccount(accountId: AccountId): F[Either[Rejection, Unit]]
-  def creditAccount(accountId: AccountId,
-                    transactionId: AccountTransactionId,
-                    amount: Amount): F[Either[Rejection, Unit]]
-  def debitAccount(accountId: AccountId,
-                   transactionId: AccountTransactionId,
-                   amount: Amount): F[Either[Rejection, Unit]]
+  def openAccount(checkBalance: Boolean): F[Either[Rejection, Unit]]
+  def creditAccount(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]
+  def debitAccount(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]
 }
 
 final case class AccountTransactionId(baseTransactionId: TransactionId,
                                       kind: AccountTransactionKind)
+
 object AccountTransactionId extends AnyValCirceEncoding {
   implicit def decoder: Decoder[AccountTransactionId] = io.circe.generic.semiauto.deriveDecoder
   implicit def encoder: Encoder[AccountTransactionId] = io.circe.generic.semiauto.deriveEncoder
 }
+
 sealed abstract class AccountTransactionKind
 object AccountTransactionKind {
   case object Normal extends AccountTransactionKind
@@ -35,6 +33,7 @@ object AccountTransactionKind {
   }
   implicit val encoder: Encoder[AccountTransactionKind] = Encoder[String].contramap(_.toString)
 }
+
 object AccountAggregate {
   sealed trait Rejection extends Product with Serializable
 

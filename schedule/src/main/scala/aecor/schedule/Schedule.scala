@@ -25,12 +25,12 @@ import scala.concurrent.duration._
 trait Schedule[F[_]] {
   def addScheduleEntry(scheduleName: String,
                        entryId: String,
-                       correlationId: CorrelationId,
+                       correlationId: String,
                        dueDate: LocalDateTime): F[Unit]
   def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
-  ): Source[Committable[F, JournalEntry[UUID, ScheduleEvent]], NotUsed]
+  ): Source[Committable[F, JournalEntry[UUID, ScheduleBucketId, ScheduleEvent]], NotUsed]
 }
 
 object Schedule {
@@ -59,9 +59,8 @@ object Schedule {
 
     val unit = AkkaPersistenceRuntimeUnit(
       entityName,
-      DefaultScheduleAggregate.correlation,
-      DefaultScheduleAggregate.behavior(clock.zonedDateTime),
-      Tagging.const(eventTag)
+      DefaultScheduleBucket.behavior(clock.zonedDateTime),
+      Tagging.const[ScheduleBucketId](eventTag)
     )
 
     val deploy = runtime.deploy(unit)
@@ -75,9 +74,9 @@ object Schedule {
     def startAggregate =
       for {
         f <- deploy.start
-      } yield ScheduleAggregate.fromFunctionK(f)
+      } yield f.andThen(ScheduleBucket.fromFunctionK)
 
-    def startProcess(aggregate: ScheduleAggregate[F]) = clock.zone.map { zone =>
+    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
       val journal =
         DefaultScheduleEventJournal[F](
           settings.consumerId,
@@ -93,26 +92,26 @@ object Schedule {
         uuidToLocalDateTime(zone),
         settings.eventualConsistencyDelay,
         repository,
-        aggregate,
+        buckets,
         clock.localDateTime,
         8
       )
       PeriodicProcessRuntime(entityName, settings.refreshInterval, process).run(system)
     }
 
-    def createSchedule(aggregate: ScheduleAggregate[F]): Schedule[F] =
+    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[F]): Schedule[F] =
       new DefaultSchedule(
         clock,
-        aggregate,
+        buckets,
         settings.bucketLength,
         deploy.journal.committable(offsetStore),
         eventTag
       )
 
     for {
-      aggregate <- startAggregate
-      _ <- startProcess(aggregate)
-      schedule = createSchedule(aggregate)
+      buckets <- startAggregate
+      _ <- startProcess(buckets)
+      schedule = createSchedule(buckets)
     } yield schedule
   }
 

@@ -7,11 +7,12 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
-import aecor.example.domain.account.{ AccountAggregate, EventsourcedAccountAggregate }
+import aecor.example.domain.account.{ AccountAggregate, AccountId, EventsourcedAccountAggregate }
 import aecor.example.domain.transaction.{
   EventsourcedTransactionAggregate,
   TransactionAggregate,
-  TransactionEvent
+  TransactionEvent,
+  TransactionId
 }
 import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraOffsetStore }
 import aecor.util.JavaTimeClock
@@ -55,21 +56,21 @@ object App {
 
     val transactionAggregate = runtime.deploy(EventsourcedTransactionAggregate.unit(taskClock))
 
-    val startTransactions: Task[TransactionAggregate[Task]] =
+    val startTransactions: Task[TransactionId => TransactionAggregate[Task]] =
       transactionAggregate.start
-        .map(TransactionAggregate.fromFunctionK)
+        .map(_.andThen(TransactionAggregate.fromFunctionK))
 
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
 
     val accountAggregate = runtime.deploy(EventsourcedAccountAggregate.unit(taskClock))
 
-    val startAccounts: Task[AccountAggregate[Task]] =
+    val startAccounts: Task[AccountId => AccountAggregate[Task]] =
       accountAggregate.start
-        .map(AccountAggregate.fromFunctionK)
+        .map(_.andThen(AccountAggregate.fromFunctionK))
 
     def startTransactionProcessing(
-      accounts: AccountAggregate[Task],
-      transactions: TransactionAggregate[Task]
+      accounts: AccountId => AccountAggregate[Task],
+      transactions: TransactionId => TransactionAggregate[Task]
     ): Task[DistributedProcessing.ProcessKillSwitch[Task]] = {
       val failure = TransactionProcessFailure.withMonadError[Task]
       val processStep: (Input) => Task[Unit] =
@@ -80,8 +81,8 @@ object App {
             transactionAggregate.journal
               .committable(offsetStore)
               .eventsByTag(tag, ConsumerId("processing"))
-              .map(_.map(_.event)),
-            Flow[Committable[Task, TransactionEvent]]
+              .map(_.map(_.identified)),
+            Flow[Committable[Task, Identified[TransactionId, TransactionEvent]]]
               .mapAsync(30) {
                 _.traverse(processStep).runAsync
               }
@@ -91,8 +92,10 @@ object App {
       distributedProcessing.start[Task]("TransactionProcessing", processes)
     }
 
-    def startHttpServer(accounts: AccountAggregate[Task],
-                        transactions: TransactionAggregate[Task]): Task[Http.ServerBinding] =
+    def startHttpServer(
+      accounts: AccountId => AccountAggregate[Task],
+      transactions: TransactionId => TransactionAggregate[Task]
+    ): Task[Http.ServerBinding] =
       Task.defer {
         Task.fromFuture {
           val transactionEndpoint =

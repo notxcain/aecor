@@ -7,21 +7,17 @@ import cats.implicits._
 import cats.{ Applicative, ~> }
 
 object notification {
-  sealed abstract class NotificationOp[A] extends Product with Serializable {
-    def notificationId: String
-  }
+  type NotificationId = String
+  sealed abstract class NotificationOp[A] extends Product with Serializable
   object NotificationOp {
-    final case class CreateNotification(notificationId: String, counterId: String)
-        extends NotificationOp[Unit]
-    final case class MarkAsSent(notificationId: String) extends NotificationOp[Unit]
-    val correlation: Correlation[NotificationOp] = Correlation[NotificationOp](_.notificationId)
+    final case class CreateNotification(counterId: String) extends NotificationOp[Unit]
+    final case object MarkAsSent extends NotificationOp[Unit]
   }
 
   sealed trait NotificationEvent
   object NotificationEvent {
-    case class NotificationCreated(notificationId: String, counterId: String)
-        extends NotificationEvent
-    case class NotificationSent(notificationId: String) extends NotificationEvent
+    final case class NotificationCreated(counterId: String) extends NotificationEvent
+    final case object NotificationSent extends NotificationEvent
     val tag: EventTag = EventTag("Notification")
   }
 
@@ -30,8 +26,8 @@ object notification {
     def folder[F[_]: Applicative]: Folder[F, NotificationEvent, NotificationState] =
       Folder.curried(NotificationState(false)) {
         case NotificationState(_) => {
-          case NotificationCreated(_, _) => NotificationState(false).pure[F]
-          case NotificationSent(_)       => NotificationState(true).pure[F]
+          case NotificationCreated(_) => NotificationState(false).pure[F]
+          case NotificationSent       => NotificationState(true).pure[F]
         }
       }
   }
@@ -42,13 +38,13 @@ object notification {
         fa: NotificationOp[A]
       ): Handler[F, NotificationState, NotificationEvent, A] =
         fa match {
-          case CreateNotification(nid, cid) =>
+          case CreateNotification(cid) =>
             Handler.lift { _ =>
-              Vector(NotificationCreated(nid, cid)) -> (())
+              Vector(NotificationCreated(cid)) -> (())
             }
-          case MarkAsSent(id) =>
+          case MarkAsSent =>
             Handler.lift { _ =>
-              Vector(NotificationSent(id)) -> (())
+              Vector(NotificationSent) -> (())
             }
         }
     }

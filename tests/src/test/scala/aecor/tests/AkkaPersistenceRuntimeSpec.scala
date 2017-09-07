@@ -1,7 +1,7 @@
 package aecor.tests
 
 import aecor.data.Tagging
-import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler }
+import aecor.tests.e2e.{ CounterEvent, CounterId, CounterOp, CounterOpHandler }
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{ Config, ConfigFactory }
@@ -31,6 +31,7 @@ class AkkaPersistenceRuntimeSpec
     with Matchers
     with ScalaFutures
     with BeforeAndAfterAll {
+  import CounterOp._
 
   override implicit val patienceConfig = PatienceConfig(15.seconds, 150.millis)
 
@@ -44,21 +45,20 @@ class AkkaPersistenceRuntimeSpec
   val deploy = runtime.deploy(
     AkkaPersistenceRuntimeUnit(
       "Counter",
-      CounterOp.correlation,
       CounterOpHandler.behavior[Task],
-      Tagging.const(CounterEvent.tag)
+      Tagging.const[CounterId](CounterEvent.tag)
     )
   )
 
   test("Runtime should work") {
     val program = for {
-      ar <- deploy.start
-      _ <- ar(CounterOp.Increment("1"))
-      _ <- ar(CounterOp.Increment("2"))
-      _2 <- ar(CounterOp.GetValue("2"))
-      _ <- ar(CounterOp.Decrement("1"))
-      _1 <- ar(CounterOp.GetValue("1"))
-      afterPassivation <- ar(CounterOp.GetValue("2")).delayExecution(2.seconds)
+      counters <- deploy.start
+      _ <- counters("1")(Increment)
+      _ <- counters("2")(Increment)
+      _2 <- counters("2")(GetValue)
+      _ <- counters("1")(Decrement)
+      _1 <- counters("1")(GetValue)
+      afterPassivation <- counters("2")(GetValue).delayExecution(2.seconds)
     } yield (_1, _2, afterPassivation)
 
     val (_1, _2, afterPassivation) = program.runAsync.futureValue

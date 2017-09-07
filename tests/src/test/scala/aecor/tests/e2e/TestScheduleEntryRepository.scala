@@ -3,7 +3,7 @@ package aecor.tests.e2e
 import java.time.LocalDateTime
 
 import aecor.schedule.CassandraScheduleEntryRepository.TimeBucket
-import aecor.schedule.ScheduleEntryRepository
+import aecor.schedule.{ ScheduleBucketId, ScheduleEntryRepository }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import cats.Monad
 import cats.data.StateT
@@ -21,15 +21,13 @@ object TestScheduleEntryRepository {
 class TestScheduleEntryRepository[F[_]: Monad, S](extract: S => Vector[ScheduleEntry],
                                                   update: (S, Vector[ScheduleEntry]) => S)
     extends ScheduleEntryRepository[StateT[F, S, ?]] {
-  override def insertScheduleEntry(scheduleName: String,
-                                   scheduleBucket: String,
+  override def insertScheduleEntry(scheduleBucketId: ScheduleBucketId,
                                    entryId: String,
                                    dueDate: LocalDateTime): StateT[F, S, Unit] =
     StateT
       .modify[F, Vector[ScheduleEntry]] { scheduleEntries =>
         scheduleEntries :+ ScheduleEntry(
-          scheduleName,
-          scheduleBucket,
+          scheduleBucketId,
           entryId,
           dueDate,
           TimeBucket(dueDate.toLocalDate).key,
@@ -37,13 +35,12 @@ class TestScheduleEntryRepository[F[_]: Monad, S](extract: S => Vector[ScheduleE
         )
       }
       .transformS(extract, update)
-  override def markScheduleEntryAsFired(scheduleName: String,
-                                        scheduleBucket: String,
+  override def markScheduleEntryAsFired(bucketId: ScheduleBucketId,
                                         entryId: String): StateT[F, S, Unit] =
     StateT
       .modify[F, Vector[ScheduleEntry]] { scheduleEntries =>
         scheduleEntries.map { e =>
-          if (e.scheduleName == scheduleName && scheduleBucket == e.scheduleBucket && e.entryId == entryId) {
+          if (e.bucketId == bucketId && e.entryId == entryId) {
             e.copy(fired = true)
           } else {
             e

@@ -1,21 +1,22 @@
 package aecor.example.domain
 
+import aecor.data.Identified
 import aecor.example.domain.account.{
   AccountAggregate,
+  AccountId,
   AccountTransactionId,
   AccountTransactionKind
 }
 import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
-import aecor.example.domain.transaction.{ TransactionAggregate, TransactionEvent }
+import aecor.example.domain.transaction.{ TransactionAggregate, TransactionEvent, TransactionId }
 import cats.implicits._
 import cats.{ Monad, MonadError }
-import io.aecor.liberator.macros.{ algebra, term }
+import io.aecor.liberator.macros.algebra
 
 object TransactionProcess {
-  type Input = TransactionEvent
+  type Input = (Identified[TransactionId, TransactionEvent])
 
   @algebra
-  @term
   trait TransactionProcessFailure[F[_]] {
     def failProcess[A](reason: String): F[A]
   }
@@ -28,44 +29,41 @@ object TransactionProcess {
       }
   }
 
-  def apply[F[_]: Monad](transaction: TransactionAggregate[F],
-                         account: AccountAggregate[F],
+  def apply[F[_]: Monad](transactions: TransactionId => TransactionAggregate[F],
+                         accounts: AccountId => AccountAggregate[F],
                          failure: TransactionProcessFailure[F]): Input => F[Unit] = {
-    case TransactionEvent.TransactionCreated(transactionId, from, to, amount, _) =>
+    case Identified(transactionId, TransactionEvent.TransactionCreated(from, to, amount, _)) =>
       for {
-        out <- account.debitAccount(
-                from.value,
+        out <- accounts(from.value).debitAccount(
                 AccountTransactionId(transactionId, AccountTransactionKind.Normal),
                 amount
               )
         _ <- out match {
               case Left(rejection) =>
-                transaction.failTransaction(transactionId, rejection.toString)
+                transactions(transactionId).failTransaction(rejection.toString)
               case Right(_) =>
-                transaction.authorizeTransaction(transactionId)
+                transactions(transactionId).authorizeTransaction
             }
       } yield ()
-    case TransactionEvent.TransactionAuthorized(transactionId, _) =>
+    case Identified(transactionId, TransactionEvent.TransactionAuthorized(_)) =>
       for {
-        txn <- transaction.getTransactionInfo(transactionId).flatMap {
+        txn <- transactions(transactionId).getTransactionInfo.flatMap {
                 case Some(x) => x.pure[F]
                 case None =>
                   failure.failProcess[TransactionInfo](s"Transaction [$transactionId] not found")
               }
-        creditResult <- account.creditAccount(
-                         txn.toAccountId.value,
+        creditResult <- accounts(txn.toAccountId.value).creditAccount(
                          AccountTransactionId(transactionId, AccountTransactionKind.Normal),
                          txn.amount
                        )
         _ <- creditResult match {
               case Left(rejection) =>
-                account.debitAccount(
-                  txn.fromAccountId.value,
-                  AccountTransactionId(txn.transactionId, AccountTransactionKind.Revert),
+                accounts(txn.fromAccountId.value).debitAccount(
+                  AccountTransactionId(transactionId, AccountTransactionKind.Revert),
                   txn.amount
-                ) >> transaction.failTransaction(transactionId, rejection.toString)
+                ) >> transactions(transactionId).failTransaction(rejection.toString)
               case Right(_) =>
-                transaction.succeedTransaction(transactionId)
+                transactions(transactionId).succeedTransaction
             }
       } yield ()
     case other =>

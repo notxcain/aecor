@@ -1,7 +1,7 @@
 package aecor.testkit
 
+import aecor.data.EventsourcedBehavior
 import aecor.data.Folded.{ Impossible, Next }
-import aecor.data.{ Correlation, EventsourcedBehavior }
 import cats.data._
 import cats.implicits._
 import cats.{ Functor, MonadError, ~> }
@@ -48,15 +48,13 @@ object StateRuntime {
     * sequence of events
     *
     */
-  def correlate[F[_]: Functor, O[_], E](
-    behavior: O ~> StateT[F, Vector[E], ?],
-    correlation: Correlation[O]
-  ): O ~> StateT[F, Map[String, Vector[E]], ?] =
-    new (O ~> StateT[F, Map[String, Vector[E]], ?]) {
-      override def apply[A](fa: O[A]): StateT[F, Map[String, Vector[E]], A] = {
-        val entityId = correlation(fa)
-        behavior(fa).transformS(_.getOrElse(entityId, Vector.empty[E]), _.updated(entityId, _))
-      }
+  def correlate[F[_]: Functor, I, O[_], E](
+    behavior: O ~> StateT[F, Vector[E], ?]
+  ): I => O ~> StateT[F, Map[I, Vector[E]], ?] =
+    i =>
+      new (O ~> StateT[F, Map[I, Vector[E]], ?]) {
+        override def apply[A](fa: O[A]): StateT[F, Map[I, Vector[E]], A] =
+          behavior(fa).transformS(_.getOrElse(i, Vector.empty[E]), _.updated(i, _))
     }
 
 }

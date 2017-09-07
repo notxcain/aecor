@@ -11,31 +11,26 @@ import aecor.schedule.protobuf.ScheduleEventCodec
 import cats.Functor
 import cats.implicits._
 
-object DefaultScheduleAggregate {
+object DefaultScheduleBucket {
 
   def apply[F[_]: Functor](
     clock: F[ZonedDateTime]
-  ): ScheduleAggregate[Handler[F, ScheduleState, ScheduleEvent, ?]] =
-    new DefaultScheduleAggregate(clock)
-
-  def correlation: Correlation[ScheduleOp] =
-    c => CorrelationId.composite("-", c.scheduleName, c.scheduleBucket)
+  ): ScheduleBucket[Handler[F, ScheduleState, ScheduleEvent, ?]] =
+    new DefaultScheduleBucket(clock)
 
   def behavior[F[_]: Functor](
     clock: F[ZonedDateTime]
   ): EventsourcedBehavior[F, ScheduleOp, ScheduleState, ScheduleEvent] =
-    EventsourcedBehavior(DefaultScheduleAggregate(clock).asFunctionK, ScheduleState.folder)
+    EventsourcedBehavior(DefaultScheduleBucket(clock).asFunctionK, ScheduleState.folder)
 
 }
 
-class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
-    extends ScheduleAggregate[Handler[F, ScheduleState, ScheduleEvent, ?]] {
+class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
+    extends ScheduleBucket[Handler[F, ScheduleState, ScheduleEvent, ?]] {
 
   override def addScheduleEntry(
-    scheduleName: String,
-    scheduleBucket: String,
     entryId: String,
-    correlationId: CorrelationId,
+    correlationId: String,
     dueDate: LocalDateTime
   ): Handler[F, ScheduleState, ScheduleEvent, Unit] =
     Handler { state =>
@@ -45,18 +40,9 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
         if (state.unfired.get(entryId).isDefined || state.fired.contains(entryId)) {
           Vector.empty -> (())
         } else {
-          val scheduleEntryAdded = ScheduleEntryAdded(
-            scheduleName,
-            scheduleBucket,
-            entryId,
-            correlationId,
-            dueDate,
-            timestamp
-          )
+          val scheduleEntryAdded = ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp)
           val firedEvent = if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
-            Vector(
-              ScheduleEntryFired(scheduleName, scheduleBucket, entryId, correlationId, timestamp)
-            )
+            Vector(ScheduleEntryFired(entryId, correlationId, timestamp))
           } else {
             Vector.empty
           }
@@ -66,49 +52,30 @@ class DefaultScheduleAggregate[F[_]: Functor](clock: F[ZonedDateTime])
       }
 
     }
-  override def fireEntry(scheduleName: String,
-                         scheduleBucket: String,
-                         entryId: String): Handler[F, ScheduleState, ScheduleEvent, Unit] =
+  override def fireEntry(entryId: String): Handler[F, ScheduleState, ScheduleEvent, Unit] =
     Handler { state =>
       clock.map(_.toInstant).map { timestamp =>
         state
           .findEntry(entryId)
-          .map(
-            entry =>
-              ScheduleEntryFired(
-                scheduleName,
-                scheduleBucket,
-                entry.id,
-                entry.correlationId,
-                timestamp
-            )
-          )
+          .map(entry => ScheduleEntryFired(entry.id, entry.correlationId, timestamp))
           .toVector -> (())
       }
     }
 }
 
 sealed abstract class ScheduleEvent extends Product with Serializable {
-  def scheduleName: String
-  def scheduleBucket: String
   def entryId: String
   def timestamp: Instant
 }
 
 object ScheduleEvent extends ScheduleEventInstances {
-  final case class ScheduleEntryAdded(scheduleName: String,
-                                      scheduleBucket: String,
-                                      entryId: String,
-                                      correlationId: CorrelationId,
+  final case class ScheduleEntryAdded(entryId: String,
+                                      correlationId: String,
                                       dueDate: LocalDateTime,
                                       timestamp: Instant)
       extends ScheduleEvent
 
-  final case class ScheduleEntryFired(scheduleName: String,
-                                      scheduleBucket: String,
-                                      entryId: String,
-                                      correlationId: CorrelationId,
-                                      timestamp: Instant)
+  final case class ScheduleEntryFired(entryId: String, correlationId: String, timestamp: Instant)
       extends ScheduleEvent
 }
 
@@ -120,9 +87,7 @@ trait ScheduleEventInstances {
 }
 
 private[aecor] case class ScheduleState(unfired: Map[String, ScheduleEntry], fired: Set[String]) {
-  def addEntry(entryId: String,
-               correlationId: CorrelationId,
-               dueDate: LocalDateTime): ScheduleState =
+  def addEntry(entryId: String, correlationId: String, dueDate: LocalDateTime): ScheduleState =
     copy(unfired = unfired + (entryId -> ScheduleEntry(entryId, correlationId, dueDate)))
 
   def markEntryAsFired(entryId: String): ScheduleState =
@@ -132,7 +97,7 @@ private[aecor] case class ScheduleState(unfired: Map[String, ScheduleEntry], fir
     unfired.get(entryId)
 
   def update(event: ScheduleEvent): Folded[ScheduleState] = event match {
-    case ScheduleEntryAdded(_, _, entryId, correlationId, dueDate, _) =>
+    case ScheduleEntryAdded(entryId, correlationId, dueDate, _) =>
       addEntry(entryId, correlationId, dueDate).next
     case e: ScheduleEntryFired =>
       markEntryAsFired(e.entryId).next
@@ -143,7 +108,7 @@ private[aecor] object ScheduleState {
 
   def initial: ScheduleState = ScheduleState(Map.empty, Set.empty)
 
-  case class ScheduleEntry(id: String, correlationId: CorrelationId, dueDate: LocalDateTime)
+  case class ScheduleEntry(id: String, correlationId: String, dueDate: LocalDateTime)
 
   val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
     Folder.curried(initial)(_.update)

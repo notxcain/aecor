@@ -1,6 +1,6 @@
 package aecor.testkit
 
-import aecor.data.{ ConsumerId, EventTag, Folder }
+import aecor.data.{ ConsumerId, EventTag, Folder, Identified }
 import aecor.testkit.Eventsourced.EventEnvelope
 import aecor.testkit.StateEventJournal.State
 import cats.data.{ NonEmptyVector, StateT }
@@ -8,23 +8,25 @@ import cats.implicits._
 import cats.{ Applicative, Monad }
 
 object StateEventJournal {
-  case class State[E](eventsById: Map[String, Vector[EventEnvelope[E]]],
-                      eventsByTag: Map[EventTag, Vector[EventEnvelope[E]]],
-                      consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
+  case class State[I, E](eventsById: Map[I, Vector[EventEnvelope[E]]],
+                         eventsByTag: Map[EventTag, Vector[Identified[I, EventEnvelope[E]]]],
+                         consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
     def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
 
-    def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[E] =
+    def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[I, E] =
       copy(consumerOffsets = consumerOffsets.updated(tag -> consumerId, offset))
 
-    def appendEvents(id: String, events: NonEmptyVector[EventEnvelope[E]]): State[E] =
+    def appendEvents(id: I, events: NonEmptyVector[EventEnvelope[E]]): State[I, E] =
       copy(
         eventsById = eventsById
           .updated(id, eventsById.getOrElse(id, Vector.empty) ++ events.toVector),
         eventsByTag =
-          eventsByTag |+| events.toVector
-            .flatMap { env =>
-              env.tags.toVector.map(t => (t, env))
+          eventsByTag |+| events
+            .map(Identified(id, _))
+            .toVector
+            .flatMap { i =>
+              i.a.tags.toVector.map(_ -> i)
             }
             .groupBy(_._1)
             .mapValues(_.map(_._2))
@@ -32,28 +34,29 @@ object StateEventJournal {
   }
 
   object State {
-    def init[E]: State[E] = State(Map.empty, Map.empty, Map.empty)
+    def init[I, E]: State[I, E] = State(Map.empty, Map.empty, Map.empty)
   }
 
-  def apply[F[_]: Monad, A, E](extract: A => State[E],
-                               update: (A, State[E]) => A): StateEventJournal[F, A, E] =
+  def apply[F[_]: Monad, I, A, E](extract: A => State[I, E],
+                                  update: (A, State[I, E]) => A): StateEventJournal[F, I, A, E] =
     new StateEventJournal(extract, update)
 }
 
-class StateEventJournal[F[_]: Monad, A, E](extract: A => State[E], update: (A, State[E]) => A)
-    extends EventJournal[StateT[F, A, ?], String, EventEnvelope[E]] {
-  override def append(id: String, events: NonEmptyVector[EventEnvelope[E]]): StateT[F, A, Unit] =
+class StateEventJournal[F[_]: Monad, I, A, E](extract: A => State[I, E],
+                                              update: (A, State[I, E]) => A)
+    extends EventJournal[StateT[F, A, ?], I, EventEnvelope[E]] {
+  override def append(id: I, events: NonEmptyVector[EventEnvelope[E]]): StateT[F, A, Unit] =
     StateT
-      .modify[F, State[E]](_.appendEvents(id, events))
+      .modify[F, State[I, E]](_.appendEvents(id, events))
       .transformS(extract, update)
 
   override def foldById[G[_]: Monad, S](
-    id: String,
+    id: I,
     offset: Long,
     folder: Folder[G, EventEnvelope[E], S]
   ): StateT[F, A, G[S]] =
     StateT
-      .inspect[F, State[E], Vector[EventEnvelope[E]]](
+      .inspect[F, State[I, E], Vector[EventEnvelope[E]]](
         _.eventsById
           .get(id)
           .map(_.drop(offset.toInt))
@@ -62,15 +65,16 @@ class StateEventJournal[F[_]: Monad, A, E](extract: A => State[E], update: (A, S
       .map(folder.consume(_))
       .transformS(extract, update)
 
-  def eventsByTag(tag: EventTag, consumerId: ConsumerId): Processable[StateT[F, A, ?], E] =
-    new Processable[StateT[F, A, ?], E] {
-      override def process(f: (E) => StateT[F, A, Unit]): StateT[F, A, Unit] =
+  def eventsByTag(tag: EventTag,
+                  consumerId: ConsumerId): Processable[StateT[F, A, ?], Identified[I, E]] =
+    new Processable[StateT[F, A, ?], Identified[I, E]] {
+      override def process(f: Identified[I, E] => StateT[F, A, Unit]): StateT[F, A, Unit] =
         for {
           offset0 <- StateT
-                      .inspect[F, State[E], Int](_.getConsumerOffset(tag, consumerId))
+                      .inspect[F, State[I, E], Int](_.getConsumerOffset(tag, consumerId))
                       .transformS(extract, update)
           result <- StateT
-                     .inspect[F, State[E], Vector[(EventEnvelope[E], Int)]] {
+                     .inspect[F, State[I, E], Vector[(Identified[I, EventEnvelope[E]], Int)]] {
                        _.eventsByTag
                          .getOrElse(tag, Vector.empty)
                          .zipWithIndex
@@ -79,11 +83,11 @@ class StateEventJournal[F[_]: Monad, A, E](extract: A => State[E], update: (A, S
                      .transformS(extract, update)
 
           _ <- result.traverse {
-                case (envelope, offset) =>
+                case (i, offset) =>
                   for {
-                    _ <- f(envelope.event)
+                    _ <- f(i.map(_.event))
                     _ <- StateT
-                          .modify[F, State[E]](_.setConsumerOffset(tag, consumerId, offset + 1))
+                          .modify[F, State[I, E]](_.setConsumerOffset(tag, consumerId, offset + 1))
                           .transformS(extract, update)
                   } yield ()
               }

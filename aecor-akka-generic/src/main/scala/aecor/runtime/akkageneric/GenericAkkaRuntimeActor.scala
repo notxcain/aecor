@@ -15,16 +15,18 @@ import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
 object GenericAkkaRuntimeActor {
-  def props[F[_]: Async, Op[_]](behavior: Behavior[F, Op], idleTimeout: FiniteDuration): Props =
-    Props(new GenericAkkaRuntimeActor(behavior, idleTimeout))
+  def props[F[_]: Async, I, Op[_]](createBehavior: I => Behavior[F, Op],
+                                   idleTimeout: FiniteDuration): Props =
+    Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
 
-  final case class PerformOp[Op[_], A](op: Op[A])
+  final case class PerformOp[I, Op[_], A](id: I, op: Op[A])
   case object Stop
 }
 
-private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, Op[_]](behavior: Behavior[F, Op],
-                                                                       idleTimeout: FiniteDuration)
-    extends Actor
+private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I, Op[_]](
+  createBehavior: I => Behavior[F, Op],
+  idleTimeout: FiniteDuration
+) extends Actor
     with Stash
     with ActorLogging {
 
@@ -34,12 +36,13 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, Op[_]](behavior:
 
   setIdleTimeout()
 
-  override def receive: Receive = withBehavior(behavior)
+  override def receive: Receive = withBehavior(Option.empty)
 
-  private def withBehavior(behavior: Behavior[F, Op]): Receive = {
-    case PerformOp(op) =>
+  private def withBehavior(behavior: Option[Behavior[F, Op]]): Receive = {
+    case PerformOp(id, op) =>
       val opId = UUID.randomUUID()
       behavior
+        .getOrElse(createBehavior(id.asInstanceOf[I]))
         .run(op.asInstanceOf[Op[Any]])
         .unsafeRun
         .map(x => Result(opId, Success(x)))
@@ -53,7 +56,7 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, Op[_]](behavior:
           value match {
             case Success((newBehavior, reply)) =>
               sender() ! reply
-              become(withBehavior(newBehavior))
+              become(withBehavior(Some(newBehavior)))
             case Failure(cause) =>
               sender() ! Status.Failure(cause)
               throw cause

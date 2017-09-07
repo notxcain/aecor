@@ -29,16 +29,15 @@ class CassandraScheduleEntryRepository[F[_]: Async: Capture](
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
   private val preparedSelectEntry = cassandraSession.prepare(queries.selectEntry)
 
-  override def insertScheduleEntry(scheduleName: String,
-                                   scheduleBucket: String,
+  override def insertScheduleEntry(id: ScheduleBucketId,
                                    entryId: String,
                                    dueDate: LocalDateTime): F[Unit] =
     Capture[F].captureFuture {
       preparedInsertEntry
         .map(
           _.bind()
-            .setString("schedule_name", scheduleName)
-            .setString("schedule_bucket", scheduleBucket)
+            .setString("schedule_name", id.scheduleName)
+            .setString("schedule_bucket", id.scheduleBucket)
             .setString("entry_id", entryId)
             .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
             .set("due_date", dueDate.toInstant(ZoneOffset.UTC), classOf[Instant])
@@ -48,15 +47,13 @@ class CassandraScheduleEntryRepository[F[_]: Async: Capture](
         .map(_ => ())
     }
 
-  override def markScheduleEntryAsFired(scheduleName: String,
-                                        scheduleBucket: String,
-                                        entryId: String): F[Unit] =
+  override def markScheduleEntryAsFired(id: ScheduleBucketId, entryId: String): F[Unit] =
     Capture[F].captureFuture {
       preparedSelectEntry
         .map(
           _.bind()
-            .setString("schedule_name", scheduleName)
-            .setString("schedule_bucket", scheduleBucket)
+            .setString("schedule_name", id.scheduleName)
+            .setString("schedule_bucket", id.scheduleBucket)
             .setString("entry_id", entryId)
         )
         .flatMap(cassandraSession.selectOne)
@@ -65,8 +62,8 @@ class CassandraScheduleEntryRepository[F[_]: Async: Capture](
             preparedInsertEntry
               .map(
                 _.bind()
-                  .setString("schedule_name", scheduleName)
-                  .setString("schedule_bucket", scheduleBucket)
+                  .setString("schedule_name", id.scheduleName)
+                  .setString("schedule_bucket", id.scheduleBucket)
                   .setString("entry_id", entryId)
                   .setString("time_bucket", row.getString("time_bucket"))
                   .setTimestamp("due_date", row.getTimestamp("due_date"))
@@ -129,8 +126,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: Capture](
 
   private def fromRow(row: Row): ScheduleEntry =
     ScheduleEntry(
-      row.getString("schedule_name"),
-      row.getString("schedule_bucket"),
+      ScheduleBucketId(row.getString("schedule_name"), row.getString("schedule_bucket")),
       row.getString("entry_id"),
       LocalDateTime.ofInstant(row.get("due_date", classOf[Instant]), ZoneOffset.UTC),
       row.getString("time_bucket"),

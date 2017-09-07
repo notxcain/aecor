@@ -16,40 +16,36 @@ import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule[F[_]: Async: Monad](
   clock: Clock[F],
-  aggregate: ScheduleAggregate[F],
+  buckets: ScheduleBucketId => ScheduleBucket[F],
   bucketLength: FiniteDuration,
-  aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleEvent],
+  aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],
   eventTag: EventTag
 ) extends Schedule[F] {
   override def addScheduleEntry(scheduleName: String,
                                 entryId: String,
-                                correlationId: CorrelationId,
+                                correlationId: String,
                                 dueDate: LocalDateTime): F[Unit] =
     for {
       zone <- clock.zone
       scheduleBucket = dueDate.atZone(zone).toEpochSecond / bucketLength.toSeconds
-      _ <- aggregate
-            .addScheduleEntry(
-              scheduleName,
-              scheduleBucket.toString,
-              entryId,
-              correlationId,
-              dueDate
-            )
+      _ <- buckets(ScheduleBucketId(scheduleName, scheduleBucket.toString))
+            .addScheduleEntry(entryId, correlationId, dueDate)
     } yield ()
 
   override def committableScheduleEvents(
     scheduleName: String,
     consumerId: ConsumerId
-  ): Source[Committable[F, JournalEntry[UUID, ScheduleEvent]], NotUsed] =
+  ): Source[Committable[F, JournalEntry[UUID, ScheduleBucketId, ScheduleEvent]], NotUsed] =
     aggregateJournal
       .eventsByTag(eventTag, ConsumerId(scheduleName + consumerId.value))
       .flatMapConcat {
-        case m if m.value.event.scheduleName == scheduleName => Source.single(m)
+        case m if m.value.entityId.scheduleName == scheduleName => Source.single(m)
         case other =>
           Source
             .fromFuture(other.commit.unsafeRun)
-            .flatMapConcat(_ => Source.empty[Committable[F, JournalEntry[UUID, ScheduleEvent]]])
+            .flatMapConcat(
+              _ => Source.empty[Committable[F, JournalEntry[UUID, ScheduleBucketId, ScheduleEvent]]]
+            )
       }
 
 }

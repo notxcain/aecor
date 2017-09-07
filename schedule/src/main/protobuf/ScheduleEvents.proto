@@ -5,8 +5,6 @@ option java_package = "aecor.schedule.serialization.protobuf.msg";
 option optimize_for = SPEED;
 
 message ScheduleEntryAdded {
-  required string scheduleName = 1;
-  required string scheduleBucket = 5;
   required string entryId = 2;
   required string correlationId = 3;
   required int64 dueToInEpochMillisUTC = 4;
@@ -14,8 +12,6 @@ message ScheduleEntryAdded {
 }
 
 message ScheduleEntryFired {
-  required string scheduleName = 1;
-  required string scheduleBucket = 4;
   required string entryId = 2;
   required string correlationId = 3;
   required int64 timestamp = 5;

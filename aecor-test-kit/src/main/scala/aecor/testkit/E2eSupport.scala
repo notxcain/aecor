@@ -12,29 +12,29 @@ import scala.collection.immutable._
 trait E2eSupport {
   final type SpecF[A] = EitherT[Eval, BehaviorFailure, A]
   type SpecState
-  final def mkJournal[E](
-    extract: SpecState => StateEventJournal.State[E],
-    update: (SpecState, StateEventJournal.State[E]) => SpecState
-  ): StateEventJournal[SpecF, SpecState, E] =
-    StateEventJournal[SpecF, SpecState, E](extract, update)
+  final def mkJournal[I, E](
+    extract: SpecState => StateEventJournal.State[I, E],
+    update: (SpecState, StateEventJournal.State[I, E]) => SpecState
+  ): StateEventJournal[SpecF, I, SpecState, E] =
+    StateEventJournal[SpecF, I, SpecState, E](extract, update)
 
-  final def mkBehavior[Op[_], S, E](
+  final def mkBehavior[I, Op[_], S, E](
     behavior: EventsourcedBehavior[StateT[SpecF, SpecState, ?], Op, S, E],
-    correlation: Correlation[Op],
-    tagging: Tagging[E],
-    journal: StateEventJournal[SpecF, SpecState, E]
-  ): Op ~> StateT[SpecF, SpecState, ?] =
-    new (Op ~> StateT[SpecF, SpecState, ?]) {
-      override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
-        Eventsourced[StateT[SpecF, SpecState, ?], Op, S, E](
-          correlation,
-          behavior,
-          tagging,
-          journal,
-          Option.empty,
-          NoopKeyValueStore[StateT[SpecF, SpecState, ?], String, RunningState[S]]
-        ).run(fa)
-          .map(_._2)
+    tagging: Tagging[I],
+    journal: StateEventJournal[SpecF, I, SpecState, E]
+  ): I => Op ~> StateT[SpecF, SpecState, ?] =
+    i =>
+      new (Op ~> StateT[SpecF, SpecState, ?]) {
+        override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
+          Eventsourced[StateT[SpecF, SpecState, ?], I, Op, S, E](
+            behavior,
+            tagging,
+            journal,
+            Option.empty,
+            NoopKeyValueStore[StateT[SpecF, SpecState, ?], I, RunningState[S]]
+          ).apply(i)
+            .run(fa)
+            .map(_._2)
     }
 
   final def wireProcess[F[_], S, In](process: In => F[Unit],
@@ -78,15 +78,16 @@ trait E2eSupport {
           }
     } yield ()
 
-  final def wiredK[Op[_]](
-    behavior: Op ~> StateT[SpecF, SpecState, ?]
-  ): Op ~> StateT[SpecF, SpecState, ?] =
-    new (Op ~> StateT[SpecF, SpecState, ?]) {
-      override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
-        for {
-          x <- behavior(fa)
-          _ <- runProcesses
-        } yield x
+  final def wiredK[I, Op[_]](
+    behavior: I => Op ~> StateT[SpecF, SpecState, ?]
+  ): I => Op ~> StateT[SpecF, SpecState, ?] =
+    i =>
+      new (Op ~> StateT[SpecF, SpecState, ?]) {
+        override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
+          for {
+            x <- behavior(i)(fa)
+            _ <- runProcesses
+          } yield x
     }
 
   final def wired[A, B](f: A => StateT[SpecF, SpecState, B]): A => StateT[SpecF, SpecState, B] =

@@ -30,7 +30,6 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
   import F._
 
   override def createTransaction(
-    transactionId: TransactionId,
     fromAccountId: From[AccountId],
     toAccountId: To[AccountId],
     amount: Amount
@@ -40,21 +39,20 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
         clock.instant.map { now =>
           Seq(
             TransactionEvent
-              .TransactionCreated(transactionId, fromAccountId, toAccountId, amount, now)
+              .TransactionCreated(fromAccountId, toAccountId, amount, now)
           ) -> (())
         }
 
       case Some(_) => pure(Seq.empty -> (()))
     }
 
-  override def authorizeTransaction(
-    transactionId: TransactionId
-  ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
+  override def authorizeTransaction
+    : Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
     Handler {
       case Some(transaction) =>
         clock.instant.map { now =>
           if (transaction.status == Requested) {
-            Seq(TransactionAuthorized(transactionId, now)) -> ().asRight
+            Seq(TransactionAuthorized(now)) -> ().asRight
           } else if (transaction.status == Authorized) {
             Seq() -> ().asRight
           } else {
@@ -66,7 +64,6 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
     }
 
   override def failTransaction(
-    transactionId: TransactionId,
     reason: String
   ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
     Handler {
@@ -75,23 +72,22 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
           if (transaction.status == Failed) {
             Seq.empty -> ().asRight
           } else {
-            Seq(TransactionFailed(transactionId, reason, now)) -> ().asRight
+            Seq(TransactionFailed(reason, now)) -> ().asRight
           }
         }
       case None =>
         pure(Seq.empty -> "Transaction not found".asLeft)
     }
 
-  override def succeedTransaction(
-    transactionId: TransactionId
-  ): Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
+  override def succeedTransaction
+    : Handler[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
     Handler {
       case Some(transaction) =>
         clock.instant.map { now =>
           if (transaction.status == Succeeded) {
             Seq.empty -> ().asRight
           } else if (transaction.status == Authorized) {
-            Seq(TransactionSucceeded(transactionId, now)) -> ().asRight
+            Seq(TransactionSucceeded(now)) -> ().asRight
           } else {
             Seq.empty -> "Illegal transition".asLeft
           }
@@ -100,12 +96,11 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
         pure(Seq.empty -> "Transaction not found".asLeft)
     }
 
-  override def getTransactionInfo(
-    transactionId: TransactionId
-  ): Handler[F, Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
+  override def getTransactionInfo
+    : Handler[F, Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
     Handler.readOnly(_.map {
       case Transaction(status, from, to, amount) =>
-        TransactionInfo(transactionId, from, to, amount, Some(status).collect {
+        TransactionInfo(from, to, amount, Some(status).collect {
           case Succeeded => true
           case Failed    => false
         })
@@ -121,19 +116,18 @@ object EventsourcedTransactionAggregate {
       Transaction.folder
     )
 
-  def unit[F[_]: Applicative](clock: Clock[F])
-    : AkkaPersistenceRuntimeUnit[F, TransactionAggregate.TransactionAggregateOp, Option[
-      Transaction
-    ], TransactionEvent] =
-    AkkaPersistenceRuntimeUnit(
-      "Transaction",
-      Correlation[TransactionAggregate.TransactionAggregateOp](_.transactionId.value),
-      behavior[F](clock),
-      tagging
-    )
+  def unit[F[_]: Applicative](
+    clock: Clock[F]
+  ): AkkaPersistenceRuntimeUnit[F,
+                                TransactionId,
+                                TransactionAggregate.TransactionAggregateOp,
+                                Option[Transaction],
+                                TransactionEvent] =
+    AkkaPersistenceRuntimeUnit("Transaction", behavior[F](clock), tagging)
 
-  def tagging: Tagging.Partitioned[TransactionEvent] =
-    Tagging.partitioned[TransactionEvent](20, EventTag("Transaction"))(_.transactionId.value)
+  def tagging: Tagging.Partitioned[TransactionId] =
+    Tagging.partitioned(20)(EventTag("Transaction"))
+
   sealed abstract class TransactionStatus
   object TransactionStatus {
     case object Requested extends TransactionStatus
@@ -146,15 +140,15 @@ object EventsourcedTransactionAggregate {
                                to: To[AccountId],
                                amount: Amount) {
     def applyEvent(event: TransactionEvent): Folded[Transaction] = event match {
-      case TransactionCreated(_, _, _, _, _) => impossible
-      case TransactionAuthorized(_, _)       => copy(status = TransactionStatus.Authorized).next
-      case TransactionFailed(_, _, _)        => copy(status = TransactionStatus.Failed).next
-      case TransactionSucceeded(_, _)        => copy(status = TransactionStatus.Succeeded).next
+      case TransactionCreated(_, _, _, _) => impossible
+      case TransactionAuthorized(_)       => copy(status = TransactionStatus.Authorized).next
+      case TransactionFailed(_, _)        => copy(status = TransactionStatus.Failed).next
+      case TransactionSucceeded(_)        => copy(status = TransactionStatus.Succeeded).next
     }
   }
   object Transaction {
     def fromEvent(event: TransactionEvent): Folded[Transaction] = event match {
-      case TransactionEvent.TransactionCreated(transactionId, fromAccount, toAccount, amount, _) =>
+      case TransactionEvent.TransactionCreated(fromAccount, toAccount, amount, _) =>
         Transaction(TransactionStatus.Requested, fromAccount, toAccount, amount).next
       case _ => impossible
     }

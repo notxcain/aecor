@@ -10,21 +10,18 @@ import io.circe.generic.auto._
 
 import scala.collection.immutable.Seq
 
-sealed trait CounterOp[A] {
-  def id: String
-}
+sealed trait CounterOp[A]
 
 object CounterOp {
-  case class Increment(id: String) extends CounterOp[Long]
-  case class Decrement(id: String) extends CounterOp[Long]
-  case class GetValue(id: String) extends CounterOp[Long]
-  val correlation: Correlation[CounterOp] = Correlation[CounterOp](_.id)
+  case object Increment extends CounterOp[Long]
+  case object Decrement extends CounterOp[Long]
+  case object GetValue extends CounterOp[Long]
 }
 
 sealed trait CounterEvent
 object CounterEvent {
-  case class CounterIncremented(id: String) extends CounterEvent
-  case class CounterDecremented(id: String) extends CounterEvent
+  case object CounterIncremented extends CounterEvent
+  case object CounterDecremented extends CounterEvent
   val tag: EventTag = EventTag("Counter")
   implicit def encoder: PersistentEncoder[CounterEvent] =
     PersistentEncoderCirce.circePersistentEncoder[CounterEvent]
@@ -37,8 +34,8 @@ object CounterState {
   def folder[F[_]: Applicative]: Folder[F, CounterEvent, CounterState] =
     Folder.curried(CounterState(0)) {
       case CounterState(x) => {
-        case CounterIncremented(_) => CounterState(x + 1).pure[F]
-        case CounterDecremented(_) => CounterState(x - 1).pure[F]
+        case CounterIncremented => CounterState(x + 1).pure[F]
+        case CounterDecremented => CounterState(x - 1).pure[F]
       }
     }
 }
@@ -55,15 +52,15 @@ class CounterOpHandler[F[_]: Applicative]
     extends (CounterOp ~> Handler[F, CounterState, CounterEvent, ?]) {
   override def apply[A](fa: CounterOp[A]): Handler[F, CounterState, CounterEvent, A] =
     fa match {
-      case Increment(id) =>
+      case Increment =>
         Handler.lift { x =>
-          Seq(CounterIncremented(id)) -> (x.value + 1)
+          Seq(CounterIncremented) -> (x.value + 1)
         }
-      case Decrement(id) =>
+      case Decrement =>
         Handler.lift { x =>
-          Seq(CounterDecremented(id)) -> (x.value - 1)
+          Seq(CounterDecremented) -> (x.value - 1)
         }
-      case GetValue(id) =>
+      case GetValue =>
         Handler.lift(x => Seq.empty -> x.value)
     }
 }

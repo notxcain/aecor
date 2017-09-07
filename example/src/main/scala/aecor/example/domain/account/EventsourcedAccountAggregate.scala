@@ -19,18 +19,17 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
   import F._
 
   override def openAccount(
-    accountId: AccountId
+    checkBalance: Boolean
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
     Handler {
       case None =>
         clock.instant.map { now =>
-          Seq(AccountOpened(accountId, now)) -> ().asRight
+          Seq(AccountOpened(checkBalance, now)) -> ().asRight
         }
       case Some(x) => pure(Seq.empty -> AccountAggregate.AccountExists.asLeft)
     }
 
   override def creditAccount(
-    accountId: AccountId,
     transactionId: AccountTransactionId,
     amount: Amount
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
@@ -40,7 +39,7 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
           if (account.processedTransactions.contains(transactionId)) {
             Seq.empty -> ().asRight
           } else {
-            Seq(AccountCredited(accountId, transactionId, amount, now)) -> ().asRight
+            Seq(AccountCredited(transactionId, amount, now)) -> ().asRight
           }
         }
       case None =>
@@ -48,7 +47,6 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
     }
 
   override def debitAccount(
-    accountId: AccountId,
     transactionId: AccountTransactionId,
     amount: Amount
   ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
@@ -58,8 +56,8 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
           if (account.processedTransactions.contains(transactionId)) {
             Seq.empty -> ().asRight
           } else {
-            if (account.hasFunds(amount) || accountId == EventsourcedAccountAggregate.rootAccountId) {
-              Seq(AccountDebited(accountId, transactionId, amount, now)) -> ().asRight
+            if (account.hasFunds(amount)) {
+              Seq(AccountDebited(transactionId, amount, now)) -> ().asRight
             } else {
               Seq.empty -> InsufficientFunds.asLeft
             }
@@ -74,13 +72,8 @@ object EventsourcedAccountAggregate {
 
   def unit[F[_]: Applicative](
     clock: Clock[F]
-  ): AkkaPersistenceRuntimeUnit[F, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
-    AkkaPersistenceRuntimeUnit(
-      "Account",
-      Correlation[AccountAggregate.AccountAggregateOp](_.accountId.value),
-      behavior(clock),
-      Tagging.const(EventTag("Account"))
-    )
+  ): AkkaPersistenceRuntimeUnit[F, AccountId, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
+    AkkaPersistenceRuntimeUnit("Account", behavior(clock), Tagging.const(EventTag("Account")))
 
   def behavior[F[_]: Applicative](
     clock: Clock[F]
@@ -90,17 +83,19 @@ object EventsourcedAccountAggregate {
       Account.folder
     )
   final val rootAccountId: AccountId = AccountId("ROOT")
-  final case class Account(balance: Amount, processedTransactions: Set[AccountTransactionId]) {
+  final case class Account(balance: Amount,
+                           processedTransactions: Set[AccountTransactionId],
+                           checkBalance: Boolean) {
     def hasFunds(amount: Amount): Boolean =
-      balance >= amount
+      !checkBalance || balance >= amount
     def applyEvent(event: AccountEvent): Folded[Account] = event match {
       case AccountOpened(_, _) => impossible
-      case AccountDebited(_, transactionId, amount, _) =>
+      case AccountDebited(transactionId, amount, _) =>
         copy(
           balance = balance - amount,
           processedTransactions = processedTransactions + transactionId
         ).next
-      case AccountCredited(_, transactionId, amount, _) =>
+      case AccountCredited(transactionId, amount, _) =>
         copy(
           balance = balance + amount,
           processedTransactions = processedTransactions + transactionId
@@ -109,8 +104,8 @@ object EventsourcedAccountAggregate {
   }
   object Account {
     def fromEvent(event: AccountEvent): Folded[Account] = event match {
-      case AccountOpened(_, _) => Account(Amount.zero, Set.empty).next
-      case _                   => impossible
+      case AccountOpened(checkBalance, _) => Account(Amount.zero, Set.empty, checkBalance).next
+      case _                              => impossible
     }
     def folder: Folder[Folded, AccountEvent, Option[Account]] =
       Folder.optionInstance(fromEvent)(x => x.applyEvent)

@@ -8,21 +8,15 @@ import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, Persiste
 import io.circe.java8.time._
 import io.circe.generic.auto._
 
-sealed abstract class AccountEvent extends Product with Serializable {
-  def accountId: AccountId
-}
+sealed abstract class AccountEvent extends Product with Serializable
 
 object AccountEvent {
-  case class AccountOpened(accountId: AccountId, timestamp: Instant) extends AccountEvent
+  case class AccountOpened(checkBalance: Boolean, timestamp: Instant) extends AccountEvent
 
-  case class AccountDebited(accountId: AccountId,
-                            transactionId: AccountTransactionId,
-                            amount: Amount,
-                            timestamp: Instant)
+  case class AccountDebited(transactionId: AccountTransactionId, amount: Amount, timestamp: Instant)
       extends AccountEvent
 
-  case class AccountCredited(accountId: AccountId,
-                             transactionId: AccountTransactionId,
+  case class AccountCredited(transactionId: AccountTransactionId,
                              amount: Amount,
                              timestamp: Instant)
       extends AccountEvent

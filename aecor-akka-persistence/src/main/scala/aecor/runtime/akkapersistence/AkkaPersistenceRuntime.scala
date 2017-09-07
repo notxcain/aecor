@@ -4,6 +4,7 @@ import java.util.UUID
 
 import aecor.data._
 import aecor.effect.{ Async, Capture }
+import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
@@ -13,28 +14,27 @@ import cats.{ Monad, ~> }
 
 import scala.concurrent.Future
 
-final case class AkkaPersistenceRuntimeUnit[F[_], Op[_], State, Event](
+final case class AkkaPersistenceRuntimeUnit[F[_], I, Op[_], State, Event](
   entityName: String,
-  correlation: Correlation[Op],
   behavior: EventsourcedBehavior[F, Op, State, Event],
-  tagging: Tagging[Event],
+  tagging: Tagging[I],
   snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never
 )
 
-abstract class AkkaPersistenceRuntimeDeployment[F[_], Op[_], Event] {
-  def start: F[Op ~> F]
-  def journal: EventJournalQuery[UUID, Event]
+abstract class Deployment[F[_], I, Op[_], Event] {
+  def start: F[I => Op ~> F]
+  def journal: EventJournalQuery[UUID, I, Event]
 }
 
-private class DefaultAkkaPersistenceRuntimeDeployment[F[_]: Async: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+private class DefaultDeployment[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
   system: ActorSystem,
-  unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event],
+  unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event],
   settings: AkkaPersistenceRuntimeSettings
-) extends AkkaPersistenceRuntimeDeployment[F, Op, Event] {
+) extends Deployment[F, I, Op, Event] {
   import AkkaPersistenceRuntime._
   import unit._
 
-  def start: F[Op ~> F] = {
+  def start: F[I => Op ~> F] = {
     val props =
       AkkaPersistenceRuntimeActor.props(
         entityName,
@@ -65,19 +65,23 @@ private class DefaultAkkaPersistenceRuntimeDeployment[F[_]: Async: Capture: Mona
       extractShardId = extractShardId
     )
 
+    implicit val askTimeout = Timeout(settings.askTimeout)
+
+    val keyEncoder = KeyEncoder[I]
+
     Capture[F].capture {
       val regionRef = startShardRegion
-      new (Op ~> F) {
-        implicit private val timeout = Timeout(settings.askTimeout)
-        override def apply[A](fa: Op[A]): F[A] =
-          Capture[F].captureFuture {
-            (regionRef ? CorrelatedCommand(correlation(fa), fa)).asInstanceOf[Future[A]]
-          }
-      }
+      i =>
+        new (Op ~> F) {
+          override def apply[A](fa: Op[A]): F[A] =
+            Capture[F].captureFuture {
+              (regionRef ? CorrelatedCommand(keyEncoder(i), fa)).asInstanceOf[Future[A]]
+            }
+        }
     }
   }
 
-  def journal: EventJournalQuery[UUID, Event] = CassandraEventJournalQuery[Event](system)
+  def journal: EventJournalQuery[UUID, I, Event] = CassandraEventJournalQuery[I, Event](system)
 }
 
 object AkkaPersistenceRuntime {
@@ -95,8 +99,8 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
                                                        settings: AkkaPersistenceRuntimeSettings) {
-  def deploy[F[_]: Async: Capture: Monad, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-    unit: AkkaPersistenceRuntimeUnit[F, Op, State, Event]
-  ): AkkaPersistenceRuntimeDeployment[F, Op, Event] =
-    new DefaultAkkaPersistenceRuntimeDeployment[F, Op, State, Event](system, unit, settings)
+  def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+    unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event]
+  ): Deployment[F, I, Op, Event] =
+    new DefaultDeployment[F, I, Op, State, Event](system, unit, settings)
 }

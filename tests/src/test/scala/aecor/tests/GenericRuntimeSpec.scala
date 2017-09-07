@@ -4,7 +4,7 @@ import aecor.data.{ Behavior, EventsourcedBehavior }
 import aecor.effect.monix._
 import aecor.runtime.akkageneric.GenericAkkaRuntime
 import aecor.testkit.StateRuntime
-import aecor.tests.e2e.{ CounterEvent, CounterOp, CounterOpHandler, CounterState }
+import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{ Config, ConfigFactory }
@@ -46,17 +46,17 @@ class GenericRuntimeSpec
   )
 
   val startRuntime =
-    GenericAkkaRuntime[Task](system).start("Counter", CounterOp.correlation, behavior)
+    GenericAkkaRuntime[Task](system).start("Counter", (_: CounterId) => behavior)
 
   test("Runtime should work") {
     val program = for {
       runtime <- startRuntime
-      _ <- runtime(CounterOp.Increment("1"))
-      _ <- runtime(CounterOp.Increment("2"))
-      _ <- runtime(CounterOp.Decrement("1"))
-      first <- runtime(CounterOp.GetValue("1"))
-      second <- runtime(CounterOp.GetValue("2"))
-      secondAfterPassivation <- runtime(CounterOp.GetValue("2")).delayExecution(2.seconds)
+      _ <- runtime("1")(CounterOp.Increment)
+      _ <- runtime("2")(CounterOp.Increment)
+      _ <- runtime("1")(CounterOp.Decrement)
+      first <- runtime("1")(CounterOp.GetValue)
+      second <- runtime("2")(CounterOp.GetValue)
+      secondAfterPassivation <- runtime("2")(CounterOp.GetValue).delayExecution(2.seconds)
     } yield (first, second, secondAfterPassivation)
 
     val (first, second, afterPassivation) = program.runAsync.futureValue

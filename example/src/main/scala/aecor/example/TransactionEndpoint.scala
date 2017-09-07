@@ -21,23 +21,24 @@ import shapeless.Lazy
 
 import scala.concurrent.duration._
 
-class TransactionEndpoint(transactions: TransactionAggregate[Task], log: LoggingAdapter) {
+class TransactionEndpoint(transactions: TransactionId => TransactionAggregate[Task],
+                          log: LoggingAdapter) {
 
   import TransactionEndpointRequest._
 
-  def authorizePayment(request: CreateTransactionRequest): Task[TransactionEndpoint.ApiResult] =
+  def authorizePayment(transactionId: TransactionId,
+                       request: CreateTransactionRequest): Task[TransactionEndpoint.ApiResult] =
     request match {
-      case CreateTransactionRequest(transactionId, fromAccountId, toAccountId, amount) =>
+      case CreateTransactionRequest(fromAccountId, toAccountId, amount) =>
         log.debug("Processing request [{}]", request)
         val start = System.nanoTime()
-        transactions
-          .createTransaction(transactionId, fromAccountId, toAccountId, amount)
+        transactions(transactionId)
+          .createTransaction(fromAccountId, toAccountId, amount)
           .flatMap { _ =>
-            transactions
-              .getTransactionInfo(transactionId)
+            transactions(transactionId).getTransactionInfo
               .flatMap {
                 case Some(t) => Task.pure(t)
-                case None => Task.raiseError(new IllegalStateException("Something went bad"))
+                case None    => Task.raiseError(new IllegalStateException("Something went bad"))
               }
               .delayExecution(5.millis)
               .restartUntil(_.succeeded.isDefined)
@@ -72,14 +73,13 @@ object TransactionEndpoint {
     case class Declined(reason: String) extends ApiResult
   }
 
-  sealed trait TransactionEndpointRequest
+  sealed abstract class TransactionEndpointRequest
 
   object TransactionEndpointRequest {
 
-    case class CreateTransactionRequest(transactionId: TransactionId,
-                                        from: From[AccountId],
-                                        to: To[AccountId],
-                                        amount: Amount)
+    final case class CreateTransactionRequest(from: From[AccountId],
+                                              to: To[AccountId],
+                                              amount: Amount)
         extends TransactionEndpointRequest
 
   }
@@ -89,37 +89,35 @@ object TransactionEndpoint {
   ): Decoder[A] = A.value
 
   def route(api: TransactionEndpoint): Route =
-    pathPrefix("transaction") {
-      post {
-        (path("create") & entity(as[CreateTransactionRequest])) { request =>
-          complete {
-            api.authorizePayment(request).map[ToResponseMarshallable] {
-              case ApiResult.Authorized =>
-                StatusCodes.OK -> "Authorized"
-              case ApiResult.Declined(reason) =>
-                StatusCodes.BadRequest -> s"Declined: $reason"
-            }
-          }
-        } ~ path("test") {
-          complete {
-            api
-              .authorizePayment(
-                CreateTransactionRequest(
-                  TransactionId(UUID.randomUUID.toString),
-//                  From(AccountId("foo" + scala.util.Random.nextInt(20))),
-                  From(EventsourcedAccountAggregate.rootAccountId),
-                  To(AccountId("foo" + scala.util.Random.nextInt(20))),
-                  Amount(1)
-                )
-              )
-              .map[ToResponseMarshallable] {
-                case ApiResult.Authorized =>
-                  StatusCodes.OK -> "Authorized"
-                case ApiResult.Declined(reason) =>
-                  StatusCodes.BadRequest -> s"Declined: $reason"
-              }
+    (put & pathPrefix("transactions" / Segment.map(TransactionId(_)))) { transactionId =>
+      entity(as[CreateTransactionRequest]) { request =>
+        complete {
+          api.authorizePayment(transactionId, request).map[ToResponseMarshallable] {
+            case ApiResult.Authorized =>
+              StatusCodes.OK -> "Authorized"
+            case ApiResult.Declined(reason) =>
+              StatusCodes.BadRequest -> s"Declined: $reason"
           }
         }
+      }
+
+    } ~ (post & path("test")) {
+      complete {
+        api
+          .authorizePayment(
+            TransactionId(UUID.randomUUID.toString),
+            CreateTransactionRequest(
+              From(EventsourcedAccountAggregate.rootAccountId),
+              To(AccountId("foo" + scala.util.Random.nextInt(20))),
+              Amount(1)
+            )
+          )
+          .map[ToResponseMarshallable] {
+            case ApiResult.Authorized =>
+              StatusCodes.OK -> "Authorized"
+            case ApiResult.Declined(reason) =>
+              StatusCodes.BadRequest -> s"Declined: $reason"
+          }
       }
     }
 

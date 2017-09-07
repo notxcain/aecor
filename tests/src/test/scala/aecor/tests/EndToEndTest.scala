@@ -12,7 +12,7 @@ import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueS
 import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
 import aecor.tests.e2e._
-import aecor.tests.e2e.notification.{ NotificationEvent, NotificationOp }
+import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
 import cats.data.StateT
 import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
@@ -25,13 +25,15 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def instant[F[_]: Capture]: F[Instant] =
     Capture[F].capture(Instant.ofEpochMilli(System.currentTimeMillis()))
 
-  case class SpecState(counterJournalState: StateEventJournal.State[CounterEvent],
-                       notificationJournalState: StateEventJournal.State[NotificationEvent],
-                       scheduleJournalState: StateEventJournal.State[ScheduleEvent],
-                       counterViewState: TestCounterViewRepositoryState,
-                       time: Instant,
-                       scheduleEntries: Vector[ScheduleEntry],
-                       offsetStoreState: Map[TagConsumer, LocalDateTime])
+  case class SpecState(
+    counterJournalState: StateEventJournal.State[CounterId, CounterEvent],
+    notificationJournalState: StateEventJournal.State[NotificationId, NotificationEvent],
+    scheduleJournalState: StateEventJournal.State[ScheduleBucketId, ScheduleEvent],
+    counterViewState: TestCounterViewRepositoryState,
+    time: Instant,
+    scheduleEntries: Vector[ScheduleEntry],
+    offsetStoreState: Map[TagConsumer, LocalDateTime]
+  )
 
   val offsetStore =
     StateKeyValueStore[SpecF, SpecState, TagConsumer, LocalDateTime](
@@ -42,18 +44,20 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val clock = StateClock[SpecF, SpecState](ZoneOffset.UTC, _.time, (s, t) => s.copy(time = t))
 
   def counterEventJournal =
-    mkJournal[CounterEvent](_.counterJournalState, (x, a) => x.copy(counterJournalState = a))
+    mkJournal[CounterId, CounterEvent](
+      _.counterJournalState,
+      (x, a) => x.copy(counterJournalState = a)
+    )
 
   def counterBehavior =
-    mkBehavior[CounterOp, CounterState, CounterEvent](
+    mkBehavior[CounterId, CounterOp, CounterState, CounterEvent](
       CounterOpHandler.behavior[StateT[SpecF, SpecState, ?]],
-      _.id,
       Tagging.const(CounterEvent.tag),
       counterEventJournal
     )
 
   def notificationEventJournal =
-    mkJournal[NotificationEvent](
+    mkJournal[NotificationId, NotificationEvent](
       _.notificationJournalState,
       (x, a) => x.copy(notificationJournalState = a)
     )
@@ -61,17 +65,18 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def notificationBehavior =
     mkBehavior(
       notification.behavior,
-      NotificationOp.correlation,
       Tagging.const(NotificationEvent.tag),
       notificationEventJournal
     )
 
   def schduleEventJournal =
-    mkJournal[ScheduleEvent](_.scheduleJournalState, (x, a) => x.copy(scheduleJournalState = a))
+    mkJournal[ScheduleBucketId, ScheduleEvent](
+      _.scheduleJournalState,
+      (x, a) => x.copy(scheduleJournalState = a)
+    )
 
-  val scheduleAggregate = mkBehavior[ScheduleOp, ScheduleState, ScheduleEvent](
-    DefaultScheduleAggregate.behavior(clock.zonedDateTime),
-    DefaultScheduleAggregate.correlation,
+  val scheduleAggregate = mkBehavior[ScheduleBucketId, ScheduleOp, ScheduleState, ScheduleEvent](
+    DefaultScheduleBucket.behavior(clock.zonedDateTime),
     Tagging.const(EventTag("Schedule")),
     schduleEventJournal
   )
@@ -84,7 +89,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
   val wrappedEventJournal = new ScheduleEventJournal[StateT[SpecF, SpecState, ?]] {
     override def processNewEvents(
-      f: (ScheduleEvent) => StateT[SpecF, SpecState, Unit]
+      f: Identified[ScheduleBucketId, ScheduleEvent] => StateT[SpecF, SpecState, Unit]
     ): StateT[SpecF, SpecState, Unit] =
       schduleEventJournal
         .eventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
@@ -98,7 +103,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     offsetStore = offsetStore,
     eventualConsistencyDelay = 1.second,
     repository = scheduleEntryRepository,
-    scheduleAggregate = ScheduleAggregate.fromFunctionK(scheduleAggregate),
+    buckets = scheduleAggregate.andThen(ScheduleBucket.fromFunctionK),
     clock = clock.localDateTime,
     parallelism = 1
   )
@@ -140,11 +145,11 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     val counter = wiredK(counterBehavior)
 
     val program = for {
-      _ <- counter(Increment("1"))
-      _ <- counter(Increment("1"))
-      _ <- counter(Decrement("1"))
-      _ <- counter(Increment("2"))
-      _ <- counter(Increment("2"))
+      _ <- counter("1")(Increment)
+      _ <- counter("1")(Increment)
+      _ <- counter("1")(Decrement)
+      _ <- counter("2")(Increment)
+      _ <- counter("2")(Increment)
     } yield ()
 
     val Right((state, _)) = program
@@ -170,13 +175,15 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   test("Schedule should fire") {
 
-    val schedule = wiredK(scheduleAggregate)
+    val buckets = wiredK(scheduleAggregate)
 
     def program(n: Int): StateT[SpecF, SpecState, Unit] =
       for {
         now <- clock.localDateTime
-        _ <- schedule(ScheduleOp.AddScheduleEntry("foo", "b", "e1", "cid", now.plusSeconds(3)))
-        _ <- schedule(ScheduleOp.AddScheduleEntry("foo", "b", "e2", "cid", now.plusSeconds(5)))
+        bucketId = ScheduleBucketId("foo", "b")
+        bucket = buckets(bucketId)
+        _ <- bucket(ScheduleOp.AddScheduleEntry("e1", "cid", now.plusSeconds(3)))
+        _ <- bucket(ScheduleOp.AddScheduleEntry("e2", "cid", now.plusSeconds(5)))
         _ <- tickSeconds(3)
         _ <- tickSeconds(2)
         _ <- if (n == 0) {

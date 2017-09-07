@@ -8,6 +8,7 @@ import java.util.UUID
 import aecor.data._
 import aecor.effect.Async
 import aecor.effect.Async.ops._
+import aecor.encoding.KeyDecoder
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.runtime.akkapersistence.serialization.{
@@ -28,11 +29,13 @@ import scala.util.{ Left, Right }
 
 private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
-  def props[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+  val PersistenceIdSeparator: String = "-"
+
+  def props[F[_]: Async, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
     behavior: EventsourcedBehavior[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
-    tagging: Tagging[Event],
+    tagging: Tagging[I],
     idleTimeout: FiniteDuration
   ): Props =
     Props(
@@ -52,11 +55,11 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
   behavior: EventsourcedBehavior[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
-  tagger: Tagging[Event],
+  tagger: Tagging[I],
   idleTimeout: FiniteDuration
 ) extends PersistentActor
     with ActorLogging
@@ -66,21 +69,28 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, Op
 
   case class CommandResult[A](opId: UUID, events: Seq[Event], reply: A)
 
-  private val entityId: String =
+  private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
 
+  private val id: I = KeyDecoder[I]
+    .decode(idString)
+    .getOrElse(throw new IllegalArgumentException(s"Failed to decode entity id from [$idString]"))
+
   private val eventEncoder = PersistentEncoder[Event]
+
   private val eventDecoder = PersistentDecoder[Event]
 
-  override val persistenceId: String = s"$entityName-$entityId"
+  override val persistenceId: String =
+    s"$entityName${AkkaPersistenceRuntimeActor.PersistenceIdSeparator}$idString"
 
   private val recoveryStartTimestamp: Instant = Instant.now()
 
   log.info("[{}] Starting...", persistenceId)
 
-  protected var state: State = behavior.folder.zero
+  private var state: State = behavior.folder.zero
 
   private var eventCount = 0L
+
   private var snapshotPending = false
 
   private def recover(repr: PersistentRepr): Unit =
@@ -177,7 +187,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, Op
       sender() ! reply
     } else {
       val envelopes =
-        events.map(e => Tagged(eventEncoder.encode(e), tagger(e).map(_.value)))
+        events.map(e => Tagged(eventEncoder.encode(e), tagger.tag(id).map(_.value)))
 
       events.foreach(applyEvent)
 
