@@ -15,25 +15,22 @@ import cats.{ Monad, ~> }
 import scala.concurrent.Future
 
 object AkkaPersistenceRuntime {
-  def apply(system: ActorSystem): AkkaPersistenceRuntime = {
-    val settings = AkkaPersistenceRuntimeSettings.default(system)
-    new AkkaPersistenceRuntime(system, settings)
-  }
-
-  def apply(system: ActorSystem, settings: AkkaPersistenceRuntimeSettings): AkkaPersistenceRuntime =
-    new AkkaPersistenceRuntime(system, settings)
+  def apply(system: ActorSystem): AkkaPersistenceRuntime =
+    new AkkaPersistenceRuntime(system)
 
   private[akkapersistence] final case class CorrelatedCommand[C[_], A](entityId: String,
                                                                        command: C[A])
 }
 
-class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
-                                                       settings: AkkaPersistenceRuntimeSettings) {
+class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem) {
   def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-    unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event]
+    typeName: String,
+    behavior: EventsourcedBehavior[F, Op, State, Event],
+    tagging: Tagging[I],
+    snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
+    settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
   ): F[I => Op ~> F] = {
     import AkkaPersistenceRuntime._
-    import unit._
 
     Capture[F].capture {
       val props =
@@ -83,10 +80,3 @@ class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
   def journal[I: KeyDecoder, Event: PersistentDecoder]: EventJournal[UUID, I, Event] =
     CassandraEventJournal[I, Event](system)
 }
-
-final case class AkkaPersistenceRuntimeUnit[F[_], I, Op[_], State, Event](
-  typeName: String,
-  behavior: EventsourcedBehavior[F, Op, State, Event],
-  tagging: Tagging[I],
-  snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never
-)

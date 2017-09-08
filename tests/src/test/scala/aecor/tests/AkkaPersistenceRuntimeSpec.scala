@@ -10,7 +10,7 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{ FunSuiteLike, Matchers }
 import monix.cats._
 import aecor.effect.monix._
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, AkkaPersistenceRuntimeUnit }
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import monix.execution.Scheduler
@@ -51,15 +51,12 @@ class AkkaPersistenceRuntimeSpec
 
   val runtime = AkkaPersistenceRuntime(system)
 
-  val deployCounters = runtime.deploy(
-    AkkaPersistenceRuntimeUnit(
+  test("Runtime should work") {
+    val deployCounters = runtime.deploy(
       "Counter",
       CounterOpHandler.behavior[Task],
       Tagging.const[CounterId](CounterEvent.tag)
     )
-  )
-
-  test("Runtime should work") {
     val program = for {
       counters <- deployCounters
       first = counters(CounterId("1"))

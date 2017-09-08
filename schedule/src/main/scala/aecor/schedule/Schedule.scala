@@ -57,12 +57,6 @@ object Schedule {
 
     val runtime = AkkaPersistenceRuntime(system)
 
-    val unit = AkkaPersistenceRuntimeUnit(
-      entityName,
-      DefaultScheduleBucket.behavior(clock.zonedDateTime),
-      Tagging.const[ScheduleBucketId](eventTag)
-    )
-
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(
         uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
@@ -70,7 +64,13 @@ object Schedule {
       )
 
     def deployBuckets =
-      runtime.deploy(unit).map(_.andThen(ScheduleBucket.fromFunctionK))
+      runtime
+        .deploy(
+          entityName,
+          DefaultScheduleBucket.behavior(clock.zonedDateTime),
+          Tagging.const[ScheduleBucketId](eventTag)
+        )
+        .map(_.andThen(ScheduleBucket.fromFunctionK))
 
     def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
       val journal =

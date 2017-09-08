@@ -6,7 +6,6 @@ import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountAggregate.{ AccountDoesNotExist, InsufficientFunds }
 import aecor.example.domain.account.AccountEvent._
 import aecor.example.domain.account.EventsourcedAccountAggregate.Account
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeUnit
 import aecor.util.Clock
 import cats.Applicative
 import cats.implicits._
@@ -69,11 +68,6 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
 }
 
 object EventsourcedAccountAggregate {
-
-  def unit[F[_]: Applicative](
-    clock: Clock[F]
-  ): AkkaPersistenceRuntimeUnit[F, AccountId, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
-    AkkaPersistenceRuntimeUnit("Account", behavior(clock), Tagging.const(EventTag("Account")))
 
   def behavior[F[_]: Applicative](
     clock: Clock[F]

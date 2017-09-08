@@ -18,7 +18,6 @@ import aecor.example.domain.transaction.TransactionEvent.{
   TransactionFailed,
   TransactionSucceeded
 }
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeUnit
 import aecor.util.Clock
 import cats.Applicative
 import cats.implicits._
@@ -115,15 +114,6 @@ object EventsourcedTransactionAggregate {
       TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate[F](clock)),
       Transaction.folder
     )
-
-  def unit[F[_]: Applicative](
-    clock: Clock[F]
-  ): AkkaPersistenceRuntimeUnit[F,
-                                TransactionId,
-                                TransactionAggregate.TransactionAggregateOp,
-                                Option[Transaction],
-                                TransactionEvent] =
-    AkkaPersistenceRuntimeUnit("Transaction", behavior[F](clock), tagging)
 
   def tagging: Tagging.Partitioned[TransactionId] =
     Tagging.partitioned(20)(EventTag("Transaction"))

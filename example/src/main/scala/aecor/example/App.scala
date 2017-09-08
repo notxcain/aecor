@@ -8,6 +8,7 @@ import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
 import aecor.example.domain.account.{ AccountAggregate, AccountId, EventsourcedAccountAggregate }
+import aecor.example.domain.transaction.EventsourcedTransactionAggregate.tagging
 import aecor.example.domain.transaction.{
   EventsourcedTransactionAggregate,
   TransactionAggregate,
@@ -58,12 +59,16 @@ object App {
 
     val deployTransactions: Task[TransactionId => TransactionAggregate[Task]] =
       runtime
-        .deploy(EventsourcedTransactionAggregate.unit(taskClock))
+        .deploy("Transaction", EventsourcedTransactionAggregate.behavior[Task](taskClock), tagging)
         .map(_.andThen(TransactionAggregate.fromFunctionK))
 
     val deployAccounts: Task[AccountId => AccountAggregate[Task]] =
       runtime
-        .deploy(EventsourcedAccountAggregate.unit(taskClock))
+        .deploy(
+          "Account",
+          EventsourcedAccountAggregate.behavior(taskClock),
+          Tagging.const[AccountId](EventTag("Account"))
+        )
         .map(_.andThen(AccountAggregate.fromFunctionK))
 
     def startTransactionProcessing(
@@ -73,14 +78,14 @@ object App {
       val failure = TransactionProcessFailure.withMonadError[Task]
       val processStep: (Input) => Task[Unit] =
         TransactionProcess(transactions, accounts, failure)
-      val transactionEventJournal = runtime
+      val journal = runtime
         .journal[TransactionId, TransactionEvent]
         .committable(offsetStore)
       val consumerId = ConsumerId("processing")
       val processes =
         EventsourcedTransactionAggregate.tagging.tags.map { tag =>
           AkkaStreamProcess[Task](
-            transactionEventJournal
+            journal
               .eventsByTag(tag, consumerId)
               .map(_.map(_.identified)),
             Flow[Committable[Task, Identified[TransactionId, TransactionEvent]]]
