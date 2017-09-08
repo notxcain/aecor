@@ -14,6 +14,27 @@ import cats.{ Monad, ~> }
 
 import scala.concurrent.Future
 
+object AkkaPersistenceRuntime {
+  def apply(system: ActorSystem): AkkaPersistenceRuntime = {
+    val settings = AkkaPersistenceRuntimeSettings.default(system)
+    new AkkaPersistenceRuntime(system, settings)
+  }
+
+  def apply(system: ActorSystem, settings: AkkaPersistenceRuntimeSettings): AkkaPersistenceRuntime =
+    new AkkaPersistenceRuntime(system, settings)
+
+  private[akkapersistence] final case class CorrelatedCommand[C[_], A](entityId: String,
+                                                                       command: C[A])
+}
+
+class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
+                                                       settings: AkkaPersistenceRuntimeSettings) {
+  def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+    unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event]
+  ): Deployment[F, I, Op, Event] =
+    new DefaultDeployment[F, I, Op, State, Event](system, unit, settings)
+}
+
 final case class AkkaPersistenceRuntimeUnit[F[_], I, Op[_], State, Event](
   typeName: String,
   behavior: EventsourcedBehavior[F, Op, State, Event],
@@ -80,25 +101,4 @@ private class DefaultDeployment[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyD
     }
 
   def journal: EventJournalQuery[UUID, I, Event] = CassandraEventJournalQuery[I, Event](system)
-}
-
-object AkkaPersistenceRuntime {
-  def apply(system: ActorSystem): AkkaPersistenceRuntime = {
-    val settings = AkkaPersistenceRuntimeSettings.default(system)
-    new AkkaPersistenceRuntime(system, settings)
-  }
-
-  def apply(system: ActorSystem, settings: AkkaPersistenceRuntimeSettings): AkkaPersistenceRuntime =
-    new AkkaPersistenceRuntime(system, settings)
-
-  private[akkapersistence] final case class CorrelatedCommand[C[_], A](entityId: String,
-                                                                       command: C[A])
-}
-
-class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
-                                                       settings: AkkaPersistenceRuntimeSettings) {
-  def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-    unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event]
-  ): Deployment[F, I, Op, Event] =
-    new DefaultDeployment[F, I, Op, State, Event](system, unit, settings)
 }
