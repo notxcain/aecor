@@ -49,7 +49,7 @@ class GenericRuntimeSpec
   )
 
   val startCounters =
-    GenericAkkaRuntime[Task](system).start("Counter", (_: CounterId) => behavior)
+    GenericAkkaRuntime[Task](system).deploy("Counter", (_: CounterId) => behavior)
 
   test("Runtime should work") {
     val program = for {

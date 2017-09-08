@@ -51,7 +51,7 @@ class AkkaPersistenceRuntimeSpec
 
   val runtime = AkkaPersistenceRuntime(system)
 
-  val deploy = runtime.deploy(
+  val deployCounters = runtime.deploy(
     AkkaPersistenceRuntimeUnit(
       "Counter",
       CounterOpHandler.behavior[Task],
@@ -61,7 +61,7 @@ class AkkaPersistenceRuntimeSpec
 
   test("Runtime should work") {
     val program = for {
-      counters <- deploy
+      counters <- deployCounters
       _ <- counters("1")(Increment)
       _ <- counters("2")(Increment)
       _2 <- counters("2")(GetValue)

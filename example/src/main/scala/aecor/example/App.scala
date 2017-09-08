@@ -54,18 +54,16 @@ object App {
         CassandraOffsetStore.createTable(offsetStoreConfig)
       )
 
-    val transactionAggregate = runtime.deploy(EventsourcedTransactionAggregate.unit(taskClock))
-
-    val startTransactions: Task[TransactionId => TransactionAggregate[Task]] =
-      transactionAggregate
-        .map(_.andThen(TransactionAggregate.fromFunctionK))
-
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
 
-    val accountAggregate = runtime.deploy(EventsourcedAccountAggregate.unit(taskClock))
+    val deployTransactions: Task[TransactionId => TransactionAggregate[Task]] =
+      runtime
+        .deploy(EventsourcedTransactionAggregate.unit(taskClock))
+        .map(_.andThen(TransactionAggregate.fromFunctionK))
 
-    val startAccounts: Task[AccountId => AccountAggregate[Task]] =
-      accountAggregate
+    val deployAccounts: Task[AccountId => AccountAggregate[Task]] =
+      runtime
+        .deploy(EventsourcedAccountAggregate.unit(taskClock))
         .map(_.andThen(AccountAggregate.fromFunctionK))
 
     def startTransactionProcessing(
@@ -75,13 +73,15 @@ object App {
       val failure = TransactionProcessFailure.withMonadError[Task]
       val processStep: (Input) => Task[Unit] =
         TransactionProcess(transactions, accounts, failure)
+      val transactionEventJournal = runtime
+        .journal[TransactionId, TransactionEvent]
+        .committable(offsetStore)
+      val consumerId = ConsumerId("processing")
       val processes =
         EventsourcedTransactionAggregate.tagging.tags.map { tag =>
           AkkaStreamProcess[Task](
-            runtime
-              .journal[TransactionId, TransactionEvent]
-              .committable(offsetStore)
-              .eventsByTag(tag, ConsumerId("processing"))
+            transactionEventJournal
+              .eventsByTag(tag, consumerId)
               .map(_.map(_.identified)),
             Flow[Committable[Task, Identified[TransactionId, TransactionEvent]]]
               .mapAsync(30) {
@@ -117,8 +117,8 @@ object App {
       }
 
     val app = for {
-      transactions <- startTransactions
-      accounts <- startAccounts
+      transactions <- deployTransactions
+      accounts <- deployAccounts
       _ <- startTransactionProcessing(accounts, transactions)
       bindResult <- startHttpServer(accounts, transactions)
       _ = system.log.info("Bind result [{}]", bindResult)

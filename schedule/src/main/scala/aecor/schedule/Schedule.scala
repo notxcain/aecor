@@ -69,10 +69,8 @@ object Schedule {
         value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli)
       )
 
-    def startAggregate =
-      for {
-        f <- runtime.deploy(unit)
-      } yield f.andThen(ScheduleBucket.fromFunctionK)
+    def deployBuckets =
+      runtime.deploy(unit).map(_.andThen(ScheduleBucket.fromFunctionK))
 
     def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
       val journal =
@@ -107,10 +105,9 @@ object Schedule {
       )
 
     for {
-      buckets <- startAggregate
+      buckets <- deployBuckets
       _ <- startProcess(buckets)
-      schedule = createSchedule(buckets)
-    } yield schedule
+    } yield createSchedule(buckets)
   }
 
 }

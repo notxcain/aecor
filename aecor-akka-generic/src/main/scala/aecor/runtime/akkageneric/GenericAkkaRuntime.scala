@@ -19,7 +19,7 @@ object GenericAkkaRuntime {
 }
 
 class GenericAkkaRuntime[F[_]: Async: Capture](system: ActorSystem) {
-  def start[I: KeyEncoder: KeyDecoder, Op[_]](
+  def deploy[I: KeyEncoder: KeyDecoder, Op[_]](
     typeName: String,
     createBehavior: I => Behavior[F, Op],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
