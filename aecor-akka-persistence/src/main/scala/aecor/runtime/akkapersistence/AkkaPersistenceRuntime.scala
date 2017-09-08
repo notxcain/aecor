@@ -15,7 +15,7 @@ import cats.{ Monad, ~> }
 import scala.concurrent.Future
 
 final case class AkkaPersistenceRuntimeUnit[F[_], I, Op[_], State, Event](
-  entityName: String,
+  typeName: String,
   behavior: EventsourcedBehavior[F, Op, State, Event],
   tagging: Tagging[I],
   snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never
@@ -34,43 +34,42 @@ private class DefaultDeployment[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyD
   import AkkaPersistenceRuntime._
   import unit._
 
-  def start: F[I => Op ~> F] = {
-    val props =
-      AkkaPersistenceRuntimeActor.props(
-        entityName,
-        behavior,
-        snapshotPolicy,
-        tagging,
-        settings.idleTimeout
+  def start: F[I => Op ~> F] =
+    Capture[F].capture {
+      val props =
+        AkkaPersistenceRuntimeActor.props(
+          typeName,
+          behavior,
+          snapshotPolicy,
+          tagging,
+          settings.idleTimeout
+        )
+
+      def extractEntityId: ShardRegion.ExtractEntityId = {
+        case CorrelatedCommand(entityId, c) =>
+          (entityId, AkkaPersistenceRuntimeActor.HandleCommand(c))
+      }
+
+      val numberOfShards = settings.numberOfShards
+
+      def extractShardId: ShardRegion.ExtractShardId = {
+        case CorrelatedCommand(entityId, _) =>
+          (scala.math.abs(entityId.hashCode) % numberOfShards).toString
+        case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
+      }
+
+      val regionRef = ClusterSharding(system).start(
+        typeName = typeName,
+        entityProps = props,
+        settings = settings.clusterShardingSettings,
+        extractEntityId = extractEntityId,
+        extractShardId = extractShardId
       )
 
-    def extractEntityId: ShardRegion.ExtractEntityId = {
-      case CorrelatedCommand(entityId, c) =>
-        (entityId, AkkaPersistenceRuntimeActor.HandleCommand(c))
-    }
+      implicit val askTimeout = Timeout(settings.askTimeout)
 
-    val numberOfShards = settings.numberOfShards
+      val keyEncoder = KeyEncoder[I]
 
-    def extractShardId: ShardRegion.ExtractShardId = {
-      case CorrelatedCommand(entityId, _) =>
-        (scala.math.abs(entityId.hashCode) % numberOfShards).toString
-      case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
-    }
-
-    def startShardRegion = ClusterSharding(system).start(
-      typeName = entityName,
-      entityProps = props,
-      settings = settings.clusterShardingSettings,
-      extractEntityId = extractEntityId,
-      extractShardId = extractShardId
-    )
-
-    implicit val askTimeout = Timeout(settings.askTimeout)
-
-    val keyEncoder = KeyEncoder[I]
-
-    Capture[F].capture {
-      val regionRef = startShardRegion
       i =>
         new (Op ~> F) {
           override def apply[A](fa: Op[A]): F[A] =
@@ -79,7 +78,6 @@ private class DefaultDeployment[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyD
             }
         }
     }
-  }
 
   def journal: EventJournalQuery[UUID, I, Event] = CassandraEventJournalQuery[I, Event](system)
 }

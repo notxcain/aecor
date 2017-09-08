@@ -1,10 +1,13 @@
 package aecor.runtime.akkageneric
 
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import aecor.data.Behavior
 import aecor.effect.Async
 import aecor.effect.Async.ops._
+import aecor.encoding.KeyDecoder
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.PerformOp
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
@@ -15,15 +18,15 @@ import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
 object GenericAkkaRuntimeActor {
-  def props[F[_]: Async, I, Op[_]](createBehavior: I => Behavior[F, Op],
-                                   idleTimeout: FiniteDuration): Props =
+  def props[F[_]: Async, I: KeyDecoder, Op[_]](createBehavior: I => Behavior[F, Op],
+                                               idleTimeout: FiniteDuration): Props =
     Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
 
-  final case class PerformOp[I, Op[_], A](id: I, op: Op[A])
-  case object Stop
+  private[akkageneric] final case class PerformOp[I, Op[_], A](op: Op[A])
+  private[akkageneric] case object Stop
 }
 
-private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I, Op[_]](
+private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I: KeyDecoder, Op[_]](
   createBehavior: I => Behavior[F, Op],
   idleTimeout: FiniteDuration
 ) extends Actor
@@ -32,17 +35,23 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I, Op[_]](
 
   import context._
 
+  private val idString: String =
+    URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
+
+  private val id: I = KeyDecoder[I]
+    .decode(idString)
+    .getOrElse(throw new IllegalArgumentException(s"Failed to decode entity id from [$idString]"))
+
   private case class Result(id: UUID, value: Try[(Behavior[F, Op], Any)])
 
   setIdleTimeout()
 
-  override def receive: Receive = withBehavior(Option.empty)
+  override def receive: Receive = withBehavior(createBehavior(id))
 
-  private def withBehavior(behavior: Option[Behavior[F, Op]]): Receive = {
-    case PerformOp(id, op) =>
+  private def withBehavior(behavior: Behavior[F, Op]): Receive = {
+    case PerformOp(op) =>
       val opId = UUID.randomUUID()
       behavior
-        .getOrElse(createBehavior(id.asInstanceOf[I]))
         .run(op.asInstanceOf[Op[Any]])
         .unsafeRun
         .map(x => Result(opId, Success(x)))
@@ -56,7 +65,7 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I, Op[_]](
           value match {
             case Success((newBehavior, reply)) =>
               sender() ! reply
-              become(withBehavior(Some(newBehavior)))
+              become(withBehavior(newBehavior))
             case Failure(cause) =>
               sender() ! Status.Failure(cause)
               throw cause
