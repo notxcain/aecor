@@ -10,13 +10,13 @@ object notification {
   type NotificationId = String
   sealed abstract class NotificationOp[A] extends Product with Serializable
   object NotificationOp {
-    final case class CreateNotification(counterId: String) extends NotificationOp[Unit]
+    final case class CreateNotification(counterId: CounterId) extends NotificationOp[Unit]
     final case object MarkAsSent extends NotificationOp[Unit]
   }
 
   sealed trait NotificationEvent
   object NotificationEvent {
-    final case class NotificationCreated(counterId: String) extends NotificationEvent
+    final case class NotificationCreated(counterId: CounterId) extends NotificationEvent
     final case object NotificationSent extends NotificationEvent
     val tag: EventTag = EventTag("Notification")
   }

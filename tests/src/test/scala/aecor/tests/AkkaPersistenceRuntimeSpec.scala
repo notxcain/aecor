@@ -62,21 +62,26 @@ class AkkaPersistenceRuntimeSpec
   test("Runtime should work") {
     val program = for {
       counters <- deployCounters
-      _ <- counters("1")(Increment)
-      _ <- counters("2")(Increment)
-      _2 <- counters("2")(GetValue)
-      _ <- counters("1")(Decrement)
-      _1 <- counters("1")(GetValue)
-      afterPassivation <- counters("2")(GetValue).delayExecution(2.seconds)
+      first = counters(CounterId("1"))
+      second = counters(CounterId("2"))
+      _ <- first(Increment)
+      _ <- second(Increment)
+      _2 <- second(GetValue)
+      _ <- first(Decrement)
+      _1 <- first(GetValue)
+      afterPassivation <- second(GetValue).delayExecution(2.seconds)
     } yield (_1, _2, afterPassivation)
 
     program.runAsync.futureValue shouldEqual ((0L, 1L, 1L))
   }
   test("Journal should work") {
     implicit val materializer = ActorMaterializer()
-    val journal = runtime.journal[String, CounterEvent]
-    val value = journal.currentEventsByTag(CounterEvent.tag, None).runWith(Sink.seq).futureValue
+    val journal = runtime.journal[CounterId, CounterEvent]
+    val events = journal.currentEventsByTag(CounterEvent.tag, None).runWith(Sink.seq).futureValue
 
-    value.size shouldBe 3
+    val map = events.groupBy(_.entityId)
+    println(map)
+    map(CounterId("1")).size shouldBe 2
+    map(CounterId("2")).size shouldBe 1
   }
 }

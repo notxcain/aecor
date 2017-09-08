@@ -1,5 +1,6 @@
 package aecor.tests.e2e
 import aecor.data._
+import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
@@ -15,6 +16,14 @@ object CounterOp {
   case object Increment extends CounterOp[Long]
   case object Decrement extends CounterOp[Long]
   case object GetValue extends CounterOp[Long]
+}
+
+final case class CounterId(value: String) extends AnyVal
+
+object CounterId {
+  implicit val keyEncoder: KeyEncoder[CounterId] =
+    KeyEncoder[String].contramap(_.value)
+  implicit val keyDecoder: KeyDecoder[CounterId] = KeyDecoder[String].map(CounterId(_))
 }
 
 sealed trait CounterEvent

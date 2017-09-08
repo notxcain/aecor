@@ -34,7 +34,7 @@ class CassandraEventJournal[I: KeyDecoder, E: PersistentDecoder](system: ActorSy
               case repr: PersistentRepr =>
                 val index =
                   persistenceId.indexOf(AkkaPersistenceRuntimeActor.PersistenceIdSeparator)
-                val idString = persistenceId.substring(index - 1, persistenceId.length)
+                val idString = persistenceId.substring(index + 1, persistenceId.length)
                 keyDecoder(idString) match {
                   case Some(id) =>
                     decoder

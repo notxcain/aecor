@@ -20,7 +20,9 @@ object NotificationProcess {
           for {
             value <- counters(counterId)(CounterOp.GetValue)
             _ <- if (value % 2 == 0) {
-                  notifications(s"$counterId-$value")(NotificationOp.CreateNotification(counterId))
+                  notifications(s"${counterId.value}-$value")(
+                    NotificationOp.CreateNotification(counterId)
+                  )
                 } else {
                   ().pure[F]
                 }

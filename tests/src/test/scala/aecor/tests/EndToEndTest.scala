@@ -144,12 +144,15 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
     val counter = wiredK(counterBehavior)
 
+    val first = CounterId("1")
+    val second = CounterId("2")
+
     val program = for {
-      _ <- counter("1")(Increment)
-      _ <- counter("1")(Increment)
-      _ <- counter("1")(Decrement)
-      _ <- counter("2")(Increment)
-      _ <- counter("2")(Increment)
+      _ <- counter(first)(Increment)
+      _ <- counter(first)(Increment)
+      _ <- counter(first)(Decrement)
+      _ <- counter(second)(Increment)
+      _ <- counter(second)(Increment)
     } yield ()
 
     val Right((state, _)) = program
@@ -167,7 +170,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       .value
       .value
 
-    state.counterViewState.value shouldBe Map("1" -> 1L, "2" -> 2L)
+    state.counterViewState.value shouldBe Map(first -> 1L, second -> 2L)
 
     state.notificationJournalState.eventsById
       .getOrElse("1-2", Vector.empty) should have size (2)

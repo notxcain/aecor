@@ -40,7 +40,11 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I: KeyDecoder, O
 
   private val id: I = KeyDecoder[I]
     .decode(idString)
-    .getOrElse(throw new IllegalArgumentException(s"Failed to decode entity id from [$idString]"))
+    .getOrElse {
+      val error = s"Failed to decode entity id from [$idString]"
+      log.error(error)
+      throw new IllegalArgumentException(error)
+    }
 
   private case class Result(id: UUID, value: Try[(Behavior[F, Op], Any)])
 
@@ -79,7 +83,7 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I: KeyDecoder, O
     case GenericAkkaRuntimeActor.Stop =>
       context.stop(self)
     case Result(_, _) =>
-      log.debug(
+      log.warning(
         "Ignoring result of another operation. Probably targeted previous instance of actor."
       )
   }
