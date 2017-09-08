@@ -9,13 +9,11 @@ import cats.{ Functor, MonadError, ~> }
 object StateRuntime {
 
   /**
-    * Creates an aggregate runtime that uses StateT as a target context
     *
-    * This runtime doesn't account for correlation,
-    * i.e. all operations are executed against common sequence of events
+    *  Construct runtime for single instance of aggregate
     *
     */
-  def shared[F[_], Op[_], S, E](
+  def unit[F[_], Op[_], S, E](
     behavior: EventsourcedBehavior[F, Op, S, E]
   )(implicit F: MonadError[F, Throwable]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
@@ -43,12 +41,12 @@ object StateRuntime {
   /**
     * Creates an aggregate runtime that uses StateT as a target context
     *
-    * This runtime uses correlation function to get entity identifier
-    * that is used to execute commands against corresponding
+    * This runtime uses supplied identifier
+    * to execute commands against corresponding
     * sequence of events
     *
     */
-  def correlate[F[_]: Functor, I, O[_], E](
+  def route[F[_]: Functor, I, O[_], E](
     behavior: O ~> StateT[F, Vector[E], ?]
   ): I => O ~> StateT[F, Map[I, Vector[E]], ?] =
     i =>

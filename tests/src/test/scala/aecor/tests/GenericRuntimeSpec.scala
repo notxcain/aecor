@@ -46,7 +46,7 @@ class GenericRuntimeSpec
 
   val behavior: Behavior[Task, CounterOp] = Behavior.fromState(
     Vector.empty[CounterEvent],
-    StateRuntime.shared(EventsourcedBehavior(CounterOpHandler[Task], CounterState.folder))
+    StateRuntime.unit(EventsourcedBehavior(CounterOpHandler[Task], CounterState.folder))
   )
 
   val deployCounters =

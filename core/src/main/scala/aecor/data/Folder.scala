@@ -23,7 +23,3 @@ object Folder {
       case Some(b) => reduce(b).andThen(_.map(Some(_)))
     }
 }
-
-trait Eventsourced[A, E] {
-  def apply(a: Option[A], e: E): Folded[A]
-}

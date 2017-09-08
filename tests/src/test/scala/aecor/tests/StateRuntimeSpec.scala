@@ -12,14 +12,14 @@ import org.scalatest.{ FunSuite, Matchers }
 
 class StateRuntimeSpec extends FunSuite with Matchers {
 
-  val sharedRuntime =
-    StateRuntime.shared[Either[Throwable, ?], CounterOp, CounterState, CounterEvent](
+  val counter =
+    StateRuntime.unit[Either[Throwable, ?], CounterOp, CounterState, CounterEvent](
       EventsourcedBehavior(CounterOpHandler[Either[Throwable, ?]], CounterState.folder)
     )
 
-  val correlated
+  val counters
     : String => CounterOp ~> StateT[Either[Throwable, ?], Map[String, Vector[CounterEvent]], ?] =
-    StateRuntime.correlate(sharedRuntime)
+    StateRuntime.route(counter)
 
   def mkProgram[F[_]: Monad](runtime: CounterOp ~> F): F[Long] =
     for {
@@ -29,7 +29,7 @@ class StateRuntimeSpec extends FunSuite with Matchers {
     } yield x
 
   test("Shared runtime should execute all commands against shared sequence of events") {
-    val program = mkProgram(sharedRuntime)
+    val program = mkProgram(counter)
 
     val Right((state, result)) = program.run(Vector.empty)
 
@@ -42,9 +42,9 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   ) {
 
     val program = for {
-      _ <- correlated("1")(Increment)
-      _ <- correlated("2")(Increment)
-      x <- correlated("1")(Decrement)
+      _ <- counters("1")(Increment)
+      _ <- counters("2")(Increment)
+      x <- counters("1")(Decrement)
     } yield x
 
     val Right((state, result)) = program.run(Map.empty)
