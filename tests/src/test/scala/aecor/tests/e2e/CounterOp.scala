@@ -10,8 +10,7 @@ import io.circe.generic.auto._
 
 import scala.collection.immutable.Seq
 
-sealed trait CounterOp[A]
-
+sealed abstract class CounterOp[A] extends Product with Serializable
 object CounterOp {
   case object Increment extends CounterOp[Long]
   case object Decrement extends CounterOp[Long]

@@ -63,8 +63,6 @@ object Schedule {
       Tagging.const[ScheduleBucketId](eventTag)
     )
 
-    val deploy = runtime.deploy(unit)
-
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(
         uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
@@ -73,7 +71,7 @@ object Schedule {
 
     def startAggregate =
       for {
-        f <- deploy.start
+        f <- runtime.deploy(unit)
       } yield f.andThen(ScheduleBucket.fromFunctionK)
 
     def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
@@ -81,7 +79,7 @@ object Schedule {
         DefaultScheduleEventJournal[F](
           settings.consumerId,
           8,
-          deploy.journal.committable(offsetStore),
+          runtime.journal[ScheduleBucketId, ScheduleEvent].committable(offsetStore),
           eventTag
         )
 
@@ -104,7 +102,7 @@ object Schedule {
         clock,
         buckets,
         settings.bucketLength,
-        deploy.journal.committable(offsetStore),
+        runtime.journal[ScheduleBucketId, ScheduleEvent].committable(offsetStore),
         eventTag
       )
 

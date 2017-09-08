@@ -13,9 +13,9 @@ import akka.stream.scaladsl.Source
 
 import scala.concurrent.Future
 
-class CassandraEventJournalQuery[I: KeyDecoder, E: PersistentDecoder](system: ActorSystem,
-                                                                      parallelism: Int)
-    extends EventJournalQuery[UUID, I, E] {
+class CassandraEventJournal[I: KeyDecoder, E: PersistentDecoder](system: ActorSystem,
+                                                                 parallelism: Int)
+    extends EventJournal[UUID, I, E] {
 
   private val decoder = PersistentDecoder[E]
   private val keyDecoder = KeyDecoder[I]
@@ -81,10 +81,10 @@ class CassandraEventJournalQuery[I: KeyDecoder, E: PersistentDecoder](system: Ac
 
 }
 
-object CassandraEventJournalQuery {
+object CassandraEventJournal {
   def apply[I: KeyDecoder, E: PersistentDecoder](
     system: ActorSystem,
     decodingParallelism: Int = 8
-  ): EventJournalQuery[UUID, I, E] =
-    new CassandraEventJournalQuery(system, decodingParallelism)
+  ): EventJournal[UUID, I, E] =
+    new CassandraEventJournal(system, decodingParallelism)
 }

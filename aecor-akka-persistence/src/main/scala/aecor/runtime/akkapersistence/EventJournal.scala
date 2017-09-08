@@ -10,7 +10,7 @@ final case class JournalEntry[+O, +I, +A](offset: O, entityId: I, sequenceNr: Lo
   def identified: Identified[I, A] = Identified(entityId, event)
 }
 
-trait EventJournalQuery[Offset, I, E] {
+trait EventJournal[Offset, I, E] {
   def eventsByTag(tag: EventTag,
                   offset: Option[Offset]): Source[JournalEntry[Offset, I, E], NotUsed]
 

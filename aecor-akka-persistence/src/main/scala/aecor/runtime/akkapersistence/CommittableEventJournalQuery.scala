@@ -8,7 +8,7 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 
 final class CommittableEventJournalQuery[F[_]: Async, O, I, E](
-  underlying: EventJournalQuery[O, I, E],
+  underlying: EventJournal[O, I, E],
   offsetStore: KeyValueStore[F, TagConsumer, O]
 ) {
 
@@ -38,7 +38,7 @@ final class CommittableEventJournalQuery[F[_]: Async, O, I, E](
 
 object CommittableEventJournalQuery {
   def apply[F[_]: Async, Offset, I, E](
-    underlying: EventJournalQuery[Offset, I, E],
+    underlying: EventJournal[Offset, I, E],
     offsetStore: KeyValueStore[F, TagConsumer, Offset]
   ): CommittableEventJournalQuery[F, Offset, I, E] =
     new CommittableEventJournalQuery(underlying, offsetStore)

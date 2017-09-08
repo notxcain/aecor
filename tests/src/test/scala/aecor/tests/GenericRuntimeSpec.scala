@@ -19,10 +19,13 @@ import scala.concurrent.duration._
 object GenericRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
         cluster.system-name=test
-        akka.persistence.journal.plugin=akka.persistence.journal.inmem
-        akka.persistence.snapshot-store.plugin=akka.persistence.no-snapshot-store
+        cluster.port = 51001
         aecor.generic-akka-runtime.idle-timeout = 1s
-        cluster.seed-nodes = ["akka://test@127.0.0.1:51000"]
+        cluster {
+          seed-nodes = [
+            "akka.tcp://test@127.0.0.1:51001"
+          ]
+        }
      """).withFallback(ConfigFactory.load())
 }
 
@@ -45,18 +48,18 @@ class GenericRuntimeSpec
     StateRuntime.shared(EventsourcedBehavior(CounterOpHandler[Task], CounterState.folder))
   )
 
-  val startRuntime =
+  val startCounters =
     GenericAkkaRuntime[Task](system).start("Counter", (_: CounterId) => behavior)
 
   test("Runtime should work") {
     val program = for {
-      runtime <- startRuntime
-      _ <- runtime("1")(CounterOp.Increment)
-      _ <- runtime("2")(CounterOp.Increment)
-      _ <- runtime("1")(CounterOp.Decrement)
-      first <- runtime("1")(CounterOp.GetValue)
-      second <- runtime("2")(CounterOp.GetValue)
-      secondAfterPassivation <- runtime("2")(CounterOp.GetValue).delayExecution(2.seconds)
+      counters <- startCounters
+      _ <- counters("1")(CounterOp.Increment)
+      _ <- counters("2")(CounterOp.Increment)
+      _ <- counters("1")(CounterOp.Decrement)
+      first <- counters("1")(CounterOp.GetValue)
+      second <- counters("2")(CounterOp.GetValue)
+      secondAfterPassivation <- counters("2")(CounterOp.GetValue).delayExecution(2.seconds)
     } yield (first, second, secondAfterPassivation)
 
     val (first, second, afterPassivation) = program.runAsync.futureValue

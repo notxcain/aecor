@@ -31,31 +31,10 @@ class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem,
                                                        settings: AkkaPersistenceRuntimeSettings) {
   def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event]
-  ): Deployment[F, I, Op, Event] =
-    new DefaultDeployment[F, I, Op, State, Event](system, unit, settings)
-}
+  ): F[I => Op ~> F] = {
+    import AkkaPersistenceRuntime._
+    import unit._
 
-final case class AkkaPersistenceRuntimeUnit[F[_], I, Op[_], State, Event](
-  typeName: String,
-  behavior: EventsourcedBehavior[F, Op, State, Event],
-  tagging: Tagging[I],
-  snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never
-)
-
-abstract class Deployment[F[_], I, Op[_], Event] {
-  def start: F[I => Op ~> F]
-  def journal: EventJournalQuery[UUID, I, Event]
-}
-
-private class DefaultDeployment[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-  system: ActorSystem,
-  unit: AkkaPersistenceRuntimeUnit[F, I, Op, State, Event],
-  settings: AkkaPersistenceRuntimeSettings
-) extends Deployment[F, I, Op, Event] {
-  import AkkaPersistenceRuntime._
-  import unit._
-
-  def start: F[I => Op ~> F] =
     Capture[F].capture {
       val props =
         AkkaPersistenceRuntimeActor.props(
@@ -99,6 +78,15 @@ private class DefaultDeployment[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyD
             }
         }
     }
+  }
 
-  def journal: EventJournalQuery[UUID, I, Event] = CassandraEventJournalQuery[I, Event](system)
+  def journal[I: KeyDecoder, Event: PersistentDecoder]: EventJournal[UUID, I, Event] =
+    CassandraEventJournal[I, Event](system)
 }
+
+final case class AkkaPersistenceRuntimeUnit[F[_], I, Op[_], State, Event](
+  typeName: String,
+  behavior: EventsourcedBehavior[F, Op, State, Event],
+  tagging: Tagging[I],
+  snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never
+)

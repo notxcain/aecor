@@ -11,7 +11,7 @@ lazy val buildSettings = inThisBuild(
 )
 
 lazy val akkaVersion = "2.5.4"
-lazy val akkaPersistenceCassandra = "0.55"
+lazy val akkaPersistenceCassandraVersion = "0.55"
 lazy val catsVersion = "0.9.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
@@ -179,7 +179,7 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion
   )
 )
 
@@ -228,6 +228,7 @@ lazy val testingSettings = Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
+    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
   )
 )

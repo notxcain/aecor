@@ -57,7 +57,7 @@ object App {
     val transactionAggregate = runtime.deploy(EventsourcedTransactionAggregate.unit(taskClock))
 
     val startTransactions: Task[TransactionId => TransactionAggregate[Task]] =
-      transactionAggregate.start
+      transactionAggregate
         .map(_.andThen(TransactionAggregate.fromFunctionK))
 
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
@@ -65,7 +65,7 @@ object App {
     val accountAggregate = runtime.deploy(EventsourcedAccountAggregate.unit(taskClock))
 
     val startAccounts: Task[AccountId => AccountAggregate[Task]] =
-      accountAggregate.start
+      accountAggregate
         .map(_.andThen(AccountAggregate.fromFunctionK))
 
     def startTransactionProcessing(
@@ -78,7 +78,8 @@ object App {
       val processes =
         EventsourcedTransactionAggregate.tagging.tags.map { tag =>
           AkkaStreamProcess[Task](
-            transactionAggregate.journal
+            runtime
+              .journal[TransactionId, TransactionEvent]
               .committable(offsetStore)
               .eventsByTag(tag, ConsumerId("processing"))
               .map(_.map(_.identified)),
