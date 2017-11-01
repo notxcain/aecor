@@ -6,10 +6,7 @@ import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.{ AccountDoesNotExist, InsufficientFunds }
 import aecor.example.domain.account.AccountEvent._
 import aecor.example.domain.account.EventsourcedAccount.AccountState
-import aecor.util.Clock
-import cats.Applicative
 import cats.implicits._
-
 import scala.collection.immutable._
 
 class EventsourcedAccount extends Account[Action[Option[AccountState], AccountEvent, ?]] {
@@ -61,17 +58,15 @@ class EventsourcedAccount extends Account[Action[Option[AccountState], AccountEv
 
 object EventsourcedAccount {
 
-  def behavior[F[_]: Applicative](
-    clock: Clock[F]
-  ): EventsourcedBehavior[F, Account.AccountOp, Option[AccountState], EventEnvelope[
-    AccountEventMeta,
-    AccountEvent
-  ]] =
-    EventsourcedBehavior.optional(
-      AccountState.fromEvent,
-      Account.toFunctionK(new EventsourcedAccount[F](clock)),
-      _.applyEvent(_)
-    )
+  def behavior: EventsourcedBehavior[Account.AccountOp, Option[AccountState], AccountEvent] =
+    EventsourcedBehavior
+      .optional(
+        Account
+          .toFunctionK(new EventsourcedAccount),
+        AccountState.fromEvent,
+        _.applyEvent(_)
+      )
+
   final val rootAccountId: AccountId = AccountId("ROOT")
   final case class AccountState(balance: Amount,
                                 processedTransactions: Set[AccountTransactionId],

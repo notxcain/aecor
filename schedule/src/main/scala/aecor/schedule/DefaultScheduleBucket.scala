@@ -20,8 +20,8 @@ object DefaultScheduleBucket {
 
   def behavior[F[_]: Functor](
     clock: F[ZonedDateTime]
-  ): EventsourcedBehavior[F, ScheduleOp, ScheduleState, ScheduleEvent] =
-    EventsourcedBehavior(
+  ): EventsourcedBehaviorT[F, ScheduleOp, ScheduleState, ScheduleEvent] =
+    EventsourcedBehaviorT(
       ScheduleState.initial,
       DefaultScheduleBucket(clock).asFunctionK,
       _.update(_)

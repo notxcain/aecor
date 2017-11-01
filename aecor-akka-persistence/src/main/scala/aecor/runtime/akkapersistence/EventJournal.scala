@@ -8,6 +8,7 @@ import akka.stream.scaladsl.Source
 
 final case class JournalEntry[+O, +I, +A](offset: O, entityId: I, sequenceNr: Long, event: A) {
   def identified: Identified[I, A] = Identified(entityId, event)
+  def map[B](f: A => B): JournalEntry[O, I, B] = copy(event = f(event))
 }
 
 trait EventJournal[Offset, I, E] {

@@ -22,13 +22,13 @@ object Eventsourced {
   final case class EventEnvelope[E](sequenceNr: Long, event: E, tags: Set[EventTag])
 
   def apply[F[_]: MonadError[?[_], BehaviorFailure], I, Op[_], S, E](
-    entityBehavior: EventsourcedBehavior[F, Op, S, E],
+    entityBehavior: EventsourcedBehaviorT[F, Op, S, E],
     tagging: Tagging[I],
     journal: EventJournal[F, I, EventEnvelope[E]],
     snapshotEach: Option[Long],
     snapshotStore: KeyValueStore[F, I, RunningState[S]]
   ): I => Behavior[F, Op] = { entityId =>
-    val effectiveBehavior = EventsourcedBehavior[F, Op, RunningState[S], EventEnvelope[E]](
+    val effectiveBehavior = EventsourcedBehaviorT[F, Op, RunningState[S], EventEnvelope[E]](
       initialState = RunningState(entityBehavior.initialState, 0),
       commandHandler = entityBehavior.commandHandler
         .andThen(new (ActionT[F, S, E, ?] ~> ActionT[F, RunningState[S], EventEnvelope[E], ?]) {

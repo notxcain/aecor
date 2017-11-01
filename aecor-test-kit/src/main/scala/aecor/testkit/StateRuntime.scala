@@ -1,6 +1,6 @@
 package aecor.testkit
 
-import aecor.data.EventsourcedBehavior
+import aecor.data.EventsourcedBehaviorT
 import aecor.data.Folded.{ Impossible, Next }
 import cats.data._
 import cats.{ Functor, MonadError, ~> }
@@ -14,7 +14,7 @@ object StateRuntime {
     *
     */
   def unit[F[_], Op[_], S, E](
-    behavior: EventsourcedBehavior[F, Op, S, E]
+    behavior: EventsourcedBehaviorT[F, Op, S, E]
   )(implicit F: MonadError[F, Throwable]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
       override def apply[A](op: Op[A]): StateT[F, Vector[E], A] =

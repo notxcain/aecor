@@ -25,7 +25,7 @@ object AkkaPersistenceRuntime {
 class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem) {
   def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     typeName: String,
-    behavior: EventsourcedBehavior[F, Op, State, Event],
+    behavior: EventsourcedBehaviorT[F, Op, State, Event],
     tagging: Tagging[I],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)

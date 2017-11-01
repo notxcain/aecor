@@ -19,7 +19,7 @@ trait E2eSupport {
     StateEventJournal[SpecF, I, SpecState, E](extract, update)
 
   final def mkBehavior[I, Op[_], S, E](
-    behavior: EventsourcedBehavior[StateT[SpecF, SpecState, ?], Op, S, E],
+    behavior: EventsourcedBehaviorT[StateT[SpecF, SpecState, ?], Op, S, E],
     tagging: Tagging[I],
     journal: StateEventJournal[SpecF, I, SpecState, E]
   ): I => Op ~> StateT[SpecF, SpecState, ?] = { id =>

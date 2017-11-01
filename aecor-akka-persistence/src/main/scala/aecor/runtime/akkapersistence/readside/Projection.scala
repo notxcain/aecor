@@ -13,7 +13,7 @@ object Projection {
   }
   def apply[F[_]: MonadError[?[_], Throwable], I, E, S](
     store: Store[F, I, Versioned[S]],
-    zero: S,
+    zero: E => Folded[S],
     update: (E, S) => Folded[S]
   ): Input[I, E] => F[Unit] = {
     case Input(id, seqNr, e) =>
@@ -27,7 +27,7 @@ object Projection {
             } else if (seqNr == currentVersion + 1) {
               oldStateOpt
                 .map(_.a)
-                .fold(Folded.next(zero))(update(e, _))
+                .fold(zero(e))(update(e, _))
                 .fold(error[Unit]("Illegal fold")) { a =>
                   store.saveState(id, Versioned(currentVersion + 1, a))
                 }

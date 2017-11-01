@@ -33,7 +33,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   def props[F[_]: Async, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: EventsourcedBehavior[F, Op, State, Event],
+    behavior: EventsourcedBehaviorT[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[I],
     idleTimeout: FiniteDuration
@@ -57,7 +57,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   */
 private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  behavior: EventsourcedBehavior[F, Op, State, Event],
+  behavior: EventsourcedBehaviorT[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[I],
   idleTimeout: FiniteDuration

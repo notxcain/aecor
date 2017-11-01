@@ -57,16 +57,22 @@ object App {
 
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
 
+    val metaProvider = taskClock.instant.map(EventMeta(_))
+
     val deployTransactions: Task[TransactionId => TransactionAggregate[Task]] =
       runtime
-        .deploy("Transaction", EventsourcedTransactionAggregate.behavior[Task](taskClock), tagging)
+        .deploy(
+          "Transaction",
+          EventsourcedTransactionAggregate.behavior.enrich(metaProvider),
+          tagging
+        )
         .map(_.andThen(TransactionAggregate.fromFunctionK))
 
     val deployAccounts: Task[AccountId => Account[Task]] =
       runtime
         .deploy(
           "Account",
-          EventsourcedAccount.behavior(taskClock),
+          EventsourcedAccount.behavior.enrich(metaProvider),
           Tagging.const[AccountId](EventTag("Account"))
         )
         .map(_.andThen(Account.fromFunctionK))
@@ -79,7 +85,7 @@ object App {
       val processStep: (Input) => Task[Unit] =
         TransactionProcess(transactions, accounts, failure)
       val journal = runtime
-        .journal[TransactionId, TransactionEvent]
+        .journal[TransactionId, Enriched[EventMeta, TransactionEvent]]
         .committable(offsetStore)
       val consumerId = ConsumerId("processing")
       val processes =
@@ -87,7 +93,7 @@ object App {
           AkkaStreamProcess[Task](
             journal
               .eventsByTag(tag, consumerId)
-              .map(_.map(_.identified)),
+              .map(_.map(_.map(_.event).identified)),
             Flow[Committable[Task, Identified[TransactionId, TransactionEvent]]]
               .mapAsync(30) {
                 _.traverse(processStep).runAsync

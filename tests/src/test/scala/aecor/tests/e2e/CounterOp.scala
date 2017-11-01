@@ -43,8 +43,8 @@ object CounterOpHandler {
 }
 
 object CounterBehavior {
-  def apply[F[_]: Applicative]: EventsourcedBehavior[F, CounterOp, CounterState, CounterEvent] =
-    EventsourcedBehavior(CounterState(0), CounterOpHandler[F], _.applyEvent(_))
+  def apply[F[_]: Applicative]: EventsourcedBehaviorT[F, CounterOp, CounterState, CounterEvent] =
+    EventsourcedBehaviorT(CounterState(0), CounterOpHandler[F], _.applyEvent(_))
 }
 
 class CounterOpHandler[F[_]: Applicative]

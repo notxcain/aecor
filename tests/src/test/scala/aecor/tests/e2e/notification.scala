@@ -45,6 +45,6 @@ object notification {
         }
     }
   def behavior[F[_]: Applicative]
-    : EventsourcedBehavior[F, NotificationOp, NotificationState, NotificationEvent] =
-    EventsourcedBehavior(NotificationState(false), notificationOpHandler[F], _.applyEvent(_))
+    : EventsourcedBehaviorT[F, NotificationOp, NotificationState, NotificationEvent] =
+    EventsourcedBehaviorT(NotificationState(false), notificationOpHandler[F], _.applyEvent(_))
 }

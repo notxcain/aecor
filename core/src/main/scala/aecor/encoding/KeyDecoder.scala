@@ -1,5 +1,6 @@
 package aecor.encoding
 import java.util.UUID
+import java.util.regex.Pattern
 
 import cats.MonadError
 
@@ -77,6 +78,13 @@ final object KeyDecoder {
   implicit val decodeKeyShort: KeyDecoder[Short] = numberInstance(java.lang.Short.parseShort)
   implicit val decodeKeyInt: KeyDecoder[Int] = numberInstance(java.lang.Integer.parseInt)
   implicit val decodeKeyLong: KeyDecoder[Long] = numberInstance(java.lang.Long.parseLong)
+
+  def split(separator: String): KeyDecoder[List[String]] = {
+    val pattern = Pattern.compile(s"(?<!\\\\)$separator")
+    KeyDecoder[String]
+      .map(pattern.split(_))
+      .map(_.toList)
+  }
 
   implicit val keyDecoderInstances: MonadError[KeyDecoder, Unit] =
     new MonadError[KeyDecoder, Unit] {
