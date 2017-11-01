@@ -1,6 +1,5 @@
 package aecor.tests.e2e
 import aecor.data._
-import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
@@ -39,7 +38,7 @@ case class CounterState(value: Long) {
 }
 
 object CounterOpHandler {
-  def apply[F[_]: Applicative]: CounterOp ~> Action[F, CounterState, CounterEvent, ?] =
+  def apply[F[_]: Applicative]: CounterOp ~> ActionT[F, CounterState, CounterEvent, ?] =
     new CounterOpHandler[F]
 }
 
@@ -49,18 +48,18 @@ object CounterBehavior {
 }
 
 class CounterOpHandler[F[_]: Applicative]
-    extends (CounterOp ~> Action[F, CounterState, CounterEvent, ?]) {
-  override def apply[A](fa: CounterOp[A]): Action[F, CounterState, CounterEvent, A] =
+    extends (CounterOp ~> ActionT[F, CounterState, CounterEvent, ?]) {
+  override def apply[A](fa: CounterOp[A]): ActionT[F, CounterState, CounterEvent, A] =
     fa match {
       case Increment =>
-        Action.lift { x =>
+        ActionT.lift { x =>
           Seq(CounterIncremented) -> (x.value + 1)
         }
       case Decrement =>
-        Action.lift { x =>
+        ActionT.lift { x =>
           Seq(CounterDecremented) -> (x.value - 1)
         }
       case GetValue =>
-        Action.lift(x => Seq.empty -> x.value)
+        ActionT.lift(x => Seq.empty -> x.value)
     }
 }

@@ -15,7 +15,7 @@ object DefaultScheduleBucket {
 
   def apply[F[_]: Functor](
     clock: F[ZonedDateTime]
-  ): ScheduleBucket[Action[F, ScheduleState, ScheduleEvent, ?]] =
+  ): ScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?]] =
     new DefaultScheduleBucket(clock)
 
   def behavior[F[_]: Functor](
@@ -29,14 +29,14 @@ object DefaultScheduleBucket {
 }
 
 class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
-    extends ScheduleBucket[Action[F, ScheduleState, ScheduleEvent, ?]] {
+    extends ScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?]] {
 
   override def addScheduleEntry(
     entryId: String,
     correlationId: String,
     dueDate: LocalDateTime
-  ): Action[F, ScheduleState, ScheduleEvent, Unit] =
-    Action { state =>
+  ): ActionT[F, ScheduleState, ScheduleEvent, Unit] =
+    ActionT { state =>
       clock.map { zdt =>
         val timestamp = zdt.toInstant
         val now = zdt.toLocalDateTime
@@ -56,8 +56,8 @@ class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
 
     }
 
-  override def fireEntry(entryId: String): Action[F, ScheduleState, ScheduleEvent, Unit] =
-    Action { state =>
+  override def fireEntry(entryId: String): ActionT[F, ScheduleState, ScheduleEvent, Unit] =
+    ActionT { state =>
       clock.map(_.toInstant).map { timestamp =>
         state
           .findEntry(entryId)

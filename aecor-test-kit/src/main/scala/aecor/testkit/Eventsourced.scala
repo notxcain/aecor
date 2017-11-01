@@ -31,11 +31,11 @@ object Eventsourced {
     val effectiveBehavior = EventsourcedBehavior[F, Op, RunningState[S], EventEnvelope[E]](
       initialState = RunningState(entityBehavior.initialState, 0),
       commandHandler = entityBehavior.commandHandler
-        .andThen(new (Action[F, S, E, ?] ~> Action[F, RunningState[S], EventEnvelope[E], ?]) {
+        .andThen(new (ActionT[F, S, E, ?] ~> ActionT[F, RunningState[S], EventEnvelope[E], ?]) {
           override def apply[A](
-            fa: Action[F, S, E, A]
-          ): Action[F, RunningState[S], EventEnvelope[E], A] =
-            Action { rs =>
+            fa: ActionT[F, S, E, A]
+          ): ActionT[F, RunningState[S], EventEnvelope[E], A] =
+            ActionT { rs =>
               fa.run(rs.entityState).map {
                 case (es, a) =>
                   val envelopes = es.foldLeft(Seq.empty[EventEnvelope[E]]) { (acc, e) =>

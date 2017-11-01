@@ -25,13 +25,13 @@ import cats.implicits._
 import scala.collection.immutable._
 
 class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applicative[F])
-    extends TransactionAggregate[Action[F, Option[Transaction], TransactionEvent, ?]] {
+    extends TransactionAggregate[ActionT[F, Option[Transaction], TransactionEvent, ?]] {
   import F._
 
   override def create(fromAccountId: From[AccountId],
                       toAccountId: To[AccountId],
-                      amount: Amount): Action[F, Option[Transaction], TransactionEvent, Unit] =
-    Action {
+                      amount: Amount): ActionT[F, Option[Transaction], TransactionEvent, Unit] =
+    ActionT {
       case None =>
         clock.instant.map { now =>
           Seq(
@@ -43,8 +43,8 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
       case Some(_) => pure(Seq.empty -> (()))
     }
 
-  override def authorize: Action[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    Action {
+  override def authorize: ActionT[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
+    ActionT {
       case Some(transaction) =>
         clock.instant.map { now =>
           if (transaction.status == Requested) {
@@ -61,8 +61,8 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
 
   override def fail(
     reason: String
-  ): Action[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    Action {
+  ): ActionT[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
+    ActionT {
       case Some(transaction) =>
         clock.instant.map { now =>
           if (transaction.status == Failed) {
@@ -75,8 +75,8 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
         pure(Seq.empty -> "Transaction not found".asLeft)
     }
 
-  override def succeed: Action[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    Action {
+  override def succeed: ActionT[F, Option[Transaction], TransactionEvent, Either[String, Unit]] =
+    ActionT {
       case Some(transaction) =>
         clock.instant.map { now =>
           if (transaction.status == Succeeded) {
@@ -91,8 +91,8 @@ class EventsourcedTransactionAggregate[F[_]](clock: Clock[F])(implicit F: Applic
         pure(Seq.empty -> "Transaction not found".asLeft)
     }
 
-  override def getInfo: Action[F, Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
-    Action.readOnly(_.map {
+  override def getInfo: ActionT[F, Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
+    ActionT.readOnly(_.map {
       case Transaction(status, from, to, amount) =>
         TransactionInfo(from, to, amount, Some(status).collect {
           case Succeeded => true
