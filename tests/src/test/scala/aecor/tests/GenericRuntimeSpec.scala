@@ -1,6 +1,6 @@
 package aecor.tests
 
-import aecor.data.{ Behavior, EventsourcedBehavior }
+import aecor.data.Behavior
 import aecor.effect.monix._
 import aecor.runtime.akkageneric.GenericAkkaRuntime
 import aecor.testkit.StateRuntime
@@ -44,10 +44,8 @@ class GenericRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val behavior: Behavior[Task, CounterOp] = Behavior.fromState(
-    Vector.empty[CounterEvent],
-    StateRuntime.unit(EventsourcedBehavior(CounterOpHandler[Task], CounterState.folder))
-  )
+  val behavior: Behavior[Task, CounterOp] =
+    Behavior.fromState(Vector.empty[CounterEvent], StateRuntime.unit(CounterBehavior[Task]))
 
   val deployCounters =
     GenericAkkaRuntime[Task](system).deploy("Counter", (_: CounterId) => behavior)

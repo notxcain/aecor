@@ -3,7 +3,7 @@ package aecor.distributedprocessing
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-import aecor.distributedprocessing.DistributedProcessing.{ Process, ProcessKillSwitch }
+import aecor.distributedprocessing.DistributedProcessing.{ Process, KillSwitch }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.effect.{ Async, Capture }
 import akka.actor.{ ActorSystem, SupervisorStrategy }
@@ -15,7 +15,15 @@ import cats.implicits._
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 
-class DistributedProcessing(system: ActorSystem) {
+final class DistributedProcessing private (system: ActorSystem) {
+
+  /**
+    * Starts `processes` distributed over underlying akka cluster.
+    *
+    * @param name - type name of underlying cluster sharding
+    * @param processes - list of processes to distribute
+    *
+    */
   def start[F[_]: Functor: Async: Capture](name: String,
                                            processes: Seq[Process[F]],
                                            settings: DistributedProcessingSettings =
@@ -28,11 +36,11 @@ class DistributedProcessing(system: ActorSystem) {
                                                heartbeatInterval = 2.seconds,
                                                clusterShardingSettings =
                                                  ClusterShardingSettings(system)
-                                             )): F[ProcessKillSwitch[F]] =
+                                             )): F[KillSwitch[F]] =
     Capture[F].capture {
 
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
-        DistributedProcessingWorker.props(x => processes(x)),
+        DistributedProcessingWorker.props(processes),
         "worker",
         settings.minBackoff,
         settings.maxBackoff,
@@ -49,7 +57,7 @@ class DistributedProcessing(system: ActorSystem) {
         },
         extractShardId = {
           case KeepRunning(workerId) => (workerId % settings.numberOfShards).toString
-          case other                 => throw new IllegalArgumentException(s"Unexpected messge [$other]")
+          case other                 => throw new IllegalArgumentException(s"Unexpected message [$other]")
         }
       )
 
@@ -58,7 +66,7 @@ class DistributedProcessing(system: ActorSystem) {
         "DistributedProcessingSupervisor-" + URLEncoder.encode(name, StandardCharsets.UTF_8.name())
       )
       implicit val timeout = Timeout(settings.shutdownTimeout)
-      ProcessKillSwitch {
+      KillSwitch {
         Capture[F].captureFuture {
           regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
         }.void
@@ -68,9 +76,9 @@ class DistributedProcessing(system: ActorSystem) {
 
 object DistributedProcessing {
   def apply(system: ActorSystem): DistributedProcessing = new DistributedProcessing(system)
-  final case class ProcessKillSwitch[F[_]](shutdown: F[Unit])
+  final case class KillSwitch[F[_]](shutdown: F[Unit]) extends AnyVal
   final case class RunningProcess[F[_]](watchTermination: F[Unit], shutdown: () => Unit)
-  final case class Process[F[_]](run: F[RunningProcess[F]])
+  final case class Process[F[_]](run: F[RunningProcess[F]]) extends AnyVal
 }
 
 final case class DistributedProcessingSettings(minBackoff: FiniteDuration,

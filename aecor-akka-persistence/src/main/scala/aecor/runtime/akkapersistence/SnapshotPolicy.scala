@@ -10,7 +10,7 @@ import aecor.runtime.akkapersistence.serialization.{
 sealed abstract class SnapshotPolicy[+E] extends Product with Serializable
 
 object SnapshotPolicy {
-  def never[E]: SnapshotPolicy[E] = Never.asInstanceOf[SnapshotPolicy[E]]
+  def never[E]: SnapshotPolicy[E] = Never
 
   def eachNumberOfEvents[E: PersistentEncoder: PersistentDecoder](
     numberOfEvents: Int

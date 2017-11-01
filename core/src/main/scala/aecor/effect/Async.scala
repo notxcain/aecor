@@ -1,7 +1,6 @@
 package aecor.effect
 
 import cats.data.{ EitherT, Kleisli }
-import cats.~>
 import simulacrum.typeclass
 
 import scala.concurrent.{ ExecutionContext, Future, Promise }
@@ -22,7 +21,6 @@ trait Async[F[_]] {
     }
     p.future
   }
-  final def asFunctionK: F ~> Future = Lambda[F ~> Future](unsafeRun(_))
 }
 
 object Async extends AsyncInstances
@@ -57,14 +55,14 @@ sealed trait AsyncInstances {
     override def unsafeRunCallback[A](fa: EitherT[F, L, A])(f: (Try[A]) => Unit): Unit =
       Async[F].unsafeRunCallback(fa.value) {
         case Success(Right(a)) => f(scala.util.Success(a))
-        case Success(Left(e)) => f(scala.util.Failure(e))
-        case Failure(a) => f(scala.util.Failure(a))
+        case Success(Left(e))  => f(scala.util.Failure(e))
+        case Failure(a)        => f(scala.util.Failure(a))
       }
 
     override def unsafeRun[A](fa: EitherT[F, L, A]): Future[A] =
       Async[F].unsafeRun(fa.value).flatMap {
         case Right(a) => Future.successful(a)
-        case Left(a) => Future.failed(a)
+        case Left(a)  => Future.failed(a)
       }
   }
 }

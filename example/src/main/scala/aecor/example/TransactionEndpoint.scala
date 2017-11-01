@@ -6,7 +6,7 @@ import aecor.example.MonixSupport._
 import aecor.example.TransactionEndpoint.TransactionEndpointRequest.CreateTransactionRequest
 import aecor.example.TransactionEndpoint._
 import aecor.example.domain._
-import aecor.example.domain.account.{ AccountId, EventsourcedAccountAggregate }
+import aecor.example.domain.account.{ AccountId, EventsourcedAccount }
 import aecor.example.domain.transaction._
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
@@ -33,9 +33,9 @@ class TransactionEndpoint(transactions: TransactionId => TransactionAggregate[Ta
         log.debug("Processing request [{}]", request)
         val start = System.nanoTime()
         transactions(transactionId)
-          .createTransaction(fromAccountId, toAccountId, amount)
+          .create(fromAccountId, toAccountId, amount)
           .flatMap { _ =>
-            transactions(transactionId).getTransactionInfo
+            transactions(transactionId).getInfo
               .flatMap {
                 case Some(t) => Task.pure(t)
                 case None    => Task.raiseError(new IllegalStateException("Something went bad"))
@@ -107,7 +107,7 @@ object TransactionEndpoint {
           .authorizePayment(
             TransactionId(UUID.randomUUID.toString),
             CreateTransactionRequest(
-              From(EventsourcedAccountAggregate.rootAccountId),
+              From(EventsourcedAccount.rootAccountId),
               To(AccountId("foo" + scala.util.Random.nextInt(20))),
               Amount(1)
             )

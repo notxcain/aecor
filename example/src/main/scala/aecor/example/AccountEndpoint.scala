@@ -1,7 +1,7 @@
 package aecor.example
 
 import aecor.example.MonixSupport._
-import aecor.example.domain.account.{ AccountAggregate, AccountId }
+import aecor.example.domain.account.{ Account, AccountId }
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
@@ -12,10 +12,10 @@ import AnyValCirceEncoding._
 import cats.implicits._
 import aecor.example.AccountEndpoint.AccountApiRequest.OpenAccountRequest
 
-class AccountEndpoint(accounts: AccountId => AccountAggregate[Task]) {
+class AccountEndpoint(accounts: AccountId => Account[Task]) {
 
   def openAccount(accountId: AccountId, checkBalance: Boolean): Task[String Either Unit] =
-    accounts(accountId).openAccount(checkBalance).map(_.leftMap(_.toString))
+    accounts(accountId).open(checkBalance).map(_.leftMap(_.toString))
 }
 
 object AccountEndpoint {
@@ -27,17 +27,16 @@ object AccountEndpoint {
   }
 
   def route(api: AccountEndpoint): Route =
-    pathPrefix("account") {
-      post {
-        (path("open") & entity(as[AccountApiRequest.OpenAccountRequest])) {
-          case OpenAccountRequest(accountId, checkBalance) =>
-            complete {
-              api.openAccount(accountId, checkBalance).map {
-                case Left(e)       => StatusCodes.BadRequest -> e.toString
-                case Right(result) => StatusCodes.OK -> ""
-              }
+    pathPrefix("accounts") {
+      (post & entity(as[AccountApiRequest.OpenAccountRequest])) {
+        case OpenAccountRequest(accountId, checkBalance) =>
+          complete {
+            api.openAccount(accountId, checkBalance).map {
+              case Left(e)       => StatusCodes.BadRequest -> e.toString
+              case Right(result) => StatusCodes.OK -> ""
             }
-        }
+          }
       }
     }
+
 }

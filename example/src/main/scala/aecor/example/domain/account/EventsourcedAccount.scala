@@ -3,36 +3,36 @@ package aecor.example.domain.account
 import aecor.data.Folded.syntax._
 import aecor.data._
 import aecor.example.domain.Amount
-import aecor.example.domain.account.AccountAggregate.{ AccountDoesNotExist, InsufficientFunds }
+import aecor.example.domain.account.Account.{ AccountDoesNotExist, InsufficientFunds }
 import aecor.example.domain.account.AccountEvent._
-import aecor.example.domain.account.EventsourcedAccountAggregate.Account
+import aecor.example.domain.account.EventsourcedAccount.AccountState
 import aecor.util.Clock
 import cats.Applicative
 import cats.implicits._
 
 import scala.collection.immutable._
 
-class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicative[F])
-    extends AccountAggregate[Handler[F, Option[Account], AccountEvent, ?]] {
+class EventsourcedAccount[F[_]](clock: Clock[F])(implicit F: Applicative[F])
+    extends Account[Action[F, Option[AccountState], AccountEvent, ?]] {
 
   import F._
 
-  override def openAccount(
+  override def open(
     checkBalance: Boolean
-  ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
-    Handler {
+  ): Action[F, Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
+    Action {
       case None =>
         clock.instant.map { now =>
           Seq(AccountOpened(checkBalance, now)) -> ().asRight
         }
-      case Some(x) => pure(Seq.empty -> AccountAggregate.AccountExists.asLeft)
+      case Some(x) => pure(Seq.empty -> Account.AccountExists.asLeft)
     }
 
-  override def creditAccount(
+  override def credit(
     transactionId: AccountTransactionId,
     amount: Amount
-  ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
-    Handler {
+  ): Action[F, Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
+    Action {
       case Some(account) =>
         clock.instant.map { now =>
           if (account.processedTransactions.contains(transactionId)) {
@@ -42,14 +42,14 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
           }
         }
       case None =>
-        pure(Seq.empty -> AccountAggregate.AccountDoesNotExist.asLeft)
+        pure(Seq.empty -> Account.AccountDoesNotExist.asLeft)
     }
 
-  override def debitAccount(
+  override def debit(
     transactionId: AccountTransactionId,
     amount: Amount
-  ): Handler[F, Option[Account], AccountEvent, Either[AccountAggregate.Rejection, Unit]] =
-    Handler {
+  ): Action[F, Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
+    Action {
       case Some(account) =>
         clock.instant.map { now =>
           if (account.processedTransactions.contains(transactionId)) {
@@ -67,22 +67,23 @@ class EventsourcedAccountAggregate[F[_]](clock: Clock[F])(implicit F: Applicativ
     }
 }
 
-object EventsourcedAccountAggregate {
+object EventsourcedAccount {
 
   def behavior[F[_]: Applicative](
     clock: Clock[F]
-  ): EventsourcedBehavior[F, AccountAggregate.AccountAggregateOp, Option[Account], AccountEvent] =
-    EventsourcedBehavior(
-      AccountAggregate.toFunctionK(new EventsourcedAccountAggregate[F](clock)),
-      Account.folder
+  ): EventsourcedBehavior[F, Account.AccountOp, Option[AccountState], AccountEvent] =
+    EventsourcedBehavior.optional(
+      AccountState.fromEvent,
+      Account.toFunctionK(new EventsourcedAccount[F](clock)),
+      _.applyEvent(_)
     )
   final val rootAccountId: AccountId = AccountId("ROOT")
-  final case class Account(balance: Amount,
-                           processedTransactions: Set[AccountTransactionId],
-                           checkBalance: Boolean) {
+  final case class AccountState(balance: Amount,
+                                processedTransactions: Set[AccountTransactionId],
+                                checkBalance: Boolean) {
     def hasFunds(amount: Amount): Boolean =
       !checkBalance || balance >= amount
-    def applyEvent(event: AccountEvent): Folded[Account] = event match {
+    def applyEvent(event: AccountEvent): Folded[AccountState] = event match {
       case AccountOpened(_, _) => impossible
       case AccountDebited(transactionId, amount, _) =>
         copy(
@@ -96,12 +97,10 @@ object EventsourcedAccountAggregate {
         ).next
     }
   }
-  object Account {
-    def fromEvent(event: AccountEvent): Folded[Account] = event match {
-      case AccountOpened(checkBalance, _) => Account(Amount.zero, Set.empty, checkBalance).next
+  object AccountState {
+    def fromEvent(event: AccountEvent): Folded[AccountState] = event match {
+      case AccountOpened(checkBalance, _) => AccountState(Amount.zero, Set.empty, checkBalance).next
       case _                              => impossible
     }
-    def folder: Folder[Folded, AccountEvent, Option[Account]] =
-      Folder.optionInstance(fromEvent)(x => x.applyEvent)
   }
 }

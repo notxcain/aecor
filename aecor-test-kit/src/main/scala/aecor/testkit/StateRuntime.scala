@@ -3,8 +3,8 @@ package aecor.testkit
 import aecor.data.EventsourcedBehavior
 import aecor.data.Folded.{ Impossible, Next }
 import cats.data._
-import cats.implicits._
 import cats.{ Functor, MonadError, ~> }
+import cats.implicits._
 
 object StateRuntime {
 
@@ -20,10 +20,10 @@ object StateRuntime {
       override def apply[A](op: Op[A]): StateT[F, Vector[E], A] =
         for {
           events <- StateT.get[F, Vector[E]]
-          foldedState = behavior.folder.consume(events)
+          foldedState = events.foldM(behavior.initialState)(behavior.applyEvent)
           result <- foldedState match {
                      case Next(state) =>
-                       StateT.lift(behavior.handlerSelector(op).run(state)).flatMap {
+                       StateT.lift(behavior.commandHandler(op).run(state)).flatMap {
                          case (es, r) =>
                            StateT
                              .modify[F, Vector[E]](_ ++ es)
@@ -50,9 +50,10 @@ object StateRuntime {
     behavior: O ~> StateT[F, Vector[E], ?]
   ): I => O ~> StateT[F, Map[I, Vector[E]], ?] =
     i =>
-      new (O ~> StateT[F, Map[I, Vector[E]], ?]) {
-        override def apply[A](fa: O[A]): StateT[F, Map[I, Vector[E]], A] =
-          behavior(fa).transformS(_.getOrElse(i, Vector.empty[E]), _.updated(i, _))
-    }
+      behavior.andThen(
+        Lambda[StateT[F, Vector[E], ?] ~> StateT[F, Map[I, Vector[E]], ?]](
+          _.transformS(_.getOrElse(i, Vector.empty[E]), _.updated(i, _))
+        )
+    )
 
 }

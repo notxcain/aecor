@@ -33,7 +33,7 @@ class PeriodicProcessRuntime[F[_]: Async: Capture: Monad](
       .mapAsync(1)(_.unsafeRun)
       .mapMaterializedValue(_ => NotUsed)
 
-  def run(system: ActorSystem): F[DistributedProcessing.ProcessKillSwitch[F]] =
+  def run(system: ActorSystem): F[DistributedProcessing.KillSwitch[F]] =
     DistributedProcessing(system)
       .start[F](s"$name-Process", Seq(AkkaStreamProcess[F](source, Flow[Unit])))
 

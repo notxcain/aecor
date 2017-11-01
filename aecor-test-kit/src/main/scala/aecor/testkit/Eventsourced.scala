@@ -11,17 +11,7 @@ import cats.{ MonadError, ~> }
 import scala.collection.immutable.{ Seq, Set }
 
 object Eventsourced {
-  final case class RunningState[S](entityState: S, version: Long)
-
-  object RunningState {
-    def folder[S, E](
-      folder: Folder[Folded, E, S]
-    ): Folder[Folded, EventEnvelope[E], RunningState[S]] =
-      Folder(
-        RunningState(folder.zero, 0),
-        (s, e) => folder.reduce(s.entityState, e.event).map(RunningState(_, s.version + 1))
-      )
-  }
+  final case class RunningState[S](entityState: S, version: Long) {}
 
   sealed abstract class BehaviorFailure extends Exception
   object BehaviorFailure {
@@ -38,48 +28,70 @@ object Eventsourced {
     snapshotEach: Option[Long],
     snapshotStore: KeyValueStore[F, I, RunningState[S]]
   ): I => Behavior[F, Op] = { entityId =>
-    val internalFolder = RunningState.folder(entityBehavior.folder)
+    val effectiveBehavior = EventsourcedBehavior[F, Op, RunningState[S], EventEnvelope[E]](
+      initialState = RunningState(entityBehavior.initialState, 0),
+      commandHandler = entityBehavior.commandHandler
+        .andThen(new (Action[F, S, E, ?] ~> Action[F, RunningState[S], EventEnvelope[E], ?]) {
+          override def apply[A](
+            fa: Action[F, S, E, A]
+          ): Action[F, RunningState[S], EventEnvelope[E], A] =
+            Action { rs =>
+              fa.run(rs.entityState).map {
+                case (es, a) =>
+                  val envelopes = es.foldLeft(Seq.empty[EventEnvelope[E]]) { (acc, e) =>
+                    acc :+ EventEnvelope(rs.version + acc.size + 1, e, tagging.tag(entityId))
+                  }
+                  (envelopes, a)
+              }
+            }
+        }),
+      applyEvent = (s, e) =>
+        entityBehavior
+          .applyEvent(s.entityState, e.event)
+          .map(RunningState(_, s.version + 1))
+    )
+
     def loadState: F[RunningState[S]] =
       for {
         snapshot <- snapshotStore.getValue(entityId)
-        effectiveFolder = snapshot.map(internalFolder.withZero).getOrElse(internalFolder)
-        zero <- journal
-                 .foldById(entityId, effectiveFolder.zero.version, effectiveFolder)
-                 .flatMap {
-                   case Next(x) => x.pure[F]
-                   case Impossible =>
-                     BehaviorFailure
-                       .illegalFold(entityId.toString)
-                       .raiseError[F, RunningState[S]]
-                 }
-      } yield zero
+        effectiveInitialState = snapshot.getOrElse(effectiveBehavior.initialState)
+        out <- journal
+                .foldById(entityId, effectiveInitialState.version, effectiveInitialState)(
+                  effectiveBehavior.applyEvent
+                )
+                .flatMap {
+                  case Next(x) => x.pure[F]
+                  case Impossible =>
+                    BehaviorFailure
+                      .illegalFold(entityId.toString)
+                      .raiseError[F, RunningState[S]]
+                }
+      } yield out
 
-    def updateState(state: RunningState[S], events: Seq[E]) =
+    def updateState(state: RunningState[S], events: Seq[EventEnvelope[E]]) =
       if (events.isEmpty) {
         state.pure[F]
       } else {
         val folded =
-          events.toVector.foldM((false, state, Vector.empty[EventEnvelope[E]])) {
-            case ((snapshotPending, s, es), e) =>
-              val eventEnvelope = EventEnvelope(s.version + 1, e, tagging.tag(entityId))
-              internalFolder.reduce(s, eventEnvelope).map { next =>
+          events.toVector.foldM((false, state)) {
+            case ((snapshotPending, s), e) =>
+              effectiveBehavior.applyEvent(s, e).map { next =>
                 def shouldSnapshotNow =
                   snapshotEach
                     .exists(x => next.version % x == 0)
-                (snapshotPending || shouldSnapshotNow, next, es :+ eventEnvelope)
+                (snapshotPending || shouldSnapshotNow, next)
               }
           }
         folded match {
-          case Next((snapshotNeeded, nextState, envelopes)) =>
-            for {
-              _ <- journal
-                    .append(entityId, NonEmptyVector.of(envelopes.head, envelopes.tail: _*))
-              _ <- if (snapshotNeeded) {
-                    snapshotStore.setValue(entityId, nextState).map(_ => nextState)
-                  } else {
-                    nextState.pure[F]
-                  }
-            } yield nextState
+          case Next((snapshotNeeded, nextState)) =>
+            val appendEvents = journal
+              .append(entityId, NonEmptyVector.of(events.head, events.tail: _*))
+            val snapshotIfNeeded = if (snapshotNeeded) {
+              snapshotStore.setValue(entityId, nextState)
+            } else {
+              ().pure[F]
+            }
+            (appendEvents |@| snapshotIfNeeded).map((_, _) => nextState)
           case Impossible =>
             BehaviorFailure
               .illegalFold(entityId.toString)
@@ -92,7 +104,7 @@ object Eventsourced {
           override def apply[A](op: Op[A]): StateT[F, RunningState[S], A] =
             StateT { state =>
               for {
-                x <- entityBehavior.handlerSelector(op).run(state.entityState)
+                x <- effectiveBehavior.commandHandler(op).run(state)
                 (events, reply) = x
                 nextState <- updateState(state, events)
               } yield (nextState, reply)

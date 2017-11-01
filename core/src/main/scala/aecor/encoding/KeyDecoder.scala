@@ -1,6 +1,8 @@
 package aecor.encoding
 import java.util.UUID
+
 import cats.MonadError
+
 import scala.annotation.tailrec
 
 abstract class KeyDecoder[A] { self =>
@@ -42,6 +44,8 @@ final object KeyDecoder {
   def instance[A](f: String => Option[A]): KeyDecoder[A] = new KeyDecoder[A] {
     final def apply(key: String): Option[A] = f(key)
   }
+
+  implicit def anyVal[A](implicit A: AnyValKeyDecoder[A]): KeyDecoder[A] = A
 
   private[this] def numberInstance[A](f: String => A): KeyDecoder[A] = new KeyDecoder[A] {
     final def apply(key: String): Option[A] =

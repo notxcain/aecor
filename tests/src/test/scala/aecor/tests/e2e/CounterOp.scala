@@ -5,11 +5,11 @@ import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, Persiste
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
-import cats.implicits._
 import cats.{ Applicative, ~> }
 import io.circe.generic.auto._
 
 import scala.collection.immutable.Seq
+import Folded.syntax._
 
 sealed abstract class CounterOp[A] extends Product with Serializable
 object CounterOp {
@@ -19,12 +19,6 @@ object CounterOp {
 }
 
 final case class CounterId(value: String) extends AnyVal
-
-object CounterId {
-  implicit val keyEncoder: KeyEncoder[CounterId] =
-    KeyEncoder[String].contramap(_.value)
-  implicit val keyDecoder: KeyDecoder[CounterId] = KeyDecoder[String].map(CounterId(_))
-}
 
 sealed trait CounterEvent
 object CounterEvent {
@@ -37,38 +31,36 @@ object CounterEvent {
     PersistentEncoderCirce.circePersistentDecoder[CounterEvent]
 }
 
-case class CounterState(value: Long)
-object CounterState {
-  def folder[F[_]: Applicative]: Folder[F, CounterEvent, CounterState] =
-    Folder.curried(CounterState(0)) {
-      case CounterState(x) => {
-        case CounterIncremented => CounterState(x + 1).pure[F]
-        case CounterDecremented => CounterState(x - 1).pure[F]
-      }
-    }
+case class CounterState(value: Long) {
+  def applyEvent(e: CounterEvent): Folded[CounterState] = e match {
+    case CounterIncremented => CounterState(value + 1).next
+    case CounterDecremented => CounterState(value - 1).next
+  }
 }
 
 object CounterOpHandler {
-  def apply[F[_]: Applicative]: CounterOp ~> Handler[F, CounterState, CounterEvent, ?] =
+  def apply[F[_]: Applicative]: CounterOp ~> Action[F, CounterState, CounterEvent, ?] =
     new CounterOpHandler[F]
+}
 
-  def behavior[F[_]: Applicative]: EventsourcedBehavior[F, CounterOp, CounterState, CounterEvent] =
-    EventsourcedBehavior(CounterOpHandler[F], CounterState.folder[Folded])
+object CounterBehavior {
+  def apply[F[_]: Applicative]: EventsourcedBehavior[F, CounterOp, CounterState, CounterEvent] =
+    EventsourcedBehavior(CounterState(0), CounterOpHandler[F], _.applyEvent(_))
 }
 
 class CounterOpHandler[F[_]: Applicative]
-    extends (CounterOp ~> Handler[F, CounterState, CounterEvent, ?]) {
-  override def apply[A](fa: CounterOp[A]): Handler[F, CounterState, CounterEvent, A] =
+    extends (CounterOp ~> Action[F, CounterState, CounterEvent, ?]) {
+  override def apply[A](fa: CounterOp[A]): Action[F, CounterState, CounterEvent, A] =
     fa match {
       case Increment =>
-        Handler.lift { x =>
+        Action.lift { x =>
           Seq(CounterIncremented) -> (x.value + 1)
         }
       case Decrement =>
-        Handler.lift { x =>
+        Action.lift { x =>
           Seq(CounterDecremented) -> (x.value - 1)
         }
       case GetValue =>
-        Handler.lift(x => Seq.empty -> x.value)
+        Action.lift(x => Seq.empty -> x.value)
     }
 }

@@ -18,7 +18,7 @@ object GenericAkkaRuntime {
   private final case class CorrelatedCommand[I, A](correlationId: String, command: A)
 }
 
-class GenericAkkaRuntime[F[_]: Async: Capture](system: ActorSystem) {
+final class GenericAkkaRuntime[F[_]: Async: Capture] private (system: ActorSystem) {
   def deploy[I: KeyEncoder: KeyDecoder, Op[_]](
     typeName: String,
     createBehavior: I => Behavior[F, Op],

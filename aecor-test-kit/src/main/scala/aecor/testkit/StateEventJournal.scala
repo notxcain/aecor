@@ -1,6 +1,6 @@
 package aecor.testkit
 
-import aecor.data.{ ConsumerId, EventTag, Folder, Identified }
+import aecor.data._
 import aecor.testkit.Eventsourced.EventEnvelope
 import aecor.testkit.StateEventJournal.State
 import cats.data.{ NonEmptyVector, StateT }
@@ -50,11 +50,9 @@ class StateEventJournal[F[_]: Monad, I, A, E](extract: A => State[I, E],
       .modify[F, State[I, E]](_.appendEvents(id, events))
       .transformS(extract, update)
 
-  override def foldById[G[_]: Monad, S](
-    id: I,
-    offset: Long,
-    folder: Folder[G, EventEnvelope[E], S]
-  ): StateT[F, A, G[S]] =
+  override def foldById[S](id: I, offset: Long, zero: S)(
+    f: (S, EventEnvelope[E]) => Folded[S]
+  ): StateT[F, A, Folded[S]] =
     StateT
       .inspect[F, State[I, E], Vector[EventEnvelope[E]]](
         _.eventsById
@@ -62,7 +60,7 @@ class StateEventJournal[F[_]: Monad, I, A, E](extract: A => State[I, E],
           .map(_.drop(offset.toInt))
           .getOrElse(Vector.empty)
       )
-      .map(folder.consume(_))
+      .map(_.foldM(zero)(f))
       .transformS(extract, update)
 
   def eventsByTag(tag: EventTag,

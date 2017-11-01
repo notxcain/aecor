@@ -3,14 +3,14 @@ package aecor.testkit
 import aecor.data._
 import aecor.testkit.Eventsourced.{ BehaviorFailure, RunningState }
 import aecor.util.NoopKeyValueStore
-import cats.data.{ EitherT, StateT }
+import cats.data.{ StateT }
 import cats.implicits._
-import cats.{ Eval, Monad, ~> }
+import cats.{ Monad, ~> }
 
 import scala.collection.immutable._
 
 trait E2eSupport {
-  final type SpecF[A] = EitherT[Eval, BehaviorFailure, A]
+  final type SpecF[A] = Either[BehaviorFailure, A]
   type SpecState
   final def mkJournal[I, E](
     extract: SpecState => StateEventJournal.State[I, E],
@@ -22,20 +22,21 @@ trait E2eSupport {
     behavior: EventsourcedBehavior[StateT[SpecF, SpecState, ?], Op, S, E],
     tagging: Tagging[I],
     journal: StateEventJournal[SpecF, I, SpecState, E]
-  ): I => Op ~> StateT[SpecF, SpecState, ?] =
-    i =>
-      new (Op ~> StateT[SpecF, SpecState, ?]) {
-        override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
-          Eventsourced[StateT[SpecF, SpecState, ?], I, Op, S, E](
-            behavior,
-            tagging,
-            journal,
-            Option.empty,
-            NoopKeyValueStore[StateT[SpecF, SpecState, ?], I, RunningState[S]]
-          ).apply(i)
-            .run(fa)
-            .map(_._2)
+  ): I => Op ~> StateT[SpecF, SpecState, ?] = { id =>
+    val routeTo = Eventsourced[StateT[SpecF, SpecState, ?], I, Op, S, E](
+      behavior,
+      tagging,
+      journal,
+      Option.empty,
+      NoopKeyValueStore[StateT[SpecF, SpecState, ?], I, RunningState[S]]
+    )
+    new (Op ~> StateT[SpecF, SpecState, ?]) {
+      override def apply[A](operation: Op[A]): StateT[SpecF, SpecState, A] =
+        routeTo(id)
+          .run(operation)
+          .map(_._2)
     }
+  }
 
   final def wireProcess[F[_], S, In](process: In => F[Unit],
                                      sources: Processable[F, In]*): WiredProcess[F] = {

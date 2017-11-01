@@ -87,7 +87,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I:
 
   log.info("[{}] Starting...", persistenceId)
 
-  private var state: State = behavior.folder.zero
+  private var state: State = behavior.initialState
 
   private var eventCount = 0L
 
@@ -153,7 +153,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I:
   private def handleCommand(command: Op[_]): Unit = {
     val opId = UUID.randomUUID()
     behavior
-      .handlerSelector(command)
+      .commandHandler(command)
       .run(state)
       .unsafeRun
       .map {
@@ -213,8 +213,8 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I:
     }
 
   private def applyEvent(event: Event): Unit =
-    state = behavior.folder
-      .reduce(state, event)
+    state = behavior
+      .applyEvent(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
         log.error(error, error.getMessage)

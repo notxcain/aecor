@@ -51,7 +51,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   def counterBehavior =
     mkBehavior[CounterId, CounterOp, CounterState, CounterEvent](
-      CounterOpHandler.behavior[StateT[SpecF, SpecState, ?]],
+      CounterBehavior[StateT[SpecF, SpecState, ?]],
       Tagging.const(CounterEvent.tag),
       counterEventJournal
     )
@@ -167,8 +167,6 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Map.empty
         )
       )
-      .value
-      .value
 
     state.counterViewState.value shouldBe Map(first -> 1L, second -> 2L)
 
@@ -208,8 +206,6 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Map.empty
         )
       )
-      .value
-      .value
 
     state.scheduleEntries.exists(e => e.entryId == "e1" && e.fired) shouldBe true
     state.scheduleEntries.exists(e => e.entryId == "e2" && e.fired) shouldBe true

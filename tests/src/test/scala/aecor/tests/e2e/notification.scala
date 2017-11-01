@@ -3,8 +3,8 @@ package aecor.tests.e2e
 import aecor.data._
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
 import aecor.tests.e2e.notification.NotificationOp.{ CreateNotification, MarkAsSent }
-import cats.implicits._
 import cats.{ Applicative, ~> }
+import Folded.syntax._
 
 object notification {
   type NotificationId = String
@@ -21,34 +21,30 @@ object notification {
     val tag: EventTag = EventTag("Notification")
   }
 
-  case class NotificationState(sent: Boolean)
-  object NotificationState {
-    def folder[F[_]: Applicative]: Folder[F, NotificationEvent, NotificationState] =
-      Folder.curried(NotificationState(false)) {
-        case NotificationState(_) => {
-          case NotificationCreated(_) => NotificationState(false).pure[F]
-          case NotificationSent       => NotificationState(true).pure[F]
-        }
-      }
+  case class NotificationState(sent: Boolean) {
+    def applyEvent(e: NotificationEvent): Folded[NotificationState] = e match {
+      case NotificationCreated(_) => NotificationState(false).next
+      case NotificationSent       => NotificationState(true).next
+    }
   }
 
   def notificationOpHandler[F[_]: Applicative] =
-    new (NotificationOp ~> Handler[F, NotificationState, NotificationEvent, ?]) {
+    new (NotificationOp ~> Action[F, NotificationState, NotificationEvent, ?]) {
       override def apply[A](
         fa: NotificationOp[A]
-      ): Handler[F, NotificationState, NotificationEvent, A] =
+      ): Action[F, NotificationState, NotificationEvent, A] =
         fa match {
           case CreateNotification(cid) =>
-            Handler.lift { _ =>
+            Action.lift { _ =>
               Vector(NotificationCreated(cid)) -> (())
             }
           case MarkAsSent =>
-            Handler.lift { _ =>
+            Action.lift { _ =>
               Vector(NotificationSent) -> (())
             }
         }
     }
   def behavior[F[_]: Applicative]
     : EventsourcedBehavior[F, NotificationOp, NotificationState, NotificationEvent] =
-    EventsourcedBehavior(notificationOpHandler[F], NotificationState.folder[Folded])
+    EventsourcedBehavior(NotificationState(false), notificationOpHandler[F], _.applyEvent(_))
 }

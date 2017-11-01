@@ -7,7 +7,7 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
-import aecor.example.domain.account.{ AccountAggregate, AccountId, EventsourcedAccountAggregate }
+import aecor.example.domain.account.{ Account, AccountId, EventsourcedAccount }
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.tagging
 import aecor.example.domain.transaction.{
   EventsourcedTransactionAggregate,
@@ -62,19 +62,19 @@ object App {
         .deploy("Transaction", EventsourcedTransactionAggregate.behavior[Task](taskClock), tagging)
         .map(_.andThen(TransactionAggregate.fromFunctionK))
 
-    val deployAccounts: Task[AccountId => AccountAggregate[Task]] =
+    val deployAccounts: Task[AccountId => Account[Task]] =
       runtime
         .deploy(
           "Account",
-          EventsourcedAccountAggregate.behavior(taskClock),
+          EventsourcedAccount.behavior(taskClock),
           Tagging.const[AccountId](EventTag("Account"))
         )
-        .map(_.andThen(AccountAggregate.fromFunctionK))
+        .map(_.andThen(Account.fromFunctionK))
 
     def startTransactionProcessing(
-      accounts: AccountId => AccountAggregate[Task],
+      accounts: AccountId => Account[Task],
       transactions: TransactionId => TransactionAggregate[Task]
-    ): Task[DistributedProcessing.ProcessKillSwitch[Task]] = {
+    ): Task[DistributedProcessing.KillSwitch[Task]] = {
       val failure = TransactionProcessFailure.withMonadError[Task]
       val processStep: (Input) => Task[Unit] =
         TransactionProcess(transactions, accounts, failure)
@@ -99,7 +99,7 @@ object App {
     }
 
     def startHttpServer(
-      accounts: AccountId => AccountAggregate[Task],
+      accounts: AccountId => Account[Task],
       transactions: TransactionId => TransactionAggregate[Task]
     ): Task[Http.ServerBinding] =
       Task.defer {

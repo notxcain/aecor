@@ -1,7 +1,7 @@
 package aecor.tests
 
 import aecor.data.Tagging
-import aecor.tests.e2e.{ CounterEvent, CounterId, CounterOp, CounterOpHandler }
+import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{ Config, ConfigFactory }
@@ -52,11 +52,8 @@ class AkkaPersistenceRuntimeSpec
   val runtime = AkkaPersistenceRuntime(system)
 
   test("Runtime should work") {
-    val deployCounters = runtime.deploy(
-      "Counter",
-      CounterOpHandler.behavior[Task],
-      Tagging.const[CounterId](CounterEvent.tag)
-    )
+    val deployCounters =
+      runtime.deploy("Counter", CounterBehavior[Task], Tagging.const[CounterId](CounterEvent.tag))
     val program = for {
       counters <- deployCounters
       first = counters(CounterId("1"))

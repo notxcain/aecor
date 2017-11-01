@@ -7,7 +7,7 @@ import aecor.util.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 
-final class CommittableEventJournalQuery[F[_]: Async, O, I, E](
+final class CommittableEventJournalQuery[F[_]: Async, O, I, E] private[akkapersistence] (
   underlying: EventJournal[O, I, E],
   offsetStore: KeyValueStore[F, TagConsumer, O]
 ) {
@@ -27,16 +27,16 @@ final class CommittableEventJournalQuery[F[_]: Async, O, I, E](
 
   def eventsByTag(tag: EventTag,
                   consumerId: ConsumerId): Source[Committable[F, JournalEntry[O, I, E]], NotUsed] =
-    mkCommittableSource(tag, consumerId, o => underlying.eventsByTag(tag, o))
+    mkCommittableSource(tag, consumerId, underlying.eventsByTag(tag, _))
 
   def currentEventsByTag(
     tag: EventTag,
     consumerId: ConsumerId
   ): Source[Committable[F, JournalEntry[O, I, E]], NotUsed] =
-    mkCommittableSource(tag, consumerId, o => underlying.currentEventsByTag(tag, o))
+    mkCommittableSource(tag, consumerId, underlying.currentEventsByTag(tag, _))
 }
 
-object CommittableEventJournalQuery {
+private[akkapersistence] object CommittableEventJournalQuery {
   def apply[F[_]: Async, Offset, I, E](
     underlying: EventJournal[Offset, I, E],
     offsetStore: KeyValueStore[F, TagConsumer, Offset]

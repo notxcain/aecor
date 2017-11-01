@@ -32,7 +32,7 @@ object CassandraOffsetStore {
 
 }
 
-class CassandraOffsetStore[F[_]: Async: Capture](
+class CassandraOffsetStore[F[_]: Async: Capture] private[akkapersistence] (
   session: CassandraSession,
   config: CassandraOffsetStore.Config
 )(implicit executionContext: ExecutionContext)

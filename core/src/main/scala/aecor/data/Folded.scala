@@ -19,37 +19,37 @@ import cats.{
 import scala.annotation.tailrec
 
 sealed abstract class Folded[+A] extends Product with Serializable {
-  def fold[B](impossible: => B, next: A => B): B = this match {
+  def fold[B](impossible: => B)(next: A => B): B = this match {
     case Impossible => impossible
-    case Next(a) => next(a)
+    case Next(a)    => next(a)
   }
   def map[B](f: A => B): Folded[B] = this match {
     case Impossible => Impossible
-    case Next(a) => Next(f(a))
+    case Next(a)    => Next(f(a))
   }
   def flatMap[B](f: A => Folded[B]): Folded[B] = this match {
     case Impossible => Impossible
-    case Next(a) => f(a)
+    case Next(a)    => f(a)
   }
   def getOrElse[AA >: A](that: => AA): AA = this match {
     case Impossible => that
-    case Next(a) => a
+    case Next(a)    => a
   }
   def orElse[AA >: A](that: Folded[AA]): Folded[AA] = this match {
-    case Next(_) => this
+    case Next(_)    => this
     case Impossible => that
   }
-  def isNext: Boolean = fold(false, _ => true)
+  def isNext: Boolean = fold(false)(_ => true)
   def isImpossible: Boolean = !isNext
 
   def filter(f: A => Boolean): Folded[A] = this match {
     case Next(a) if f(a) => this
-    case _ => Impossible
+    case _               => Impossible
   }
   def exists(f: A => Boolean): Boolean = filter(f).isNext
-  def forall(f: A => Boolean): Boolean = fold(true, f)
+  def forall(f: A => Boolean): Boolean = fold(true)(f)
 
-  def toOption: Option[A] = fold(None, Some(_))
+  def toOption: Option[A] = fold(Option.empty[A])(Some(_))
 }
 object Folded extends FoldedInstances {
   final case object Impossible extends Folded[Nothing]
@@ -90,7 +90,7 @@ trait FoldedInstances {
       @tailrec
       def tailRecM[A, B](a: A)(f: A => Folded[Either[A, B]]): Folded[B] =
         f(a) match {
-          case Impossible => Impossible
+          case Impossible     => Impossible
           case Next(Left(a1)) => tailRecM(a1)(f)
           case Next(Right(b)) => Next(b)
         }
@@ -102,7 +102,7 @@ trait FoldedInstances {
                                      fb: Eval[Folded[B]])(f: (A, B) => Z): Eval[Folded[Z]] =
         fa match {
           case Impossible => Now(Impossible)
-          case Next(a) => fb.map(_.map(f(a, _)))
+          case Next(a)    => fb.map(_.map(f(a, _)))
         }
 
       def coflatMap[A, B](fa: Folded[A])(f: Folded[A] => B): Folded[B] =
@@ -111,13 +111,13 @@ trait FoldedInstances {
       def foldLeft[A, B](fa: Folded[A], b: B)(f: (B, A) => B): B =
         fa match {
           case Impossible => b
-          case Next(a) => f(b, a)
+          case Next(a)    => f(b, a)
         }
 
       def foldRight[A, B](fa: Folded[A], lb: Eval[B])(f: (A, Eval[B]) => Eval[B]): Eval[B] =
         fa match {
           case Impossible => lb
-          case Next(a) => f(a, lb)
+          case Next(a)    => f(a, lb)
         }
 
       def raiseError[A](e: Unit): Folded[A] = Impossible
@@ -132,14 +132,14 @@ trait FoldedInstances {
           case Next(a) =>
             G.map(f(a)) {
               case Some(aa) => Next(aa)
-              case None => Impossible
+              case None     => Impossible
             }
         }
 
       override def traverse[G[_]: Applicative, A, B](fa: Folded[A])(f: A => G[B]): G[Folded[B]] =
         fa match {
           case Impossible => Applicative[G].pure(Impossible)
-          case Next(a) => Applicative[G].map(f(a))(Next(_))
+          case Next(a)    => Applicative[G].map(f(a))(Next(_))
         }
 
       override def filter[A](fa: Folded[A])(p: A => Boolean): Folded[A] =
@@ -158,15 +158,15 @@ trait FoldedInstances {
   implicit def aecorDataShowForFolded[A](implicit A: Show[A]): Show[Folded[A]] =
     new Show[Folded[A]] {
       def show(fa: Folded[A]): String = fa match {
-        case Next(a) => s"Next(${A.show(a)})"
+        case Next(a)    => s"Next(${A.show(a)})"
         case Impossible => "Impossible"
       }
     }
 
   implicit def aecorDataEqForFolded[A](implicit A: Eq[A]): Eq[Folded[A]] =
     Eq.instance {
-      case (Next(l), Next(r)) => A.eqv(l, r)
+      case (Next(l), Next(r))       => A.eqv(l, r)
       case (Impossible, Impossible) => true
-      case _ => false
+      case _                        => false
     }
 }

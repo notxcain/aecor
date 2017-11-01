@@ -15,25 +15,28 @@ object DefaultScheduleBucket {
 
   def apply[F[_]: Functor](
     clock: F[ZonedDateTime]
-  ): ScheduleBucket[Handler[F, ScheduleState, ScheduleEvent, ?]] =
+  ): ScheduleBucket[Action[F, ScheduleState, ScheduleEvent, ?]] =
     new DefaultScheduleBucket(clock)
 
   def behavior[F[_]: Functor](
     clock: F[ZonedDateTime]
   ): EventsourcedBehavior[F, ScheduleOp, ScheduleState, ScheduleEvent] =
-    EventsourcedBehavior(DefaultScheduleBucket(clock).asFunctionK, ScheduleState.folder)
-
+    EventsourcedBehavior(
+      ScheduleState.initial,
+      DefaultScheduleBucket(clock).asFunctionK,
+      _.update(_)
+    )
 }
 
 class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
-    extends ScheduleBucket[Handler[F, ScheduleState, ScheduleEvent, ?]] {
+    extends ScheduleBucket[Action[F, ScheduleState, ScheduleEvent, ?]] {
 
   override def addScheduleEntry(
     entryId: String,
     correlationId: String,
     dueDate: LocalDateTime
-  ): Handler[F, ScheduleState, ScheduleEvent, Unit] =
-    Handler { state =>
+  ): Action[F, ScheduleState, ScheduleEvent, Unit] =
+    Action { state =>
       clock.map { zdt =>
         val timestamp = zdt.toInstant
         val now = zdt.toLocalDateTime
@@ -52,8 +55,9 @@ class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
       }
 
     }
-  override def fireEntry(entryId: String): Handler[F, ScheduleState, ScheduleEvent, Unit] =
-    Handler { state =>
+
+  override def fireEntry(entryId: String): Action[F, ScheduleState, ScheduleEvent, Unit] =
+    Action { state =>
       clock.map(_.toInstant).map { timestamp =>
         state
           .findEntry(entryId)
@@ -109,7 +113,4 @@ private[aecor] object ScheduleState {
   def initial: ScheduleState = ScheduleState(Map.empty, Set.empty)
 
   case class ScheduleEntry(id: String, correlationId: String, dueDate: LocalDateTime)
-
-  val folder: Folder[Folded, ScheduleEvent, ScheduleState] =
-    Folder.curried(initial)(_.update)
 }

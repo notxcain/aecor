@@ -15,7 +15,7 @@ private[aecor] object DistributedProcessingWorker {
   final case class KeepRunning(workerId: Int) extends Message
 }
 
-private[aecor] class DistributedProcessingWorker[F[_]: Async](processFor: Int => Process[F])
+private[aecor] final class DistributedProcessingWorker[F[_]: Async](processFor: Int => Process[F])
     extends Actor
     with ActorLogging {
   import context.dispatcher
