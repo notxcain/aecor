@@ -8,9 +8,9 @@ lazy val buildSettings = Seq(
   crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.3-bin-typelevel-4")
 )
 
-lazy val akkaVersion = "2.5.4"
-lazy val akkaPersistenceCassandra = "0.55"
-lazy val catsVersion = "0.9.0"
+lazy val akkaVersion = "2.5.7"
+lazy val akkaPersistenceCassandra = "0.59"
+lazy val catsVersion = "1.0.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -39,8 +39,8 @@ lazy val aecor = project
   .settings(moduleName := "aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
-  .aggregate(core, example, schedule, tests)
-  .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
+  .aggregate(core,  schedule, tests)
+  .dependsOn(core,  tests % "test-internal -> test")
 
 lazy val core =
   project.settings(moduleName := "aecor-core").settings(aecorSettings).settings(coreSettings)
@@ -52,18 +52,11 @@ lazy val schedule = project
   .settings(scheduleSettings)
 
 lazy val tests = project
-  .dependsOn(core, example, schedule)
+  .dependsOn(core, schedule)
   .settings(moduleName := "aecor-tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
-
-lazy val example = project
-  .dependsOn(core, schedule)
-  .settings(moduleName := "aecor-example")
-  .settings(aecorSettings)
-  .settings(noPublishSettings)
-  .settings(exampleSettings)
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
@@ -73,7 +66,7 @@ lazy val coreSettings = Seq(
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra,
     "com.chuusai" %% "shapeless" % shapelessVersion,
-    "org.typelevel" %% "cats" % catsVersion
+    "org.typelevel" %% "cats-core" % catsVersion
   )
 )
 
@@ -84,32 +77,13 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   )
 )
 
-lazy val exampleSettings = {
-  val circeVersion = "0.6.1"
-  val akkaHttpVersion = "10.0.10"
-  val akkaHttpJsonVersion = "1.17.0"
-  val freekVersion = "0.6.5"
-  Seq(
-    resolvers ++= Seq(Resolver.bintrayRepo("projectseptemberinc", "maven")),
-    libraryDependencies ++=
-      Seq(
-        "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
-        "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
-        ("com.projectseptember" %% "freek" % freekVersion)
-          .exclude("org.typelevel", "cats-free_2.12.0-RC2"),
-        "io.circe" %% "circe-core" % circeVersion,
-        "io.circe" %% "circe-generic" % circeVersion,
-        "io.circe" %% "circe-parser" % circeVersion,
-        "ch.qos.logback" % "logback-classic" % logbackVersion
-      )
-  )
-}
-
 lazy val testingSettings = Seq(
   libraryDependencies ++= Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
+    "org.typelevel" %% "cats-laws" % catsVersion % Test,
+    "org.typelevel" %% "cats-testkit" % catsVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
   )
 )

@@ -1,13 +1,14 @@
 package aecor.tests
 
 import aecor.data.Folded
-import cats.{ Cartesian, CoflatMap, Eval, Later, Monad, MonadCombine, MonadError, TraverseFilter }
+import cats.{ Alternative, Semigroupal, CoflatMap, Eval, Later, Monad, MonadError }
 import cats.laws.{ ApplicativeLaws, CoflatMapLaws, FlatMapLaws, MonadLaws }
 import cats.laws.discipline._
 import Folded.syntax._
+import cats.tests.CatsSuite
 import org.scalacheck.{ Arbitrary, Cogen }
 
-class FoldedTests extends LawSuite {
+class FoldedTests extends CatsSuite {
 
   implicit def arbitraryFolded[A](implicit A: Arbitrary[Option[A]]): Arbitrary[Folded[A]] =
     Arbitrary(A.arbitrary.map(_.map(_.next).getOrElse(impossible)))
@@ -15,23 +16,17 @@ class FoldedTests extends LawSuite {
   implicit def cogenFolded[A](implicit A: Cogen[Option[A]]): Cogen[Folded[A]] =
     A.contramap(_.toOption)
 
-  checkAll("Folded[Int]", CartesianTests[Folded].cartesian[Int, Int, Int])
-  checkAll("Cartesian[Folded]", SerializableTests.serializable(Cartesian[Folded]))
+  checkAll("Folded[Int].SemigroupalLaws", SemigroupalTests[Folded].semigroupal[Int, Int, Int])
+  checkAll("Semigroupal[Folded]", SerializableTests.serializable(Semigroupal[Folded]))
 
   checkAll("Folded[Int]", CoflatMapTests[Folded].coflatMap[Int, Int, Int])
   checkAll("CoflatMap[Folded]", SerializableTests.serializable(CoflatMap[Folded]))
 
-  checkAll("Folded[Int]", MonadCombineTests[Folded].monadCombine[Int, Int, Int])
-  checkAll("MonadCombine[Folded]", SerializableTests.serializable(MonadCombine[Folded]))
+  checkAll("Folded[Int]", AlternativeTests[Folded].alternative[Int, Int, Int])
+  checkAll("MonadCombine[Folded]", SerializableTests.serializable(Alternative[Folded]))
 
   checkAll("Folded[Int]", MonadTests[Folded].monad[Int, Int, Int])
   checkAll("Monad[Folded]", SerializableTests.serializable(Monad[Folded]))
-
-  checkAll(
-    "Folded[Int] with Folded",
-    TraverseFilterTests[Folded].traverseFilter[Int, Int, Int, Int, Folded, Folded]
-  )
-  checkAll("TraverseFilter[Folded]", SerializableTests.serializable(TraverseFilter[Folded]))
 
   checkAll("Folded with Unit", MonadErrorTests[Folded, Unit].monadError[Int, Int, Int])
   checkAll("MonadError[Folded, Unit]", SerializableTests.serializable(MonadError[Folded, Unit]))
@@ -44,11 +39,6 @@ class FoldedTests extends LawSuite {
       fs.show should ===(fs.toString)
     }
   }
-
-  // The following tests check laws which are a different formulation of
-  // laws that are checked. Since these laws are more or less duplicates of
-  // existing laws, we don't check them for all types that have the relevant
-  // instances.
 
   test("Kleisli associativity") {
     forAll { (l: Long, f: Long => Folded[Int], g: Int => Folded[Char], h: Char => Folded[String]) =>

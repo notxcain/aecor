@@ -21,7 +21,7 @@ object StateRuntime {
       override def apply[A](fa: Op[A]): StateT[F, Vector[E], A] =
         for {
           events <- StateT.get[F, Vector[E]]
-          state <- StateT.lift(folder.consume(events))
+          state <- StateT.liftF(folder.consume(events))
           result <- {
             val (es, r) = behavior(fa).run(state)
             StateT.modify[F, Vector[E]](_ ++ es).map(_ => r)
