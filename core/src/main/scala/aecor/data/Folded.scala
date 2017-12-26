@@ -108,18 +108,6 @@ trait FoldedInstances {
 
       def handleErrorWith[A](fa: Folded[A])(f: (Unit) => Folded[A]): Folded[A] = fa orElse f(())
 
-      def traverseFilter[G[_], A, B](
-        fa: Folded[A]
-      )(f: A => G[Option[B]])(implicit G: Applicative[G]): G[Folded[B]] =
-        fa match {
-          case Impossible => G.pure(Impossible)
-          case Next(a) =>
-            G.map(f(a)) {
-              case Some(aa) => Next(aa)
-              case None     => Impossible
-            }
-        }
-
       override def traverse[G[_]: Applicative, A, B](fa: Folded[A])(f: A => G[B]): G[Folded[B]] =
         fa match {
           case Impossible => Applicative[G].pure(Impossible)
