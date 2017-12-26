@@ -17,4 +17,9 @@ object PersistentEncoder {
       override def encode(a: A) =
         PersistentRepr(codec.manifest(a), codec.encode(a))
     }
+
+  implicit val persistentReprInstance: PersistentEncoder[PersistentRepr] =
+    new PersistentEncoder[PersistentRepr] {
+      override def encode(a: PersistentRepr): PersistentRepr = a
+    }
 }

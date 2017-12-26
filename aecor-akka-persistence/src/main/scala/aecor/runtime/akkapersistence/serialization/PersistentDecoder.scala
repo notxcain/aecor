@@ -19,11 +19,16 @@ object PersistentDecoder {
       override def decode(repr: PersistentRepr): DecodingResult[A] =
         codec.decode(repr.payload, repr.manifest) match {
           case Failure(exception) => Left(DecodingFailure(exception.getMessage, Some(exception)))
-          case Success(value) => Right(value)
+          case Success(value)     => Right(value)
         }
     }
 
   type DecodingResult[A] = Either[DecodingFailure, A]
+
+  implicit val persistentReprInstance: PersistentDecoder[PersistentRepr] =
+    new PersistentDecoder[PersistentRepr] {
+      override def decode(repr: PersistentRepr): DecodingResult[PersistentRepr] = Right(repr)
+    }
 
 }
 
