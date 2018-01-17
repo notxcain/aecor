@@ -8,12 +8,11 @@ import aecor.schedule.{ ScheduleBucketId, ScheduleEvent }
 import aecor.util.effect._
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Keep, Sink }
-import cats.Applicative
 import cats.effect.Effect
 import cats.implicits._
 
 object DefaultScheduleEventJournal {
-  def apply[F[_]: Effect: Applicative](
+  def apply[F[_]: Effect](
     consumerId: ConsumerId,
     parallelism: Int,
     aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],
@@ -22,7 +21,7 @@ object DefaultScheduleEventJournal {
     new DefaultScheduleEventJournal(consumerId, parallelism, aggregateJournal, eventTag)
 }
 
-class DefaultScheduleEventJournal[F[_]: Effect: Applicative](
+class DefaultScheduleEventJournal[F[_]: Effect](
   consumerId: ConsumerId,
   parallelism: Int,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],

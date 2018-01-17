@@ -1,11 +1,11 @@
 package aecor.distributedprocessing
 
 import aecor.distributedprocessing.DistributedProcessing._
+import aecor.util.effect._
 import akka.NotUsed
 import akka.stream.scaladsl.{ Flow, Keep, Sink, Source }
 import akka.stream.{ KillSwitches, Materializer }
-import cats.Eval
-import cats.effect.{ Async, IO }
+import cats.effect.Async
 import cats.implicits._
 
 object AkkaStreamProcess {
@@ -21,7 +21,7 @@ object AkkaStreamProcess {
           .toMat(Sink.ignore)(Keep.both)
           .run()
         RunningProcess(
-          F.liftIO(IO.fromFuture(Eval.now(terminated))(mat.executionContext).void),
+          Async[F].fromFuture(terminated)(mat.executionContext).void,
           () => killSwitch.shutdown()
         )
       })

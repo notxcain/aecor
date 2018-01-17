@@ -1,6 +1,5 @@
 package aecor.util
 
-import cats.Eval
 import cats.effect.{ Async, Effect, IO }
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -22,6 +21,6 @@ object effect {
 
   implicit final class AecorAsyncTCOps[F[_]](val self: Async[F]) extends AnyVal {
     def fromFuture[A](future: => Future[A])(implicit ec: ExecutionContext): F[A] =
-      IO.fromFuture(Eval.always(future)).to(self)
+      IO.fromFuture(IO(future)).to(self)
   }
 }
