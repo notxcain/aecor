@@ -8,17 +8,18 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
+import cats.effect.Effect
 import cats.~>
 
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
-  def apply[F[_]: Async: Capture](system: ActorSystem): GenericAkkaRuntime[F] =
+  def apply[F[_]: Effect: Capture](system: ActorSystem): GenericAkkaRuntime[F] =
     new GenericAkkaRuntime(system)
   private final case class CorrelatedCommand[I, A](correlationId: String, command: A)
 }
 
-final class GenericAkkaRuntime[F[_]: Async: Capture] private (system: ActorSystem) {
+final class GenericAkkaRuntime[F[_]: Effect: Capture] private (system: ActorSystem) {
   def deploy[I: KeyEncoder: KeyDecoder, Op[_]](
     typeName: String,
     createBehavior: I => Behavior[F, Op],

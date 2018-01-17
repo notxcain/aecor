@@ -5,28 +5,28 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import aecor.data.Behavior
-import aecor.effect.Async
-import aecor.effect.Async.ops._
+import aecor.util._
 import aecor.encoding.KeyDecoder
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.PerformOp
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
+import cats.effect.Effect
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
 object GenericAkkaRuntimeActor {
-  def props[F[_]: Async, I: KeyDecoder, Op[_]](createBehavior: I => Behavior[F, Op],
-                                               idleTimeout: FiniteDuration): Props =
+  def props[F[_]: Effect, I: KeyDecoder, Op[_]](createBehavior: I => Behavior[F, Op],
+                                                idleTimeout: FiniteDuration): Props =
     Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
 
   private[akkageneric] final case class PerformOp[I, Op[_], A](op: Op[A])
   private[akkageneric] case object Stop
 }
 
-private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I: KeyDecoder, Op[_]](
+private[aecor] final class GenericAkkaRuntimeActor[F[_]: Effect, I: KeyDecoder, Op[_]](
   createBehavior: I => Behavior[F, Op],
   idleTimeout: FiniteDuration
 ) extends Actor
@@ -57,8 +57,9 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Async, I: KeyDecoder, O
       val opId = UUID.randomUUID()
       behavior
         .run(op.asInstanceOf[Op[Any]])
-        .unsafeRun
+        .toIO
         .map(x => Result(opId, Success(x)))
+        .unsafeRun
         .recover {
           case NonFatal(e) => Result(opId, Failure(e))
         }

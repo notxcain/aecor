@@ -1,20 +1,8 @@
 package aecor.data
 
 import aecor.data.Folded.{ Impossible, Next }
-
 import cats.kernel.Eq
-import cats.{
-  Alternative,
-  Applicative,
-  CoflatMap,
-  Eval,
-  Monad,
-  MonadCombine,
-  MonadError,
-  Now,
-  Show,
-  TraverseFilter
-}
+import cats.{ Alternative, Applicative, CoflatMap, Eval, MonadError, Now, Show, Traverse }
 
 import scala.annotation.tailrec
 
@@ -69,11 +57,11 @@ object Folded extends FoldedInstances {
 
 trait FoldedInstances {
   implicit val aecorDataInstancesForFolded
-    : TraverseFilter[Folded] with MonadError[Folded, Unit] with MonadCombine[Folded] with Monad[
+    : Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded] with Alternative[
       Folded
-    ] with CoflatMap[Folded] with Alternative[Folded] =
-    new TraverseFilter[Folded] with MonadError[Folded, Unit] with MonadCombine[Folded]
-    with Monad[Folded] with CoflatMap[Folded] with Alternative[Folded] {
+    ] =
+    new Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded]
+    with Alternative[Folded] {
 
       def empty[A]: Folded[A] = Impossible
 
@@ -141,9 +129,6 @@ trait FoldedInstances {
           case Impossible => Applicative[G].pure(Impossible)
           case Next(a)    => Applicative[G].map(f(a))(Next(_))
         }
-
-      override def filter[A](fa: Folded[A])(p: A => Boolean): Folded[A] =
-        fa.filter(p)
 
       override def exists[A](fa: Folded[A])(p: A => Boolean): Boolean =
         fa.exists(p)

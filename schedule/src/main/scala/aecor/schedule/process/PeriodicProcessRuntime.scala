@@ -1,19 +1,19 @@
 package aecor.schedule.process
 
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.effect.Async.ops._
-import aecor.effect.{ Async, Capture }
+import aecor.effect.Capture
+import aecor.util._
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Source }
 import cats.Monad
-
+import cats.effect.Effect
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 
 object PeriodicProcessRuntime {
-  def apply[F[_]: Async: Capture: Monad](
+  def apply[F[_]: Effect: Capture: Monad](
     name: String,
     tickInterval: FiniteDuration,
     processCycle: F[Unit]
@@ -21,7 +21,7 @@ object PeriodicProcessRuntime {
     new PeriodicProcessRuntime[F](name, tickInterval, processCycle)
 }
 
-class PeriodicProcessRuntime[F[_]: Async: Capture: Monad](
+class PeriodicProcessRuntime[F[_]: Effect: Capture: Monad](
   name: String,
   tickInterval: FiniteDuration,
   processCycle: F[Unit]
@@ -30,7 +30,7 @@ class PeriodicProcessRuntime[F[_]: Async: Capture: Monad](
   private def source =
     Source
       .tick(0.seconds, tickInterval, processCycle)
-      .mapAsync(1)(_.unsafeRun)
+      .mapAsync(1)(_.unsafeToFuture())
       .mapMaterializedValue(_ => NotUsed)
 
   def run(system: ActorSystem): F[DistributedProcessing.KillSwitch[F]] =

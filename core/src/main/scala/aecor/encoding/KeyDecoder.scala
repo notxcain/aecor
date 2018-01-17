@@ -13,7 +13,7 @@ abstract class KeyDecoder[A] { self =>
     */
   def apply(key: String): Option[A]
 
-  def decode(key: String): Option[A] = apply(key)
+  final def decode(key: String): Option[A] = apply(key)
 
   /**
     * Construct an instance for type `B` from an instance for type `A`.

@@ -3,13 +3,14 @@ package aecor.runtime.akkapersistence
 import java.util.UUID
 
 import aecor.data._
-import aecor.effect.{ Async, Capture }
+import aecor.effect.Capture
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
+import cats.effect.Effect
 import cats.{ Monad, ~> }
 
 import scala.concurrent.Future
@@ -23,7 +24,7 @@ object AkkaPersistenceRuntime {
 }
 
 class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem) {
-  def deploy[F[_]: Async: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def deploy[F[_]: Effect: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     typeName: String,
     behavior: EventsourcedBehaviorT[F, Op, State, Event],
     tagging: Tagging[I],

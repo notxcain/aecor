@@ -6,8 +6,7 @@ import java.time.{ Duration, Instant }
 import java.util.UUID
 
 import aecor.data._
-import aecor.effect.Async
-import aecor.effect.Async.ops._
+import aecor.util._
 import aecor.encoding.KeyDecoder
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
@@ -22,6 +21,7 @@ import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
+import cats.effect.Effect
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
@@ -31,7 +31,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[F[_]: Async, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def props[F[_]: Effect, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
     behavior: EventsourcedBehaviorT[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
@@ -55,7 +55,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
   behavior: EventsourcedBehaviorT[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
@@ -155,7 +155,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Async, I:
     behavior
       .commandHandler(command)
       .run(state)
-      .unsafeRun
+      .unsafeToFuture()
       .map {
         case (events, reply) =>
           CommandResult(opId, events, reply)

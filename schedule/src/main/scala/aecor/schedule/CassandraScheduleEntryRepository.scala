@@ -3,22 +3,22 @@ package aecor.schedule
 import java.time._
 import java.time.format.DateTimeFormatter
 
+import aecor.effect.Capture
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
-import aecor.effect.{ Async, Capture }
 import akka.NotUsed
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Sink, Source }
+import cats.effect.Effect
 import com.datastax.driver.core.{ Row, Session }
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
-import Async.ops._
-
+import aecor.util._
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraScheduleEntryRepository[F[_]: Async: Capture](
+class CassandraScheduleEntryRepository[F[_]: Effect: Capture](
   cassandraSession: CassandraSession,
   queries: Queries
 )(implicit materializer: Materializer)
@@ -120,7 +120,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: Capture](
   ): F[Option[ScheduleEntry]] =
     Capture[F].captureFuture {
       getEntries(from, to)
-        .mapAsync(parallelism)(x => f(x).unsafeRun.map(_ => x))
+        .mapAsync(parallelism)(x => f(x).unsafeToFuture().map(_ => x))
         .runWith(Sink.lastOption)
     }
 
@@ -136,7 +136,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: Capture](
 
 object CassandraScheduleEntryRepository {
 
-  def apply[F[_]: Async: Capture](cassandraSession: CassandraSession, queries: Queries)(
+  def apply[F[_]: Effect: Capture](cassandraSession: CassandraSession, queries: Queries)(
     implicit materializer: Materializer
   ): CassandraScheduleEntryRepository[F] =
     new CassandraScheduleEntryRepository(cassandraSession, queries)

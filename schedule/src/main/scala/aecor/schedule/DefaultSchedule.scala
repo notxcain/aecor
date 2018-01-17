@@ -4,17 +4,17 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.data._
-import aecor.effect.Async
-import aecor.effect.Async.ops._
 import aecor.runtime.akkapersistence.{ CommittableEventJournalQuery, JournalEntry }
 import aecor.util.Clock
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.Monad
+import cats.effect.Effect
 import cats.implicits._
+import aecor.util._
 import scala.concurrent.duration.FiniteDuration
 
-private[schedule] class DefaultSchedule[F[_]: Async: Monad](
+private[schedule] class DefaultSchedule[F[_]: Effect: Monad](
   clock: Clock[F],
   buckets: ScheduleBucketId => ScheduleBucket[F],
   bucketLength: FiniteDuration,
@@ -42,7 +42,7 @@ private[schedule] class DefaultSchedule[F[_]: Async: Monad](
         case m if m.value.entityId.scheduleName == scheduleName => Source.single(m)
         case other =>
           Source
-            .fromFuture(other.commit.unsafeRun)
+            .fromFuture(other.commit.unsafeToFuture())
             .flatMapConcat(
               _ => Source.empty[Committable[F, JournalEntry[UUID, ScheduleBucketId, ScheduleEvent]]]
             )

@@ -3,10 +3,11 @@ package aecor.runtime.akkapersistence
 import java.util.UUID
 
 import aecor.data.TagConsumer
-import aecor.effect.{ Async, Capture }
+import aecor.effect.Capture
 import aecor.util.KeyValueStore
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
+import cats.effect.Effect
 import com.datastax.driver.core.Session
 
 import scala.concurrent.{ ExecutionContext, Future }
@@ -25,14 +26,14 @@ object CassandraOffsetStore {
     implicit executionContext: ExecutionContext
   ): Session => Future[Unit] = _.executeAsync(config.createTableQuery).asScala.map(_ => ())
 
-  def apply[F[_]: Async: Capture](session: CassandraSession, config: CassandraOffsetStore.Config)(
+  def apply[F[_]: Effect: Capture](session: CassandraSession, config: CassandraOffsetStore.Config)(
     implicit executionContext: ExecutionContext
   ): CassandraOffsetStore[F] =
     new CassandraOffsetStore(session, config)
 
 }
 
-class CassandraOffsetStore[F[_]: Async: Capture] private[akkapersistence] (
+class CassandraOffsetStore[F[_]: Effect: Capture] private[akkapersistence] (
   session: CassandraSession,
   config: CassandraOffsetStore.Config
 )(implicit executionContext: ExecutionContext)

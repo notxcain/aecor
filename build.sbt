@@ -10,31 +10,31 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.4"
-lazy val akkaPersistenceCassandraVersion = "0.56"
-lazy val catsVersion = "0.9.0"
+lazy val akkaVersion = "2.5.9"
+lazy val akkaPersistenceCassandraVersion = "0.59"
+lazy val catsVersion = "1.0.1"
+lazy val catsEffectVersion = "0.5"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 
-lazy val monixVersion = "2.3.0"
-lazy val fs2Version = "0.9.6"
+lazy val monixVersion = "3.0.0-M3"
+lazy val fs2Version = "0.10.0-RC1"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
-lazy val shapelessVersion = "2.3.2"
+lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.4"
-lazy val paradiseVersion = "2.1.0"
-lazy val simulacrumVersion = "0.10.0"
+lazy val simulacrumVersion = "0.11.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.8.0"
-lazy val akkaHttpVersion = "10.0.10"
-lazy val akkaHttpJsonVersion = "1.16.0"
+lazy val circeVersion = "0.9.0"
+lazy val akkaHttpVersion = "10.0.11"
+lazy val akkaHttpJsonVersion = "1.19.0"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
-lazy val liberatorVersion = "0.4.3"
+lazy val liberatorVersion = "0.7.0"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
@@ -151,11 +151,11 @@ lazy val example = project
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.patch),
     "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
-    "org.typelevel" %% "cats" % catsVersion,
+    "org.typelevel" %% "cats-core" % catsVersion,
+    "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
   )
 )
@@ -210,7 +210,6 @@ lazy val exampleSettings = {
         "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion.value,
         "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-        "io.monix" %% "monix-cats" % monixVersion,
         "io.monix" %% "monix-reactive" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
         "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
@@ -313,7 +312,7 @@ lazy val sharedReleaseProcess = Seq(
     publishArtifacts,
     setNextVersion,
     commitNextVersion,
-    ReleaseStep(action = Command.process("sonatypeReleaseAll", _)),
+    ReleaseStep(action = "sonatypeReleaseAll" :: _),
     pushChanges
   )
 )

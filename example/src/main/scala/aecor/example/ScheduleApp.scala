@@ -5,7 +5,6 @@ import java.util.UUID
 
 import aecor.data.ConsumerId
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.effect.Async.ops._
 import aecor.effect.monix._
 import aecor.effect.{ Async, Capture }
 import aecor.runtime.akkapersistence.CassandraOffsetStore
@@ -19,11 +18,12 @@ import akka.persistence.cassandra.{
 }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
+import cats.effect.Effect
 import cats.implicits._
 import cats.{ Functor, Monad }
 import monix.eval.Task
 import monix.execution.Scheduler
-import monix.cats._
+import aecor.util._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -46,7 +46,7 @@ object ScheduleApp extends App {
     )
   )
 
-  def runSchedule[F[_]: Async: Capture: Monad]: F[Schedule[F]] =
+  def runSchedule[F[_]: Effect: Capture: Monad]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
       dayZero = LocalDate.of(2016, 5, 10),
@@ -56,7 +56,7 @@ object ScheduleApp extends App {
       offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 
-  def runAdder[F[_]: Async: Capture: Monad](schedule: Schedule[F]): F[Unit] =
+  def runAdder[F[_]: Effect: Capture: Monad](schedule: Schedule[F]): F[Unit] =
     Capture[F].capture {
       Source
         .tick(0.seconds, 2.seconds, ())
@@ -76,18 +76,18 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def runEventWatch[F[_]: Async: Capture: Functor](schedule: Schedule[F]): F[Unit] =
+  def runEventWatch[F[_]: Effect: Capture: Functor](schedule: Schedule[F]): F[Unit] =
     Capture[F].capture {
       schedule
         .committableScheduleEvents("SubscriptionInvoicing", ConsumerId("println"))
         .mapAsync(1) { x =>
           println(x.value)
-          x.commit.unsafeRun
+          x.commit.unsafeToFuture()
         }
         .runWith(Sink.ignore)
     }.void
 
-  def mkApp[F[_]: Async: Capture: Monad]: F[Unit] =
+  def mkApp[F[_]: Effect: Capture: Monad]: F[Unit] =
     for {
       schedule <- runSchedule[F]
       _ <- runAdder[F](schedule)
