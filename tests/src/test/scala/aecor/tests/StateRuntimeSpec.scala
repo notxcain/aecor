@@ -12,7 +12,7 @@ import org.scalatest.{ FunSuite, Matchers }
 class StateRuntimeSpec extends FunSuite with Matchers {
 
   val counter =
-    StateRuntime.unit(CounterBehavior[Either[Throwable, ?]])
+    StateRuntime.single(CounterBehavior[Either[Throwable, ?]])
 
   val counters
     : String => CounterOp ~> StateT[Either[Throwable, ?], Map[String, Vector[CounterEvent]], ?] =

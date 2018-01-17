@@ -5,14 +5,13 @@ import java.nio.charset.StandardCharsets
 
 import aecor.distributedprocessing.DistributedProcessing.{ KillSwitch, Process }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
-import aecor.effect.Capture
 import akka.actor.{ ActorSystem, SupervisorStrategy }
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.{ BackoffSupervisor, ask }
 import akka.util.Timeout
-import cats.Functor
-import cats.effect.Effect
+import cats.effect.{ Effect, IO }
 import cats.implicits._
+import cats.{ Eval, Functor }
 
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
@@ -26,21 +25,20 @@ final class DistributedProcessing private (system: ActorSystem) {
     * @param processes - list of processes to distribute
     *
     */
-  def start[F[_]: Functor: Effect: Capture](name: String,
-                                            processes: Seq[Process[F]],
-                                            settings: DistributedProcessingSettings =
-                                              DistributedProcessingSettings(
-                                                minBackoff = 3.seconds,
-                                                maxBackoff = 10.seconds,
-                                                randomFactor = 0.2,
-                                                shutdownTimeout = 10.seconds,
-                                                numberOfShards = 100,
-                                                heartbeatInterval = 2.seconds,
-                                                clusterShardingSettings =
-                                                  ClusterShardingSettings(system)
-                                              )): F[KillSwitch[F]] =
-    Capture[F].capture {
-
+  def start[F[_]: Functor: Effect](name: String,
+                                   processes: Seq[Process[F]],
+                                   settings: DistributedProcessingSettings =
+                                     DistributedProcessingSettings(
+                                       minBackoff = 3.seconds,
+                                       maxBackoff = 10.seconds,
+                                       randomFactor = 0.2,
+                                       shutdownTimeout = 10.seconds,
+                                       numberOfShards = 100,
+                                       heartbeatInterval = 2.seconds,
+                                       clusterShardingSettings = ClusterShardingSettings(system)
+                                     )): F[KillSwitch[F]] = {
+    import system.dispatcher
+    Effect[F].delay {
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
         DistributedProcessingWorker.props(processes),
         "worker",
@@ -64,16 +62,21 @@ final class DistributedProcessing private (system: ActorSystem) {
       )
 
       val regionSupervisor = system.actorOf(
-        DistributedProcessingSupervisor.props(processes.size, region, settings.heartbeatInterval),
-        "DistributedProcessingSupervisor-" + URLEncoder.encode(name, StandardCharsets.UTF_8.name())
+        DistributedProcessingSupervisor
+          .props(processes.size, region, settings.heartbeatInterval),
+        "DistributedProcessingSupervisor-" + URLEncoder
+          .encode(name, StandardCharsets.UTF_8.name())
       )
       implicit val timeout = Timeout(settings.shutdownTimeout)
       KillSwitch {
-        Capture[F].captureFuture {
-          regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
-        }.void
+        IO.fromFuture(
+            Eval.later(regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown)
+          )
+          .void
+          .to[F]
       }
     }
+  }
 }
 
 object DistributedProcessing {

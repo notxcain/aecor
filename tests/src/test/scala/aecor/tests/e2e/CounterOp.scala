@@ -49,17 +49,24 @@ object CounterBehavior {
 
 class CounterOpHandler[F[_]: Applicative]
     extends (CounterOp ~> ActionT[F, CounterState, CounterEvent, ?]) {
+  private val lift = ActionT.liftK[F, CounterState, CounterEvent]
   override def apply[A](fa: CounterOp[A]): ActionT[F, CounterState, CounterEvent, A] =
     fa match {
       case Increment =>
-        ActionT.lift { x =>
-          Seq(CounterIncremented) -> (x.value + 1)
+        lift {
+          Action { x: CounterState =>
+            Seq(CounterIncremented) -> (x.value + 1)
+          }
         }
       case Decrement =>
-        ActionT.lift { x =>
-          Seq(CounterDecremented) -> (x.value - 1)
+        lift {
+          Action { x =>
+            Seq(CounterDecremented) -> (x.value - 1)
+          }
         }
       case GetValue =>
-        ActionT.lift(x => Seq.empty -> x.value)
+        lift {
+          Action(x => Seq.empty -> x.value)
+        }
     }
 }

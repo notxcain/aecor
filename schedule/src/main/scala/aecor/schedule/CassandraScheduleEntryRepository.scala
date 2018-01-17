@@ -3,7 +3,6 @@ package aecor.schedule
 import java.time._
 import java.time.format.DateTimeFormatter
 
-import aecor.effect.Capture
 import aecor.schedule.CassandraScheduleEntryRepository.{ Queries, TimeBucket }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import akka.NotUsed
@@ -15,10 +14,10 @@ import cats.effect.Effect
 import com.datastax.driver.core.{ Row, Session }
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
-import aecor.util._
+import aecor.util.effect._
 import scala.concurrent.{ ExecutionContext, Future }
 
-class CassandraScheduleEntryRepository[F[_]: Effect: Capture](
+class CassandraScheduleEntryRepository[F[_]: Effect](
   cassandraSession: CassandraSession,
   queries: Queries
 )(implicit materializer: Materializer)
@@ -32,7 +31,7 @@ class CassandraScheduleEntryRepository[F[_]: Effect: Capture](
   override def insertScheduleEntry(id: ScheduleBucketId,
                                    entryId: String,
                                    dueDate: LocalDateTime): F[Unit] =
-    Capture[F].captureFuture {
+    Effect[F].fromFuture {
       preparedInsertEntry
         .map(
           _.bind()
@@ -48,7 +47,7 @@ class CassandraScheduleEntryRepository[F[_]: Effect: Capture](
     }
 
   override def markScheduleEntryAsFired(id: ScheduleBucketId, entryId: String): F[Unit] =
-    Capture[F].captureFuture {
+    Effect[F].fromFuture {
       preparedSelectEntry
         .map(
           _.bind()
@@ -118,7 +117,7 @@ class CassandraScheduleEntryRepository[F[_]: Effect: Capture](
   override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
     f: (ScheduleEntry) => F[Unit]
   ): F[Option[ScheduleEntry]] =
-    Capture[F].captureFuture {
+    Effect[F].fromFuture {
       getEntries(from, to)
         .mapAsync(parallelism)(x => f(x).unsafeToFuture().map(_ => x))
         .runWith(Sink.lastOption)
@@ -136,7 +135,7 @@ class CassandraScheduleEntryRepository[F[_]: Effect: Capture](
 
 object CassandraScheduleEntryRepository {
 
-  def apply[F[_]: Effect: Capture](cassandraSession: CassandraSession, queries: Queries)(
+  def apply[F[_]: Effect](cassandraSession: CassandraSession, queries: Queries)(
     implicit materializer: Materializer
   ): CassandraScheduleEntryRepository[F] =
     new CassandraScheduleEntryRepository(cassandraSession, queries)

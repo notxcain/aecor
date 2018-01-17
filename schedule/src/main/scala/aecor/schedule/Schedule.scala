@@ -4,7 +4,6 @@ import java.time.{ Clock => _, _ }
 import java.util.UUID
 
 import aecor.data._
-import aecor.effect.Capture
 import aecor.runtime.akkapersistence._
 import aecor.schedule.process.{
   DefaultScheduleEventJournal,
@@ -16,7 +15,6 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import cats.Monad
 import cats.effect.Effect
 import cats.implicits._
 import com.datastax.driver.core.utils.UUIDs
@@ -40,7 +38,7 @@ object Schedule {
                                     eventualConsistencyDelay: FiniteDuration,
                                     consumerId: ConsumerId)
 
-  def start[F[_]: Effect: Capture: Monad](
+  def start[F[_]: Effect](
     entityName: String,
     dayZero: LocalDate,
     clock: Clock[F],

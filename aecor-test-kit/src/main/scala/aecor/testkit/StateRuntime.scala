@@ -13,7 +13,7 @@ object StateRuntime {
     *  Construct runtime for single instance of aggregate
     *
     */
-  def unit[F[_], Op[_], S, E](
+  def single[F[_], Op[_], S, E](
     behavior: EventsourcedBehaviorT[F, Op, S, E]
   )(implicit F: MonadError[F, Throwable]): Op ~> StateT[F, Vector[E], ?] =
     new (Op ~> StateT[F, Vector[E], ?]) {
@@ -23,14 +23,14 @@ object StateRuntime {
           foldedState = events.foldM(behavior.initialState)(behavior.applyEvent)
           result <- foldedState match {
                      case Next(state) =>
-                       StateT.lift(behavior.commandHandler(op).run(state)).flatMap {
+                       StateT.liftF(behavior.commandHandler(op).run(state)).flatMap {
                          case (es, r) =>
                            StateT
                              .modify[F, Vector[E]](_ ++ es)
                              .map(_ => r)
                        }
                      case Impossible =>
-                       StateT.lift[F, Vector[E], A](
+                       StateT.liftF[F, Vector[E], A](
                          F.raiseError(new IllegalStateException(s"Failed to fold $events"))
                        )
                    }

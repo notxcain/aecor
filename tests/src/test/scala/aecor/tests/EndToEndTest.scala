@@ -3,7 +3,6 @@ package aecor.tests
 import java.time._
 
 import aecor.data._
-import aecor.effect.Capture
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
@@ -14,6 +13,7 @@ import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
 import aecor.tests.e2e._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
 import cats.data.StateT
+import cats.effect.Sync
 import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
 import shapeless.Coproduct
@@ -22,8 +22,8 @@ import scala.concurrent.duration._
 
 class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
-  def instant[F[_]: Capture]: F[Instant] =
-    Capture[F].capture(Instant.ofEpochMilli(System.currentTimeMillis()))
+  def instant[F[_]: Sync]: F[Instant] =
+    Sync[F].delay(Instant.ofEpochMilli(System.currentTimeMillis()))
 
   case class SpecState(
     counterJournalState: StateEventJournal.State[CounterId, CounterEvent],

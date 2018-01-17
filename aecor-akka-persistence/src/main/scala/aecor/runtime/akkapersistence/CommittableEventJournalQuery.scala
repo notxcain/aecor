@@ -1,7 +1,8 @@
 package aecor.runtime.akkapersistence
 
 import aecor.data.{ Committable, ConsumerId, EventTag, TagConsumer }
-import aecor.util.{ KeyValueStore, _ }
+import aecor.util.KeyValueStore
+import aecor.util.effect._
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect

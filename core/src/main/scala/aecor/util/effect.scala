@@ -1,10 +1,11 @@
-package aecor
+package aecor.util
 
-import cats.effect.{ Effect, IO }
+import cats.Eval
+import cats.effect.{ Async, Effect, IO }
 
-import scala.concurrent.Future
+import scala.concurrent.{ ExecutionContext, Future }
 
-package object util {
+object effect {
   implicit final class AecorIOOps(val self: IO.type) extends AnyVal {
     final def fromEffect[F[_]: Effect, A](fa: F[A]): IO[A] =
       IO.async { cb =>
@@ -17,5 +18,10 @@ package object util {
       toIO.unsafeToFuture()
     @inline final def toIO(implicit F: Effect[F]): IO[A] =
       IO.fromEffect(self)
+  }
+
+  implicit final class AecorAsyncTCOps[F[_]](val self: Async[F]) extends AnyVal {
+    def fromFuture[A](future: => Future[A])(implicit ec: ExecutionContext): F[A] =
+      IO.fromFuture(Eval.always(future)).to(self)
   }
 }

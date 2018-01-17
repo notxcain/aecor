@@ -19,7 +19,7 @@ final case class EventsourcedBehavior[Op[_], S, E](commandHandler: Op ~> Action[
     )
 
   def plain[F[_]: Applicative]: EventsourcedBehaviorT[F, Op, S, E] =
-    EventsourcedBehaviorT(initialState, commandHandler.andThen(ActionT.lift[F, S, E]), applyEvent)
+    EventsourcedBehaviorT(initialState, commandHandler.andThen(ActionT.liftK[F, S, E]), applyEvent)
 }
 
 final case class Enriched[M, E](metadata: M, event: E)

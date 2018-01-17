@@ -1,27 +1,24 @@
 package aecor.schedule.process
 
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.effect.Capture
-import aecor.util._
+import aecor.util.effect._
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Flow, Source }
-import cats.Monad
 import cats.effect.Effect
+
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 
 object PeriodicProcessRuntime {
-  def apply[F[_]: Effect: Capture: Monad](
-    name: String,
-    tickInterval: FiniteDuration,
-    processCycle: F[Unit]
-  )(implicit materializer: Materializer): PeriodicProcessRuntime[F] =
+  def apply[F[_]: Effect](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(
+    implicit materializer: Materializer
+  ): PeriodicProcessRuntime[F] =
     new PeriodicProcessRuntime[F](name, tickInterval, processCycle)
 }
 
-class PeriodicProcessRuntime[F[_]: Effect: Capture: Monad](
+class PeriodicProcessRuntime[F[_]: Effect](
   name: String,
   tickInterval: FiniteDuration,
   processCycle: F[Unit]

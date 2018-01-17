@@ -1,7 +1,7 @@
 package aecor.tests
 
 import aecor.data.Behavior
-import aecor.effect.monix._
+
 import aecor.runtime.akkageneric.GenericAkkaRuntime
 import aecor.testkit.StateRuntime
 import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
@@ -9,7 +9,7 @@ import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{ Config, ConfigFactory }
-import monix.cats._
+
 import monix.eval.Task
 import monix.execution.Scheduler
 import org.scalatest.concurrent.ScalaFutures
@@ -45,7 +45,7 @@ class GenericRuntimeSpec
     TestKit.shutdownActorSystem(system)
 
   val behavior: Behavior[Task, CounterOp] =
-    Behavior.fromState(Vector.empty[CounterEvent], StateRuntime.unit(CounterBehavior[Task]))
+    Behavior.fromState(Vector.empty[CounterEvent], StateRuntime.single(CounterBehavior[Task]))
 
   val deployCounters =
     GenericAkkaRuntime[Task](system).deploy("Counter", (_: CounterId) => behavior)

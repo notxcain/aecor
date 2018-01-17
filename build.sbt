@@ -19,7 +19,6 @@ lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 
 lazy val monixVersion = "3.0.0-M3"
-lazy val fs2Version = "0.10.0-RC1"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
@@ -59,8 +58,6 @@ lazy val aecor = project
     distributedProcessing,
     example,
     schedule,
-    effectMonix,
-    effectFs2,
     tests
   )
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
@@ -105,20 +102,6 @@ lazy val schedule = project
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
-lazy val effectMonix = project
-  .in(file("aecor-monix"))
-  .settings(moduleName := "aecor-monix", name := "Aecor Monix")
-  .dependsOn(core)
-  .settings(aecorSettings)
-  .settings(effectMonixSettings)
-
-lazy val effectFs2 = project
-  .in(file("aecor-fs2"))
-  .settings(moduleName := "aecor-fs2", name := "Aecor FS2")
-  .dependsOn(core)
-  .settings(aecorSettings)
-  .settings(effectFs2Settings)
-
 lazy val testKit = project
   .in(file("aecor-test-kit"))
   .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
@@ -130,8 +113,6 @@ lazy val tests = project
     core,
     example,
     schedule,
-    effectMonix,
-    effectFs2,
     testKit,
     akkaPersistence,
     distributedProcessing,
@@ -143,7 +124,7 @@ lazy val tests = project
   .settings(testingSettings)
 
 lazy val example = project
-  .dependsOn(core, schedule, effectMonix, distributedProcessing)
+  .dependsOn(core, schedule, distributedProcessing)
   .settings(moduleName := "aecor-example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -187,11 +168,6 @@ lazy val akkaGenericSettings = Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
 )
 
-lazy val effectMonixSettings = Seq(
-  libraryDependencies ++= Seq("io.monix" %% "monix-eval" % monixVersion)
-)
-
-lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-core" % fs2Version))
 
 lazy val exampleSettings = {
   val akkaKryoVersion = SettingKey[String]("akka-kryo-version", "")
@@ -228,7 +204,8 @@ lazy val testingSettings = Seq(
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
     "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
-    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
+    "org.typelevel" %% "cats-testkit" % catsVersion % Test
   )
 )
 

@@ -30,17 +30,22 @@ object notification {
 
   def notificationOpHandler[F[_]: Applicative] =
     new (NotificationOp ~> ActionT[F, NotificationState, NotificationEvent, ?]) {
+      private val lift = ActionT.liftK[F, NotificationState, NotificationEvent]
       override def apply[A](
         fa: NotificationOp[A]
       ): ActionT[F, NotificationState, NotificationEvent, A] =
         fa match {
           case CreateNotification(cid) =>
-            ActionT.lift { _ =>
-              Vector(NotificationCreated(cid)) -> (())
+            lift {
+              Action { _ =>
+                Vector(NotificationCreated(cid)) -> (())
+              }
             }
           case MarkAsSent =>
-            ActionT.lift { _ =>
-              Vector(NotificationSent) -> (())
+            lift {
+              Action { _ =>
+                Vector(NotificationSent) -> (())
+              }
             }
         }
     }

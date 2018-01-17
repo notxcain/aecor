@@ -4,7 +4,6 @@ import java.time.Clock
 
 import aecor.data._
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.effect.monix._
 import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
 import aecor.example.domain._
 import aecor.example.domain.account.{ Account, AccountId, EventsourcedAccount }
@@ -26,7 +25,6 @@ import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.scaladsl.Flow
 import akka.stream.{ ActorMaterializer, Materializer }
 import com.typesafe.config.ConfigFactory
-import monix.cats._
 import monix.eval.Task
 import monix.execution.Scheduler.Implicits.global
 

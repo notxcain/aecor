@@ -5,7 +5,7 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import aecor.data.Behavior
-import aecor.util._
+import aecor.util.effect._
 import aecor.encoding.KeyDecoder
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.PerformOp
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
@@ -55,11 +55,12 @@ private[aecor] final class GenericAkkaRuntimeActor[F[_]: Effect, I: KeyDecoder, 
   private def withBehavior(behavior: Behavior[F, Op]): Receive = {
     case PerformOp(op) =>
       val opId = UUID.randomUUID()
+
       behavior
         .run(op.asInstanceOf[Op[Any]])
         .toIO
         .map(x => Result(opId, Success(x)))
-        .unsafeRun
+        .unsafeToFuture()
         .recover {
           case NonFatal(e) => Result(opId, Failure(e))
         }

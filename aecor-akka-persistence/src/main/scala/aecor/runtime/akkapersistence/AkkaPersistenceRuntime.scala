@@ -3,15 +3,16 @@ package aecor.runtime.akkapersistence
 import java.util.UUID
 
 import aecor.data._
-import aecor.effect.Capture
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.Effect
-import cats.{ Monad, ~> }
+import cats.~>
 
 import scala.concurrent.Future
 
@@ -24,16 +25,15 @@ object AkkaPersistenceRuntime {
 }
 
 class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem) {
-  def deploy[F[_]: Effect: Capture: Monad, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def deploy[F[_]: Effect, I: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     typeName: String,
     behavior: EventsourcedBehaviorT[F, Op, State, Event],
     tagging: Tagging[I],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  ): F[I => Op ~> F] = {
-    import AkkaPersistenceRuntime._
-
-    Capture[F].capture {
+  ): F[I => Op ~> F] =
+    Effect[F].delay {
+      import system.dispatcher
       val props =
         AkkaPersistenceRuntimeActor.props(
           typeName,
@@ -71,12 +71,11 @@ class AkkaPersistenceRuntime private[akkapersistence] (system: ActorSystem) {
       i =>
         new (Op ~> F) {
           override def apply[A](fa: Op[A]): F[A] =
-            Capture[F].captureFuture {
+            Effect[F].fromFuture {
               (regionRef ? CorrelatedCommand(keyEncoder(i), fa)).asInstanceOf[Future[A]]
             }
         }
     }
-  }
 
   def journal[I: KeyDecoder, Event: PersistentDecoder]: EventJournal[UUID, I, Event] =
     CassandraEventJournal[I, Event](system)

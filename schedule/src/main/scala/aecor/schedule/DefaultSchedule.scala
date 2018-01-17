@@ -8,13 +8,12 @@ import aecor.runtime.akkapersistence.{ CommittableEventJournalQuery, JournalEntr
 import aecor.util.Clock
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import cats.Monad
 import cats.effect.Effect
 import cats.implicits._
-import aecor.util._
+import aecor.util.effect._
 import scala.concurrent.duration.FiniteDuration
 
-private[schedule] class DefaultSchedule[F[_]: Effect: Monad](
+private[schedule] class DefaultSchedule[F[_]: Effect](
   clock: Clock[F],
   buckets: ScheduleBucketId => ScheduleBucket[F],
   bucketLength: FiniteDuration,

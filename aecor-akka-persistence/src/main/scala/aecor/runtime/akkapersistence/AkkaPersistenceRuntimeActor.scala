@@ -6,7 +6,7 @@ import java.time.{ Duration, Instant }
 import java.util.UUID
 
 import aecor.data._
-import aecor.util._
+import aecor.util.effect._
 import aecor.encoding.KeyDecoder
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }

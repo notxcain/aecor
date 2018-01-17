@@ -5,8 +5,6 @@ import java.util.UUID
 
 import aecor.data.ConsumerId
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.effect.monix._
-import aecor.effect.{ Async, Capture }
 import aecor.runtime.akkapersistence.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.util.JavaTimeClock
@@ -18,12 +16,11 @@ import akka.persistence.cassandra.{
 }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{ Flow, Sink, Source }
-import cats.effect.Effect
+import cats.effect.{ Effect, Sync }
 import cats.implicits._
-import cats.{ Functor, Monad }
 import monix.eval.Task
 import monix.execution.Scheduler
-import aecor.util._
+import aecor.util.effect._
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -32,7 +29,7 @@ object ScheduleApp extends App {
   implicit val system = ActorSystem("test")
   implicit val materializer = ActorMaterializer()
   implicit val scheduler = Scheduler(materializer.executionContext)
-  def clock[F[_]: Capture] = JavaTimeClock[F](Clock.systemUTC())
+  def clock[F[_]: Sync] = JavaTimeClock[F](Clock.systemUTC())
 
   val offsetStoreConfig = CassandraOffsetStore.Config("aecor_example")
   val scheduleEntryRepositoryQueries =
@@ -46,7 +43,7 @@ object ScheduleApp extends App {
     )
   )
 
-  def runSchedule[F[_]: Effect: Capture: Monad]: F[Schedule[F]] =
+  def runSchedule[F[_]: Effect]: F[Schedule[F]] =
     Schedule.start(
       entityName = "Schedule",
       dayZero = LocalDate.of(2016, 5, 10),
@@ -56,13 +53,13 @@ object ScheduleApp extends App {
       offsetStore = CassandraOffsetStore(cassandraSession, offsetStoreConfig)
     )
 
-  def runAdder[F[_]: Effect: Capture: Monad](schedule: Schedule[F]): F[Unit] =
-    Capture[F].capture {
+  def runAdder[F[_]: Effect](schedule: Schedule[F]): F[Unit] =
+    Effect[F].delay {
       Source
         .tick(0.seconds, 2.seconds, ())
         .mapAsync(1) { _ =>
-          Async[F].unsafeRun {
-            clock[F].localDateTime.flatMap { now =>
+          clock[F].localDateTime
+            .flatMap { now =>
               schedule.addScheduleEntry(
                 "Test",
                 UUID.randomUUID().toString,
@@ -70,14 +67,14 @@ object ScheduleApp extends App {
                 now.plusSeconds(20)
               )
             }
+            .unsafeToFuture()
 
-          }
         }
         .runWith(Sink.ignore)
     }.void
 
-  def runEventWatch[F[_]: Effect: Capture: Functor](schedule: Schedule[F]): F[Unit] =
-    Capture[F].capture {
+  def runEventWatch[F[_]: Effect](schedule: Schedule[F]): F[Unit] =
+    Effect[F].delay {
       schedule
         .committableScheduleEvents("SubscriptionInvoicing", ConsumerId("println"))
         .mapAsync(1) { x =>
@@ -87,7 +84,7 @@ object ScheduleApp extends App {
         .runWith(Sink.ignore)
     }.void
 
-  def mkApp[F[_]: Effect: Capture: Monad]: F[Unit] =
+  def mkApp[F[_]: Effect]: F[Unit] =
     for {
       schedule <- runSchedule[F]
       _ <- runAdder[F](schedule)

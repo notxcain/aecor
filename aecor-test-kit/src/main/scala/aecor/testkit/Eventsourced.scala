@@ -91,7 +91,7 @@ object Eventsourced {
             } else {
               ().pure[F]
             }
-            (appendEvents |@| snapshotIfNeeded).map((_, _) => nextState)
+            (appendEvents, snapshotIfNeeded).mapN((_, _) => nextState)
           case Impossible =>
             BehaviorFailure
               .illegalFold(entityId.toString)

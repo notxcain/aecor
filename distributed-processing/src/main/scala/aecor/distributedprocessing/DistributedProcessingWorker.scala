@@ -3,7 +3,7 @@ package aecor.distributedprocessing
 import aecor.distributedprocessing.DistributedProcessing._
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.distributedprocessing.serialization.Message
-import aecor.util._
+import aecor.util.effect._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
 import cats.effect.Effect
