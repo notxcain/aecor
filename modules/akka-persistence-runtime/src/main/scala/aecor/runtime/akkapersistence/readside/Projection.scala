@@ -1,7 +1,7 @@
 package aecor.runtime.akkapersistence.readside
 
 import aecor.data.Folded
-import aecor.runtime.akkapersistence.JournalEntry
+
 import cats.MonadError
 import cats.implicits._
 
@@ -15,11 +15,11 @@ object Projection {
     def fromJournalEntry[O, I, A](journalEntry: JournalEntry[O, I, A]): Input[I, A] =
       Input(journalEntry.entityId, journalEntry.sequenceNr, journalEntry.event)
   }
-  def apply[F[_], E, Key, Event, State](store: Store[F, Key, Versioned[State]],
-                                        zero: Event => Folded[State],
-                                        update: (Event, State) => Folded[State])(
-    implicit F: MonadError[F, E],
-    Error: ProjectionError[E, Input[Key, Event], Option[Versioned[State]]]
+  def apply[F[_], Err, Key, Event, State](store: Store[F, Key, Versioned[State]],
+                                          zero: Event => Folded[State],
+                                          update: (Event, State) => Folded[State])(
+    implicit F: MonadError[F, Err],
+    Error: ProjectionError[Err, Input[Key, Event], Option[Versioned[State]]]
   ): Input[Key, Event] => F[Unit] = {
     case input @ Input(id, seqNr, event) =>
       for {

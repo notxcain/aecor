@@ -36,10 +36,20 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     behavior: EventsourcedBehaviorT[F, Op, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[I],
-    idleTimeout: FiniteDuration
+    idleTimeout: FiniteDuration,
+    journalPluginId: String,
+    snapshotPluginId: String
   ): Props =
     Props(
-      new AkkaPersistenceRuntimeActor(entityName, behavior, snapshotPolicy, tagging, idleTimeout)
+      new AkkaPersistenceRuntimeActor(
+        entityName,
+        behavior,
+        snapshotPolicy,
+        tagging,
+        idleTimeout,
+        journalPluginId,
+        snapshotPluginId
+      )
     )
 
   final case class HandleCommand[A](command: A) extends Message
@@ -60,7 +70,9 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
   behavior: EventsourcedBehaviorT[F, Op, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[I],
-  idleTimeout: FiniteDuration
+  idleTimeout: FiniteDuration,
+  override val journalPluginId: String,
+  override val snapshotPluginId: String
 ) extends PersistentActor
     with ActorLogging
     with Stash {
@@ -111,7 +123,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
     case SnapshotOffer(_, snapshotRepr: PersistentRepr) =>
       snapshotPolicy match {
         case Never => ()
-        case e @ EachNumberOfEvents(_) =>
+        case e @ EachNumberOfEvents(_, _) =>
           e.decode(snapshotRepr) match {
             case Left(cause) =>
               onRecoveryFailure(cause, Some(snapshotRepr))
@@ -223,14 +235,14 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
 
   private def markSnapshotAsPendingIfNeeded(): Unit =
     snapshotPolicy match {
-      case EachNumberOfEvents(numberOfEvents) if eventCount % numberOfEvents == 0 =>
+      case EachNumberOfEvents(numberOfEvents, _) if eventCount % numberOfEvents == 0 =>
         snapshotPending = true
       case _ => ()
     }
 
   private def snapshotIfPending(): Unit =
     snapshotPolicy match {
-      case e @ EachNumberOfEvents(_) if snapshotPending =>
+      case e @ EachNumberOfEvents(_, _) if snapshotPending =>
         saveSnapshot(e.encode(state))
         snapshotPending = false
       case _ => ()

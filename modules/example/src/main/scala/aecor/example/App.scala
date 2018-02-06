@@ -14,7 +14,8 @@ import aecor.example.domain.transaction.{
   TransactionEvent,
   TransactionId
 }
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraOffsetStore }
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
+import aecor.runtime.akkapersistence.readside.{ CassandraJournalAdapter, CassandraOffsetStore }
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.event.Logging
@@ -44,7 +45,7 @@ object App {
     val offsetStoreConfig =
       CassandraOffsetStore.Config(config.getString("cassandra-journal.keyspace"))
 
-    val runtime = AkkaPersistenceRuntime(system)
+    val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
     val distributedProcessing = DistributedProcessing(system)
 
     val cassandraSession =

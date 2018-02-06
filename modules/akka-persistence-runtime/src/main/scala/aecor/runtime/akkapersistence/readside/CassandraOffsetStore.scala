@@ -1,14 +1,15 @@
-package aecor.runtime.akkapersistence
+package aecor.runtime.akkapersistence.readside
 
 import java.util.UUID
 
 import aecor.data.TagConsumer
 import aecor.util.KeyValueStore
+import aecor.util.effect._
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.effect.Effect
 import com.datastax.driver.core.Session
-import aecor.util.effect._
+
 import scala.concurrent.{ ExecutionContext, Future }
 
 object CassandraOffsetStore {
@@ -37,8 +38,10 @@ class CassandraOffsetStore[F[_]: Effect] private[akkapersistence] (
   config: CassandraOffsetStore.Config
 )(implicit executionContext: ExecutionContext)
     extends KeyValueStore[F, TagConsumer, UUID] {
+
   private val selectOffsetStatement =
     session.prepare(config.selectOffsetQuery)
+
   private val updateOffsetStatement =
     session.prepare(config.updateOffsetQuery)
 

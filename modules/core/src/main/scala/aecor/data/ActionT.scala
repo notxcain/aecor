@@ -14,7 +14,7 @@ object Action {
 
 final case class ActionT[F[_], State, Event, Result](run: State => F[(Seq[Event], Result)])
     extends AnyVal {
-  def mapS[State1](f: State1 => State): ActionT[F, State1, Event, Result] =
+  def mapState[State1](f: State1 => State): ActionT[F, State1, Event, Result] =
     ActionT(run.compose(f))
 }
 

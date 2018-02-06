@@ -1,35 +1,32 @@
-package aecor.runtime.akkapersistence
-
-import java.util.UUID
+package aecor.runtime.akkapersistence.readside
 
 import aecor.data.EventTag
 import aecor.encoding.KeyDecoder
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntimeActor, JournalAdapter }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentRepr }
 import akka.NotUsed
-import akka.actor.ActorSystem
-import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query._
 import akka.stream.scaladsl.Source
 
 import scala.concurrent.Future
 
-private[akkapersistence] final class CassandraEventJournal[I: KeyDecoder, E: PersistentDecoder](
-  system: ActorSystem
-) extends EventJournal[UUID, I, E] {
+private[akkapersistence] final class AkkaPersistenceEventJournalQuery[
+  O, I: KeyDecoder, E: PersistentDecoder
+](adapter: JournalAdapter[O])
+    extends JournalQuery[O, I, E] {
 
   private val decoder = PersistentDecoder[E]
   private val keyDecoder = KeyDecoder[I]
 
-  private val readJournal =
-    PersistenceQuery(system).readJournalFor[CassandraReadJournal](CassandraReadJournal.Identifier)
+  private val readJournal = adapter.createReadJournal
 
   private def createSource(
     inner: Source[EventEnvelope, NotUsed]
-  ): Source[JournalEntry[UUID, I, E], NotUsed] =
+  ): Source[JournalEntry[O, I, E], NotUsed] =
     inner.mapAsync(1) {
       case EventEnvelope(offset, persistenceId, sequenceNr, event) =>
         offset match {
-          case TimeBasedUUID(offsetValue) =>
+          case adapter.journalOffset(offsetValue) =>
             event match {
               case repr: PersistentRepr =>
                 val index =
@@ -66,22 +63,24 @@ private[akkapersistence] final class CassandraEventJournal[I: KeyDecoder, E: Per
         }
     }
 
-  def eventsByTag(tag: EventTag, offset: Option[UUID]): Source[JournalEntry[UUID, I, E], NotUsed] =
+  def eventsByTag(tag: EventTag, offset: Option[O]): Source[JournalEntry[O, I, E], NotUsed] =
     createSource(
       readJournal
-        .eventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
+        .eventsByTag(tag.value, adapter.journalOffset(offset))
     )
 
   override def currentEventsByTag(tag: EventTag,
-                                  offset: Option[UUID]): Source[JournalEntry[UUID, I, E], NotUsed] =
+                                  offset: Option[O]): Source[JournalEntry[O, I, E], NotUsed] =
     createSource(
       readJournal
-        .currentEventsByTag(tag.value, offset.map(TimeBasedUUID).getOrElse(NoOffset))
+        .currentEventsByTag(tag.value, adapter.journalOffset(offset))
     )
 
 }
 
-private[akkapersistence] object CassandraEventJournal {
-  def apply[I: KeyDecoder, E: PersistentDecoder](system: ActorSystem): EventJournal[UUID, I, E] =
-    new CassandraEventJournal(system)
+private[akkapersistence] object AkkaPersistenceEventJournalQuery {
+  def apply[O, K: KeyDecoder, E: PersistentDecoder](
+    adapter: JournalAdapter[O]
+  ): JournalQuery[O, K, E] =
+    new AkkaPersistenceEventJournalQuery(adapter)
 }

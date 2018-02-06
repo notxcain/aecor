@@ -9,6 +9,7 @@ import monix.eval.Task
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{ FunSuiteLike, Matchers }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
+import aecor.runtime.akkapersistence.readside.CassandraJournalAdapter
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import monix.execution.Scheduler
@@ -47,7 +48,7 @@ class AkkaPersistenceRuntimeSpec
     super.afterAll()
   }
 
-  val runtime = AkkaPersistenceRuntime(system)
+  val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
   test("Runtime should work") {
     val deployCounters =

@@ -1,4 +1,4 @@
-package aecor.runtime.akkapersistence
+package aecor.runtime.akkapersistence.readside
 
 import aecor.data.{ EventTag, Identified, TagConsumer }
 import aecor.util.KeyValueStore
@@ -11,7 +11,7 @@ final case class JournalEntry[O, I, A](offset: O, entityId: I, sequenceNr: Long,
   def map[B](f: A => B): JournalEntry[O, I, B] = copy(event = f(event))
 }
 
-trait EventJournal[Offset, I, E] {
+trait JournalQuery[Offset, I, E] {
   def eventsByTag(tag: EventTag,
                   offset: Option[Offset]): Source[JournalEntry[Offset, I, E], NotUsed]
 

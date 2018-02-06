@@ -151,7 +151,8 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion,
+    "com.github.dnvriend" %% "akka-persistence-jdbc" % "3.2.0"
   )
 )
 

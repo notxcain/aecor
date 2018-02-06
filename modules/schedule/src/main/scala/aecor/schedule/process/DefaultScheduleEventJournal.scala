@@ -3,7 +3,7 @@ package aecor.schedule.process
 import java.util.UUID
 
 import aecor.data.{ Committable, ConsumerId, EventTag, Identified }
-import aecor.runtime.akkapersistence.CommittableEventJournalQuery
+import aecor.runtime.akkapersistence.readside.CommittableEventJournalQuery
 import aecor.schedule.{ ScheduleBucketId, ScheduleEvent }
 import aecor.util.effect._
 import akka.stream.Materializer

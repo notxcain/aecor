@@ -1,4 +1,4 @@
-package aecor.runtime.akkapersistence
+package aecor.runtime.akkapersistence.readside
 
 import aecor.data.{ Committable, ConsumerId, EventTag, TagConsumer }
 import aecor.util.KeyValueStore
@@ -8,7 +8,7 @@ import akka.stream.scaladsl.Source
 import cats.effect.Effect
 
 final class CommittableEventJournalQuery[F[_]: Effect, O, I, E] private[akkapersistence] (
-  underlying: EventJournal[O, I, E],
+  underlying: JournalQuery[O, I, E],
   offsetStore: KeyValueStore[F, TagConsumer, O]
 ) {
 
@@ -38,7 +38,7 @@ final class CommittableEventJournalQuery[F[_]: Effect, O, I, E] private[akkapers
 
 private[akkapersistence] object CommittableEventJournalQuery {
   def apply[F[_]: Effect, Offset, I, E](
-    underlying: EventJournal[Offset, I, E],
+    underlying: JournalQuery[Offset, I, E],
     offsetStore: KeyValueStore[F, TagConsumer, Offset]
   ): CommittableEventJournalQuery[F, Offset, I, E] =
     new CommittableEventJournalQuery(underlying, offsetStore)

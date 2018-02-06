@@ -2,7 +2,7 @@ package aecor.runtime.akkageneric
 
 import aecor.data.Behavior
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
-import aecor.runtime.akkageneric.GenericAkkaRuntime.CorrelatedCommand
+import aecor.runtime.akkageneric.GenericAkkaRuntime.Command
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
@@ -15,7 +15,7 @@ import scala.concurrent.Future
 object GenericAkkaRuntime {
   def apply[F[_]: Effect](system: ActorSystem): GenericAkkaRuntime[F] =
     new GenericAkkaRuntime(system)
-  private final case class CorrelatedCommand[I, A](correlationId: String, command: A)
+  private final case class Command[A](entityId: String, command: A)
 }
 
 final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
@@ -31,13 +31,13 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
       val numberOfShards = settings.numberOfShards
 
       val extractEntityId: ShardRegion.ExtractEntityId = {
-        case CorrelatedCommand(entityId, c) =>
+        case Command(entityId, c) =>
           (entityId, GenericAkkaRuntimeActor.PerformOp(c.asInstanceOf[Op[_]]))
       }
 
       val extractShardId: ShardRegion.ExtractShardId = {
-        case CorrelatedCommand(correlationId, _) =>
-          (scala.math.abs(correlationId.hashCode) % numberOfShards).toString
+        case Command(correlationId, _) =>
+          String.valueOf(scala.math.abs(correlationId.hashCode) % numberOfShards)
         case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
       }
 
@@ -58,7 +58,7 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
       i =>
         new (Op ~> F) {
           override def apply[A](fa: Op[A]): F[A] = Effect[F].fromFuture {
-            (shardRegionRef ? CorrelatedCommand(keyEncoder(i), fa)).asInstanceOf[Future[A]]
+            (shardRegionRef ? Command(keyEncoder(i), fa)).asInstanceOf[Future[A]]
           }
         }
     }

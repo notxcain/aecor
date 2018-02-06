@@ -4,13 +4,14 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.data._
-import aecor.runtime.akkapersistence.{ CommittableEventJournalQuery, JournalEntry }
+import aecor.runtime.akkapersistence.readside.{ CommittableEventJournalQuery, JournalEntry }
 import aecor.util.Clock
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect
 import cats.implicits._
 import aecor.util.effect._
+
 import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule[F[_]: Effect](

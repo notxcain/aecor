@@ -5,6 +5,7 @@ import java.util.UUID
 
 import aecor.data._
 import aecor.runtime.akkapersistence._
+import aecor.runtime.akkapersistence.readside.{ CassandraJournalAdapter, JournalEntry }
 import aecor.schedule.process.{
   DefaultScheduleEventJournal,
   PeriodicProcessRuntime,
@@ -54,7 +55,7 @@ object Schedule {
 
     val eventTag = EventTag(entityName)
 
-    val runtime = AkkaPersistenceRuntime(system)
+    val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(

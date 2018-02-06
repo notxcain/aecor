@@ -5,7 +5,7 @@ import java.util.UUID
 
 import aecor.data.ConsumerId
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.runtime.akkapersistence.CassandraOffsetStore
+import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.util.JavaTimeClock
 import akka.NotUsed
