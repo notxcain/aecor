@@ -6,7 +6,7 @@ lazy val buildSettings = inThisBuild(
     organization := "io.aecor",
     scalaVersion := "2.11.11-bin-typelevel-4",
     scalaOrganization := "org.typelevel",
-    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.3-bin-typelevel-4")
+    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.4-bin-typelevel-4")
   )
 )
 
@@ -49,6 +49,7 @@ lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
 lazy val aecor = project
   .in(file("."))
+  .withId("aecor")
   .settings(moduleName := "aecor", name := "Aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -62,54 +63,45 @@ lazy val aecor = project
   )
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
-lazy val core =
-  project.in(file("modules/core"))
-    .settings(moduleName := "aecor-core", name := "Aecor Core")
+def aecorModule(id: String, description: String): Project =
+  Project(id, file(s"modules/$id"))
+   .settings(
+     moduleName := id,
+     name := description
+   )
+
+lazy val core = aecorModule("core", "Aecor Core")
     .settings(aecorSettings)
     .settings(coreSettings)
 
-lazy val akkaPersistence = project
-  .in(file("modules/akka-persistence-runtime"))
-  .settings(
-    moduleName := "akka-persistence-runtime",
-    name := "Aecor Runtime based on Akka Cluster Sharding and Persistence"
+lazy val akkaPersistence = aecorModule("akka-persistence-runtime",
+    "Aecor Runtime based on Akka Cluster Sharding and Persistence"
   )
   .dependsOn(core)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
-lazy val akkaGeneric = project
-  .in(file("modules/akka-cluster-runtime"))
-  .settings(
-    moduleName := "akka-cluster-sharding-runtime",
-    name := "Aecor Runtime based on Akka Cluster Sharding"
-  )
+lazy val akkaGeneric = aecorModule("akka-cluster-runtime", "Aecor Runtime based on Akka Cluster Sharding")
   .dependsOn(core)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
 lazy val distributedProcessing =
-  project
-    .in(file("modules/distributed-processing"))
-    .settings(moduleName := "distributed-processing", name := "Aecor Distributed Processing")
+  aecorModule("distributed-processing", "Aecor Distributed Processing")
     .dependsOn(core)
     .settings(aecorSettings)
     .settings(distributedProcessingSettings)
 
-lazy val schedule = project.in(file("modules/schedule"))
+lazy val schedule = aecorModule("schedule", "Aecor Schedule")
   .dependsOn(akkaPersistence, distributedProcessing)
-  .settings(moduleName := "schedule", name := "Aecor Schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
-lazy val testKit = project
-  .in(file("modules/test-kit"))
-  .settings(moduleName := "test-kit", name := "Aecor Test Kit")
+lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
   .dependsOn(core)
   .settings(aecorSettings)
 
-lazy val tests = project
-    .in(file("modules/tests"))
+lazy val tests = aecorModule("tests", "Aecor Tests")
   .dependsOn(
     core,
     example,
@@ -119,15 +111,12 @@ lazy val tests = project
     distributedProcessing,
     akkaGeneric
   )
-  .settings(moduleName := "tests", name := "Aecor Tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
-lazy val example = project
-    .in(file("modules/example"))
+lazy val example = aecorModule("example", "Aecor Example Application")
   .dependsOn(core, schedule, distributedProcessing)
-  .settings(moduleName := "example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
