@@ -63,15 +63,15 @@ lazy val aecor = project
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
 lazy val core =
-  project
+  project.in(file("modules/core"))
     .settings(moduleName := "aecor-core", name := "Aecor Core")
     .settings(aecorSettings)
     .settings(coreSettings)
 
 lazy val akkaPersistence = project
-  .in(file("aecor-akka-persistence"))
+  .in(file("modules/akka-persistence-runtime"))
   .settings(
-    moduleName := "aecor-akka-persistence",
+    moduleName := "akka-persistence-runtime",
     name := "Aecor Runtime based on Akka Cluster Sharding and Persistence"
   )
   .dependsOn(core)
@@ -79,9 +79,9 @@ lazy val akkaPersistence = project
   .settings(akkaPersistenceSettings)
 
 lazy val akkaGeneric = project
-  .in(file("aecor-akka-generic"))
+  .in(file("modules/akka-cluster-runtime"))
   .settings(
-    moduleName := "aecor-akka-generic",
+    moduleName := "akka-cluster-sharding-runtime",
     name := "Aecor Runtime based on Akka Cluster Sharding"
   )
   .dependsOn(core)
@@ -90,25 +90,26 @@ lazy val akkaGeneric = project
 
 lazy val distributedProcessing =
   project
-    .in(file("distributed-processing"))
-    .settings(moduleName := "aecor-distributed-processing", name := "Aecor Distributed Processing")
+    .in(file("modules/distributed-processing"))
+    .settings(moduleName := "distributed-processing", name := "Aecor Distributed Processing")
     .dependsOn(core)
     .settings(aecorSettings)
     .settings(distributedProcessingSettings)
 
-lazy val schedule = project
+lazy val schedule = project.in(file("modules/schedule"))
   .dependsOn(akkaPersistence, distributedProcessing)
-  .settings(moduleName := "aecor-schedule", name := "Aecor Schedule")
+  .settings(moduleName := "schedule", name := "Aecor Schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
 lazy val testKit = project
-  .in(file("aecor-test-kit"))
-  .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
+  .in(file("modules/test-kit"))
+  .settings(moduleName := "test-kit", name := "Aecor Test Kit")
   .dependsOn(core)
   .settings(aecorSettings)
 
 lazy val tests = project
+    .in(file("modules/tests"))
   .dependsOn(
     core,
     example,
@@ -118,14 +119,15 @@ lazy val tests = project
     distributedProcessing,
     akkaGeneric
   )
-  .settings(moduleName := "aecor-tests", name := "Aecor Tests")
+  .settings(moduleName := "tests", name := "Aecor Tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = project
+    .in(file("modules/example"))
   .dependsOn(core, schedule, distributedProcessing)
-  .settings(moduleName := "aecor-example", name := "Aecor Example Application")
+  .settings(moduleName := "example", name := "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
@@ -240,7 +242,7 @@ lazy val warnUnusedImport = Seq(scalacOptions in (Compile, console) ~= {
   _.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))
 }, scalacOptions in (Test, console) := (scalacOptions in (Compile, console)).value)
 
-lazy val noPublishSettings = Seq(publish := (), publishLocal := (), publishArtifact := false)
+lazy val noPublishSettings = Seq(publish := (()), publishLocal := (()), publishArtifact := false)
 
 lazy val publishSettings = Seq(
   releaseCrossBuild := true,
