@@ -1,5 +1,6 @@
 import ReleaseTransformations._
 import sbtrelease.Version.Bump
+import pl.project13.scala.sbt._
 
 lazy val buildSettings = inThisBuild(
   Seq(
@@ -59,7 +60,8 @@ lazy val aecor = project
     distributedProcessing,
     example,
     schedule,
-    tests
+    tests,
+    benchmarks
   )
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
@@ -120,6 +122,12 @@ lazy val example = aecorModule("example", "Aecor Example Application")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
+
+lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
+  .dependsOn(core)
+  .settings(aecorSettings)
+  .settings(noPublishSettings)
+  .enablePlugins(JmhPlugin)
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
