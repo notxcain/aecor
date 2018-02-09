@@ -1,8 +1,7 @@
-package aecor.runtime.akkapersistence.readside
+package aecor.runtime.akkapersistence
 
 import java.util.UUID
 
-import aecor.runtime.akkapersistence.JournalAdapter
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.{ NoOffset, Offset, PersistenceQuery, TimeBasedUUID }

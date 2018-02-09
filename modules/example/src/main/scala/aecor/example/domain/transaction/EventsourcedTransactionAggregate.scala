@@ -92,14 +92,14 @@ class EventsourcedTransactionAggregate
 }
 
 object EventsourcedTransactionAggregate {
+
+  val instance: TransactionAggregate[Action[Option[Transaction], TransactionEvent, ?]] =
+    new EventsourcedTransactionAggregate()
+
   def behavior
     : EventsourcedBehavior[TransactionAggregateOp, Option[Transaction], TransactionEvent] =
     EventsourcedBehavior
-      .optional(
-        TransactionAggregate.toFunctionK(new EventsourcedTransactionAggregate),
-        Transaction.fromEvent,
-        _.applyEvent(_)
-      )
+      .optionalM(instance, Transaction.fromEvent, _.applyEvent(_))
 
   def tagging: Tagging.Partitioned[TransactionId] =
     Tagging.partitioned(20)(EventTag("Transaction"))

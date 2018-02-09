@@ -5,7 +5,7 @@ import java.util.UUID
 
 import aecor.data._
 import aecor.runtime.akkapersistence._
-import aecor.runtime.akkapersistence.readside.{ CassandraJournalAdapter, JournalEntry }
+import aecor.runtime.akkapersistence.readside.JournalEntry
 import aecor.schedule.process.{
   DefaultScheduleEventJournal,
   PeriodicProcessRuntime,

@@ -136,7 +136,8 @@ lazy val coreSettings = Seq(
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
-    "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
+    "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
+    "io.aecor" %% "liberator" % "0.7.0"
   )
 )
 

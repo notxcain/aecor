@@ -14,8 +14,8 @@ import aecor.example.domain.transaction.{
   TransactionEvent,
   TransactionId
 }
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
-import aecor.runtime.akkapersistence.readside.{ CassandraJournalAdapter, CassandraOffsetStore }
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
+import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.event.Logging
@@ -93,12 +93,12 @@ object App {
           AkkaStreamProcess[Task](
             journal
               .eventsByTag(tag, consumerId)
-              .map(_.map(_.map(_.event).identified)),
-            Flow[Committable[Task, Identified[TransactionId, TransactionEvent]]]
+              .map(_.map(_.map(_.event).identified))
               .mapAsync(30) {
                 _.traverse(processStep).runAsync
               }
-              .mapAsync(1)(_.commit.runAsync)
+              .mapAsync(1)(_.commit.runAsync),
+            Flow[Unit]
           )
         }
       distributedProcessing.start[Task]("TransactionProcessing", processes)

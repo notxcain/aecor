@@ -1,6 +1,7 @@
 package aecor.data
 
 import cats.{ Applicative, Functor, ~> }
+import io.aecor.liberator.Algebra
 
 final case class EventsourcedBehaviorT[F[_], Op[_], State, Event](
   initialState: State,
@@ -25,6 +26,13 @@ final case class EventsourcedBehavior[Op[_], S, E](commandHandler: Op ~> Action[
 final case class Enriched[M, E](metadata: M, event: E)
 
 object EventsourcedBehavior {
+
+  def optionalM[M[_[_]], State, Event](
+    commandHandler: M[Action[Option[State], Event, ?]],
+    init: Event => Folded[State],
+    applyEvent: (State, Event) => Folded[State]
+  )(implicit M: Algebra[M]): EventsourcedBehavior[M.Out, Option[State], Event] =
+    optional(M.toFunctionK(commandHandler), init, applyEvent)
 
   def optional[Op[_], State, Event](
     commandHandler: Op ~> Action[Option[State], Event, ?],

@@ -8,8 +8,7 @@ import com.typesafe.config.{ Config, ConfigFactory }
 import monix.eval.Task
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{ FunSuiteLike, Matchers }
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
-import aecor.runtime.akkapersistence.readside.CassandraJournalAdapter
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import monix.execution.Scheduler
