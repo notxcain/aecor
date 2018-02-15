@@ -31,26 +31,26 @@ class EventsourcedTransactionAggregate
                       amount: Amount): Action[Option[Transaction], TransactionEvent, Unit] =
     Action {
       case None =>
-        Seq(
+        List(
           TransactionEvent
             .TransactionCreated(fromAccountId, toAccountId, amount)
         ) -> (())
 
-      case Some(_) => Seq.empty -> (())
+      case Some(_) => List.empty -> (())
     }
 
   override def authorize: Action[Option[Transaction], TransactionEvent, Either[String, Unit]] =
     Action {
       case Some(transaction) =>
         if (transaction.status == Requested) {
-          Seq(TransactionAuthorized) -> ().asRight
+          List(TransactionAuthorized) -> ().asRight
         } else if (transaction.status == Authorized) {
-          Seq() -> ().asRight
+          List.empty -> ().asRight
         } else {
-          Seq() -> "Illegal transition".asLeft
+          List.empty -> "Illegal transition".asLeft
         }
       case None =>
-        Seq() -> "Transaction not found".asLeft
+        List.empty -> "Transaction not found".asLeft
     }
 
   override def fail(
@@ -59,26 +59,26 @@ class EventsourcedTransactionAggregate
     Action {
       case Some(transaction) =>
         if (transaction.status == Failed) {
-          Seq.empty -> ().asRight
+          List.empty -> ().asRight
         } else {
-          Seq(TransactionFailed(reason)) -> ().asRight
+          List(TransactionFailed(reason)) -> ().asRight
         }
       case None =>
-        Seq.empty -> "Transaction not found".asLeft
+        List.empty -> "Transaction not found".asLeft
     }
 
   override def succeed: Action[Option[Transaction], TransactionEvent, Either[String, Unit]] =
     Action {
       case Some(transaction) =>
         if (transaction.status == Succeeded) {
-          Seq.empty -> ().asRight
+          List.empty -> ().asRight
         } else if (transaction.status == Authorized) {
-          Seq(TransactionSucceeded) -> ().asRight
+          List(TransactionSucceeded) -> ().asRight
         } else {
-          Seq.empty -> "Illegal transition".asLeft
+          List.empty -> "Illegal transition".asLeft
         }
       case None =>
-        Seq.empty -> "Transaction not found".asLeft
+        List.empty -> "Transaction not found".asLeft
     }
 
   override def getInfo: Action[Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
@@ -93,13 +93,12 @@ class EventsourcedTransactionAggregate
 
 object EventsourcedTransactionAggregate {
 
-  val instance: TransactionAggregate[Action[Option[Transaction], TransactionEvent, ?]] =
+  val actions: TransactionAggregate[Action[Option[Transaction], TransactionEvent, ?]] =
     new EventsourcedTransactionAggregate()
 
-  def behavior
-    : EventsourcedBehavior[TransactionAggregateOp, Option[Transaction], TransactionEvent] =
+  def behavior: EventsourcedBehavior[TransactionAggregate, Option[Transaction], TransactionEvent] =
     EventsourcedBehavior
-      .optionalM(instance, Transaction.fromEvent, _.applyEvent(_))
+      .optional(actions, Transaction.fromEvent, _.applyEvent(_))
 
   def tagging: Tagging.Partitioned[TransactionId] =
     Tagging.partitioned(20)(EventTag("Transaction"))

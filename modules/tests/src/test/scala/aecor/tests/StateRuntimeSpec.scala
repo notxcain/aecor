@@ -2,27 +2,25 @@ package aecor.tests
 
 import aecor.testkit.StateRuntime
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
-import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
-import aecor.tests.e2e.{ CounterBehavior, CounterEvent, CounterOp }
+import aecor.tests.e2e.{ Counter, CounterBehavior, CounterEvent }
 import cats.data.StateT
 import cats.implicits._
-import cats.~>
 import org.scalatest.{ FunSuite, Matchers }
 
 class StateRuntimeSpec extends FunSuite with Matchers {
 
-  val counter =
-    StateRuntime.single(CounterBehavior[Either[Throwable, ?]])
+  val counter: Counter[StateT[Either[Throwable, ?], Vector[CounterEvent], ?]] =
+    StateRuntime.single(CounterBehavior.instance.lifted[Either[Throwable, ?]])
 
   val counters
-    : String => CounterOp ~> StateT[Either[Throwable, ?], Map[String, Vector[CounterEvent]], ?] =
+    : String => Counter[StateT[Either[Throwable, ?], Map[String, Vector[CounterEvent]], ?]] =
     StateRuntime.route(counter)
 
   test("Shared runtime should execute all commands against shared sequence of events") {
     val program = for {
-      _ <- counter(Increment)
-      _ <- counter(Increment)
-      x <- counter(Decrement)
+      _ <- counter.increment
+      _ <- counter.increment
+      x <- counter.decrement
     } yield x
 
     val Right((state, result)) = program.run(Vector.empty)
@@ -36,9 +34,9 @@ class StateRuntimeSpec extends FunSuite with Matchers {
   ) {
 
     val program = for {
-      _ <- counters("1")(Increment)
-      _ <- counters("2")(Increment)
-      x <- counters("1")(Decrement)
+      _ <- counters("1").increment
+      _ <- counters("2").increment
+      x <- counters("1").decrement
     } yield x
 
     val Right((state, result)) = program.run(Map.empty)

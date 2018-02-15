@@ -4,7 +4,6 @@ import aecor.data.Behavior
 
 import aecor.runtime.akkageneric.GenericAkkaRuntime
 import aecor.testkit.StateRuntime
-import aecor.tests.e2e.CounterOp.{ Decrement, GetValue, Increment }
 import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
@@ -44,8 +43,11 @@ class GenericRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val behavior: Behavior[Task, CounterOp] =
-    Behavior.fromState(Vector.empty[CounterEvent], StateRuntime.single(CounterBehavior[Task]))
+  val behavior: Behavior[Counter, Task] =
+    Behavior.fromState(
+      Vector.empty[CounterEvent],
+      StateRuntime.single(CounterBehavior.instance.lifted[Task])
+    )
 
   val deployCounters =
     GenericAkkaRuntime[Task](system).deploy("Counter", (_: CounterId) => behavior)
@@ -55,12 +57,12 @@ class GenericRuntimeSpec
       counters <- deployCounters
       first = counters(CounterId("1"))
       second = counters(CounterId("2"))
-      _ <- first(Increment)
-      _ <- second(Increment)
-      _2 <- second(GetValue)
-      _ <- first(Decrement)
-      _1 <- first(GetValue)
-      afterPassivation <- second(GetValue).delayExecution(2.seconds)
+      _ <- first.increment
+      _ <- second.increment
+      _2 <- second.value
+      _ <- first.decrement
+      _1 <- first.value
+      afterPassivation <- second.value.delayExecution(2.seconds)
     } yield (_1, _2, afterPassivation)
 
     val (first, second, afterPassivation) = program.runAsync.futureValue

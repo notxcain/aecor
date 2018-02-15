@@ -16,9 +16,9 @@ class EventsourcedAccount extends Account[Action[Option[AccountState], AccountEv
   ): Action[Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
     Action {
       case None =>
-        Seq(AccountOpened(checkBalance)) -> ().asRight
-      case Some(x) =>
-        Seq.empty -> Account.AccountExists.asLeft
+        List(AccountOpened(checkBalance)) -> ().asRight
+      case Some(_) =>
+        List.empty -> Account.AccountExists.asLeft
     }
 
   override def credit(
@@ -28,12 +28,12 @@ class EventsourcedAccount extends Account[Action[Option[AccountState], AccountEv
     Action {
       case Some(account) =>
         if (account.processedTransactions.contains(transactionId)) {
-          Seq.empty -> ().asRight
+          List.empty -> ().asRight
         } else {
-          Seq(AccountCredited(transactionId, amount)) -> ().asRight
+          List(AccountCredited(transactionId, amount)) -> ().asRight
         }
       case None =>
-        Seq.empty -> Account.AccountDoesNotExist.asLeft
+        List.empty -> Account.AccountDoesNotExist.asLeft
     }
 
   override def debit(
@@ -43,29 +43,24 @@ class EventsourcedAccount extends Account[Action[Option[AccountState], AccountEv
     Action {
       case Some(account) =>
         if (account.processedTransactions.contains(transactionId)) {
-          Seq.empty -> ().asRight
+          List.empty -> ().asRight
         } else {
           if (account.hasFunds(amount)) {
-            Seq(AccountDebited(transactionId, amount)) -> ().asRight
+            List(AccountDebited(transactionId, amount)) -> ().asRight
           } else {
-            Seq.empty -> InsufficientFunds.asLeft
+            List.empty -> InsufficientFunds.asLeft
           }
         }
       case None =>
-        Seq.empty -> AccountDoesNotExist.asLeft
+        List.empty -> AccountDoesNotExist.asLeft
     }
 }
 
 object EventsourcedAccount {
 
-  def behavior: EventsourcedBehavior[Account.AccountOp, Option[AccountState], AccountEvent] =
+  def behavior: EventsourcedBehavior[Account, Option[AccountState], AccountEvent] =
     EventsourcedBehavior
-      .optional(
-        Account
-          .toFunctionK(new EventsourcedAccount),
-        AccountState.fromEvent,
-        _.applyEvent(_)
-      )
+      .optional(new EventsourcedAccount, AccountState.fromEvent, _.applyEvent(_))
 
   final val rootAccountId: AccountId = AccountId("ROOT")
   final case class AccountState(balance: Amount,

@@ -7,11 +7,13 @@ import akka.cluster.sharding.ShardRegion.EntityId
 import cats.data.{ NonEmptyVector, StateT }
 import cats.implicits._
 import cats.{ MonadError, ~> }
+import io.aecor.liberator.syntax._
+import io.aecor.liberator.{ Algebra, FunctorK }
 
-import scala.collection.immutable.{ Seq, Set }
+import scala.collection.immutable.Set
 
 object Eventsourced {
-  final case class RunningState[S](entityState: S, version: Long) {}
+  final case class InternalState[S](entityState: S, version: Long) {}
 
   sealed abstract class BehaviorFailure extends Exception
   object BehaviorFailure {
@@ -21,37 +23,40 @@ object Eventsourced {
 
   final case class EventEnvelope[E](sequenceNr: Long, event: E, tags: Set[EventTag])
 
-  def apply[F[_]: MonadError[?[_], BehaviorFailure], I, Op[_], S, E](
-    entityBehavior: EventsourcedBehaviorT[F, Op, S, E],
+  def apply[M[_[_]]: FunctorK, F[_]: MonadError[?[_], BehaviorFailure], S, E, I](
+    entityBehavior: EventsourcedBehaviorT[M, F, S, E],
     tagging: Tagging[I],
     journal: EventJournal[F, I, EventEnvelope[E]],
     snapshotEach: Option[Long],
-    snapshotStore: KeyValueStore[F, I, RunningState[S]]
-  ): I => Behavior[F, Op] = { entityId =>
-    val effectiveBehavior = EventsourcedBehaviorT[F, Op, RunningState[S], EventEnvelope[E]](
-      initialState = RunningState(entityBehavior.initialState, 0),
-      commandHandler = entityBehavior.commandHandler
-        .andThen(new (ActionT[F, S, E, ?] ~> ActionT[F, RunningState[S], EventEnvelope[E], ?]) {
-          override def apply[A](
-            fa: ActionT[F, S, E, A]
-          ): ActionT[F, RunningState[S], EventEnvelope[E], A] =
-            ActionT { rs =>
-              fa.run(rs.entityState).map {
-                case (es, a) =>
-                  val envelopes = es.foldLeft(Seq.empty[EventEnvelope[E]]) { (acc, e) =>
-                    acc :+ EventEnvelope(rs.version + acc.size + 1, e, tagging.tag(entityId))
-                  }
-                  (envelopes, a)
-              }
+    snapshotStore: KeyValueStore[F, I, InternalState[S]]
+  )(implicit M: Algebra[M]): I => Behavior[M, F] = { entityId =>
+    val internalize =
+      new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], EventEnvelope[E], ?]) {
+        override def apply[A](
+          fa: ActionT[F, S, E, A]
+        ): ActionT[F, InternalState[S], EventEnvelope[E], A] =
+          ActionT { rs =>
+            fa.run(rs.entityState).map {
+              case (es, a) =>
+                val envelopes = es.foldLeft(Vector.empty[EventEnvelope[E]]) { (acc, e) =>
+                  acc :+ EventEnvelope(rs.version + acc.size + 1, e, tagging.tag(entityId))
+                }
+                (envelopes.toList, a)
             }
-        }),
+          }
+      }
+
+    val effectiveBehavior = EventsourcedBehaviorT[M, F, InternalState[S], EventEnvelope[E]](
+      initialState = InternalState(entityBehavior.initialState, 0),
+      actions = entityBehavior.actions
+        .mapK(internalize),
       applyEvent = (s, e) =>
         entityBehavior
           .applyEvent(s.entityState, e.event)
-          .map(RunningState(_, s.version + 1))
+          .map(InternalState(_, s.version + 1))
     )
 
-    def loadState: F[RunningState[S]] =
+    def loadState: F[InternalState[S]] =
       for {
         snapshot <- snapshotStore.getValue(entityId)
         effectiveInitialState = snapshot.getOrElse(effectiveBehavior.initialState)
@@ -64,22 +69,23 @@ object Eventsourced {
                   case Impossible =>
                     BehaviorFailure
                       .illegalFold(entityId.toString)
-                      .raiseError[F, RunningState[S]]
+                      .raiseError[F, InternalState[S]]
                 }
       } yield out
 
-    def updateState(state: RunningState[S], events: Seq[EventEnvelope[E]]) =
+    def needsSnapshot(state: InternalState[S]): Boolean =
+      snapshotEach
+        .exists(x => state.version % x == 0)
+
+    def updateState(state: InternalState[S], events: List[EventEnvelope[E]]) =
       if (events.isEmpty) {
         state.pure[F]
       } else {
-        val folded =
-          events.toVector.foldM((false, state)) {
+        val folded: Folded[(Boolean, InternalState[S])] =
+          events.foldM((false, state)) {
             case ((snapshotPending, s), e) =>
               effectiveBehavior.applyEvent(s, e).map { next =>
-                def shouldSnapshotNow =
-                  snapshotEach
-                    .exists(x => next.version % x == 0)
-                (snapshotPending || shouldSnapshotNow, next)
+                (snapshotPending || needsSnapshot(next), next)
               }
           }
         folded match {
@@ -95,22 +101,27 @@ object Eventsourced {
           case Impossible =>
             BehaviorFailure
               .illegalFold(entityId.toString)
-              .raiseError[F, RunningState[S]]
+              .raiseError[F, InternalState[S]]
         }
       }
     Behavior.roll {
-      loadState.map { s =>
-        Behavior.fromState(s, new (Op ~> StateT[F, RunningState[S], ?]) {
-          override def apply[A](op: Op[A]): StateT[F, RunningState[S], A] =
-            StateT { state =>
-              for {
-                x <- effectiveBehavior.commandHandler(op).run(state)
-                (events, reply) = x
-                nextState <- updateState(state, events)
-              } yield (nextState, reply)
-            }
+      loadState.map { initialState =>
+        val x = effectiveBehavior.actions.mapK {
+          new (ActionT[F, InternalState[S], EventEnvelope[E], ?] ~> StateT[F, InternalState[S], ?]) {
+            override def apply[A](
+              action: ActionT[F, InternalState[S], EventEnvelope[E], A]
+            ): StateT[F, InternalState[S], A] =
+              StateT { state =>
+                for {
+                  x <- action.run(state)
+                  (events, reply) = x
+                  nextState <- updateState(state, events)
+                } yield (nextState, reply)
+              }
 
-        })
+          }
+        }
+        Behavior.fromState(initialState, x)
       }
     }
   }

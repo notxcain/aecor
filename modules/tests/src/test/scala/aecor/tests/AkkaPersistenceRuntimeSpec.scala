@@ -34,7 +34,6 @@ class AkkaPersistenceRuntimeSpec
     with Matchers
     with ScalaFutures
     with CassandraLifecycle {
-  import CounterOp._
 
   override def systemName = system.name
 
@@ -50,18 +49,22 @@ class AkkaPersistenceRuntimeSpec
   val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
   test("Runtime should work") {
-    val deployCounters =
-      runtime.deploy("Counter", CounterBehavior[Task], Tagging.const[CounterId](CounterEvent.tag))
+    val deployCounters: Task[CounterId => Counter[Task]] =
+      runtime.deploy(
+        "Counter",
+        CounterBehavior.instance.lifted[Task],
+        Tagging.const[CounterId](CounterEvent.tag)
+      )
     val program = for {
       counters <- deployCounters
       first = counters(CounterId("1"))
       second = counters(CounterId("2"))
-      _ <- first(Increment)
-      _ <- second(Increment)
-      _2 <- second(GetValue)
-      _ <- first(Decrement)
-      _1 <- first(GetValue)
-      afterPassivation <- second(GetValue).delayExecution(2.seconds)
+      _ <- first.increment
+      _ <- second.increment
+      _2 <- second.value
+      _ <- first.decrement
+      _1 <- first.value
+      afterPassivation <- second.value.delayExecution(2.seconds)
     } yield (_1, _2, afterPassivation)
 
     program.runAsync.futureValue shouldEqual ((0L, 1L, 1L))

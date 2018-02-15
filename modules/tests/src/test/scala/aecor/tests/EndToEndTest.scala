@@ -8,7 +8,6 @@ import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
 import aecor.testkit.StateEventJournal.State
 import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueStore }
-import aecor.tests.e2e.CounterOp.{ Decrement, Increment }
 import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
 import aecor.tests.e2e._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
@@ -49,9 +48,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       (x, a) => x.copy(counterJournalState = a)
     )
 
-  def counterBehavior =
-    mkBehavior[CounterId, CounterOp, CounterState, CounterEvent](
-      CounterBehavior[StateT[SpecF, SpecState, ?]],
+  def counters =
+    deploy(
+      CounterBehavior.instance.lifted[StateT[SpecF, SpecState, ?]],
       Tagging.const(CounterEvent.tag),
       counterEventJournal
     )
@@ -62,9 +61,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       (x, a) => x.copy(notificationJournalState = a)
     )
 
-  def notificationBehavior =
-    mkBehavior(
-      notification.behavior,
+  def notifications =
+    deploy(
+      notification.behavior.lifted[StateT[SpecF, SpecState, ?]],
       Tagging.const(NotificationEvent.tag),
       notificationEventJournal
     )
@@ -75,7 +74,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       (x, a) => x.copy(scheduleJournalState = a)
     )
 
-  val scheduleAggregate = mkBehavior[ScheduleBucketId, ScheduleOp, ScheduleState, ScheduleEvent](
+  val scheduleBuckets = deploy(
     DefaultScheduleBucket.behavior(clock.zonedDateTime),
     Tagging.const(EventTag("Schedule")),
     schduleEventJournal
@@ -103,7 +102,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     offsetStore = offsetStore,
     eventualConsistencyDelay = 1.second,
     repository = scheduleEntryRepository,
-    buckets = scheduleAggregate.andThen(ScheduleBucket.fromFunctionK),
+    buckets = scheduleBuckets,
     clock = clock.localDateTime,
     parallelism = 1
   )
@@ -121,14 +120,13 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
         TestCounterViewRepository[SpecF, SpecState](
           _.counterViewState,
           (x, a) => x.copy(counterViewState = a)
-        ),
-        counterBehavior
+        )
       ),
       counterEventJournal
         .eventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
     ),
     wireProcess(
-      NotificationProcess(counterBehavior, notificationBehavior),
+      NotificationProcess(counters, notifications),
       counterEventJournal
         .eventsByTag(CounterEvent.tag, notificationProcessConsumerId)
         .map(Coproduct[NotificationProcess.Input](_)),
@@ -142,17 +140,17 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   test("Process should react to events") {
 
-    val counter = wiredK(counterBehavior)
+    val counter = wiredK(counters)
 
     val first = CounterId("1")
     val second = CounterId("2")
 
     val program = for {
-      _ <- counter(first)(Increment)
-      _ <- counter(first)(Increment)
-      _ <- counter(first)(Decrement)
-      _ <- counter(second)(Increment)
-      _ <- counter(second)(Increment)
+      _ <- counter(first).increment
+      _ <- counter(first).increment
+      _ <- counter(first).decrement
+      _ <- counter(second).increment
+      _ <- counter(second).increment
     } yield ()
 
     val Right((state, _)) = program
@@ -176,15 +174,15 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   test("Schedule should fire") {
 
-    val buckets = wiredK(scheduleAggregate)
+    val buckets = wiredK(scheduleBuckets)
 
     def program(n: Int): StateT[SpecF, SpecState, Unit] =
       for {
         now <- clock.localDateTime
         bucketId = ScheduleBucketId("foo", "b")
         bucket = buckets(bucketId)
-        _ <- bucket(ScheduleOp.AddScheduleEntry("e1", "cid", now.plusSeconds(3)))
-        _ <- bucket(ScheduleOp.AddScheduleEntry("e2", "cid", now.plusSeconds(5)))
+        _ <- bucket.addScheduleEntry("e1", "cid", now.plusSeconds(3))
+        _ <- bucket.addScheduleEntry("e2", "cid", now.plusSeconds(5))
         _ <- tickSeconds(3)
         _ <- tickSeconds(2)
         _ <- if (n == 0) {

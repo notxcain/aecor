@@ -1,11 +1,12 @@
 package aecor.testkit
 
 import aecor.data._
-import aecor.testkit.Eventsourced.{ BehaviorFailure, RunningState }
+import aecor.testkit.Eventsourced.{ BehaviorFailure, EventEnvelope, InternalState }
 import aecor.util.NoopKeyValueStore
-import cats.data.{ StateT }
+import cats.data.StateT
 import cats.implicits._
-import cats.{ Monad, ~> }
+import cats.{ Monad, MonadError, ~> }
+import io.aecor.liberator.{ Algebra, FunctorK }
 
 import scala.collection.immutable._
 
@@ -18,23 +19,25 @@ trait E2eSupport {
   ): StateEventJournal[SpecF, I, SpecState, E] =
     StateEventJournal[SpecF, I, SpecState, E](extract, update)
 
-  final def mkBehavior[I, Op[_], S, E](
-    behavior: EventsourcedBehaviorT[StateT[SpecF, SpecState, ?], Op, S, E],
+  final def deploy[M[_[_]], F[_], S, E, I](
+    behavior: EventsourcedBehaviorT[M, F, S, E],
     tagging: Tagging[I],
-    journal: StateEventJournal[SpecF, I, SpecState, E]
-  ): I => Op ~> StateT[SpecF, SpecState, ?] = { id =>
-    val routeTo = Eventsourced[StateT[SpecF, SpecState, ?], I, Op, S, E](
-      behavior,
-      tagging,
-      journal,
-      Option.empty,
-      NoopKeyValueStore[StateT[SpecF, SpecState, ?], I, RunningState[S]]
-    )
-    new (Op ~> StateT[SpecF, SpecState, ?]) {
-      override def apply[A](operation: Op[A]): StateT[SpecF, SpecState, A] =
-        routeTo(id)
-          .run(operation)
-          .map(_._2)
+    journal: EventJournal[F, I, EventEnvelope[E]]
+  )(implicit M: Algebra[M], MF: FunctorK[M], F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
+    val routeTo: I => Behavior[M, F] =
+      Eventsourced[M, F, S, E, I](
+        behavior,
+        tagging,
+        journal,
+        Option.empty,
+        NoopKeyValueStore[F, I, InternalState[S]]
+      )
+    val actionK = M.toFunctionK[PairT[F, Behavior[M, F], ?]](routeTo(id).actions)
+    M.fromFunctionK {
+      new (M.Out ~> F) {
+        override def apply[A](operation: M.Out[A]): F[A] =
+          F.map(actionK(operation))(_._2)
+      }
     }
   }
 
@@ -79,17 +82,17 @@ trait E2eSupport {
           }
     } yield ()
 
-  final def wiredK[I, Op[_]](
-    behavior: I => Op ~> StateT[SpecF, SpecState, ?]
-  ): I => Op ~> StateT[SpecF, SpecState, ?] =
+  final def wiredK[I, M[_[_]]](
+    behavior: I => M[StateT[SpecF, SpecState, ?]]
+  )(implicit M: FunctorK[M]): I => M[StateT[SpecF, SpecState, ?]] =
     i =>
-      new (Op ~> StateT[SpecF, SpecState, ?]) {
-        override def apply[A](fa: Op[A]): StateT[SpecF, SpecState, A] =
+      M.mapK(behavior(i), new (StateT[SpecF, SpecState, ?] ~> StateT[SpecF, SpecState, ?]) {
+        override def apply[A](fa: StateT[SpecF, SpecState, A]): StateT[SpecF, SpecState, A] =
           for {
-            x <- behavior(i)(fa)
+            x <- fa
             _ <- runProcesses
           } yield x
-    }
+      })
 
   final def wired[A, B](f: A => StateT[SpecF, SpecState, B]): A => StateT[SpecF, SpecState, B] =
     new (A => StateT[SpecF, SpecState, B]) {

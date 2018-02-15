@@ -3,12 +3,11 @@ package aecor.tests.e2e
 import aecor.data.Identified
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import cats.implicits._
-import cats.{ Monad, ~> }
+import cats.Monad
 
 object CounterViewProcess {
   def apply[F[_]: Monad](
-    repo: CounterViewRepository[F],
-    counter: CounterId => CounterOp ~> F
+    repo: CounterViewRepository[F]
   ): Identified[CounterId, CounterEvent] => F[Unit] = {
     case Identified(id, CounterIncremented) =>
       for {

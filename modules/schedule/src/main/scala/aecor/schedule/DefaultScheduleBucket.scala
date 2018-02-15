@@ -20,12 +20,8 @@ object DefaultScheduleBucket {
 
   def behavior[F[_]: Functor](
     clock: F[ZonedDateTime]
-  ): EventsourcedBehaviorT[F, ScheduleOp, ScheduleState, ScheduleEvent] =
-    EventsourcedBehaviorT(
-      ScheduleState.initial,
-      DefaultScheduleBucket(clock).asFunctionK,
-      _.update(_)
-    )
+  ): EventsourcedBehaviorT[ScheduleBucket, F, ScheduleState, ScheduleEvent] =
+    EventsourcedBehaviorT(DefaultScheduleBucket(clock), ScheduleState.initial, _.update(_))
 }
 
 class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
@@ -41,16 +37,15 @@ class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
         val timestamp = zdt.toInstant
         val now = zdt.toLocalDateTime
         if (state.unfired.get(entryId).isDefined || state.fired.contains(entryId)) {
-          Vector.empty -> (())
+          List.empty -> (())
         } else {
           val scheduleEntryAdded = ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp)
           val firedEvent = if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
-            Vector(ScheduleEntryFired(entryId, correlationId, timestamp))
+            List(ScheduleEntryFired(entryId, correlationId, timestamp))
           } else {
-            Vector.empty
+            List.empty
           }
-
-          (scheduleEntryAdded +: firedEvent, ())
+          (scheduleEntryAdded :: firedEvent, ())
         }
       }
 
@@ -62,7 +57,7 @@ class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
         state
           .findEntry(entryId)
           .map(entry => ScheduleEntryFired(entry.id, entry.correlationId, timestamp))
-          .toVector -> (())
+          .toList -> (())
       }
     }
 }

@@ -10,6 +10,8 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.~>
 import aecor.util.effect._
+import io.aecor.liberator.Algebra
+
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
@@ -19,13 +21,14 @@ object GenericAkkaRuntime {
 }
 
 final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
-  def deploy[I: KeyEncoder: KeyDecoder, Op[_]](
+  def deploy[I: KeyEncoder: KeyDecoder, M[_[_]]](
     typeName: String,
-    createBehavior: I => Behavior[F, Op],
+    createBehavior: I => Behavior[M, F],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  ): F[I => Op ~> F] =
+  )(implicit M: Algebra[M]): F[I => M[F]] =
     Effect[F].delay {
 
+      type Op[A] = M.Out[A]
       import system.dispatcher
 
       val numberOfShards = settings.numberOfShards
@@ -56,9 +59,11 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
       val keyEncoder = KeyEncoder[I]
 
       i =>
-        new (Op ~> F) {
-          override def apply[A](fa: Op[A]): F[A] = Effect[F].fromFuture {
-            (shardRegionRef ? Command(keyEncoder(i), fa)).asInstanceOf[Future[A]]
+        M.fromFunctionK {
+          new (Op ~> F) {
+            override def apply[A](fa: Op[A]): F[A] = Effect[F].fromFuture {
+              (shardRegionRef ? Command(keyEncoder(i), fa)).asInstanceOf[Future[A]]
+            }
           }
         }
     }

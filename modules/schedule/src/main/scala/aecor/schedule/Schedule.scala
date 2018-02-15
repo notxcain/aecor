@@ -70,7 +70,6 @@ object Schedule {
           DefaultScheduleBucket.behavior(clock.zonedDateTime),
           Tagging.const[ScheduleBucketId](eventTag)
         )
-        .map(_.andThen(ScheduleBucket.fromFunctionK))
 
     def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
       val journal =

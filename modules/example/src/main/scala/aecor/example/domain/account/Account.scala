@@ -4,10 +4,11 @@ import aecor.example.AnyValCirceEncoding
 import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.Rejection
 import aecor.example.domain.transaction.TransactionId
-import io.aecor.liberator.macros.algebra
+import io.aecor.liberator.macros.{ algebra, functorK }
 import io.circe.{ Decoder, Encoder }
 
 @algebra
+@functorK
 trait Account[F[_]] {
   def open(checkBalance: Boolean): F[Either[Rejection, Unit]]
   def credit(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]

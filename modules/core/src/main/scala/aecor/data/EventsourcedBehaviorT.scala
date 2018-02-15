@@ -1,46 +1,40 @@
 package aecor.data
 
-import cats.{ Applicative, Functor, ~> }
-import io.aecor.liberator.Algebra
+import cats.{ Applicative, Functor }
+import io.aecor.liberator.FunctorK
 
-final case class EventsourcedBehaviorT[F[_], Op[_], State, Event](
+final case class EventsourcedBehaviorT[M[_[_]], F[_], State, Event](
+  actions: M[ActionT[F, State, Event, ?]],
   initialState: State,
-  commandHandler: Op ~> ActionT[F, State, Event, ?],
   applyEvent: (State, Event) => Folded[State]
 )
 
-final case class EventsourcedBehavior[Op[_], S, E](commandHandler: Op ~> Action[S, E, ?],
-                                                   initialState: S,
-                                                   applyEvent: (S, E) => Folded[S]) {
-  def enrich[F[_]: Functor, M](fm: F[M]): EventsourcedBehaviorT[F, Op, S, Enriched[M, E]] =
+final case class EventsourcedBehavior[M[_[_]], S, E](actions: M[Action[S, E, ?]],
+                                                     initialState: S,
+                                                     applyEvent: (S, E) => Folded[S]) {
+  def enrich[F[_]: Functor, Env](
+    fm: F[Env]
+  )(implicit M: FunctorK[M]): EventsourcedBehaviorT[M, F, S, Enriched[Env, E]] =
     EventsourcedBehaviorT(
+      M.mapK(actions, ActionT.enrich(fm)),
       initialState,
-      commandHandler.andThen(ActionT.enrich(fm)),
       (s, e) => applyEvent(s, e.event)
     )
 
-  def plain[F[_]: Applicative]: EventsourcedBehaviorT[F, Op, S, E] =
-    EventsourcedBehaviorT(initialState, commandHandler.andThen(ActionT.liftK[F, S, E]), applyEvent)
+  def lifted[F[_]: Applicative](implicit M: FunctorK[M]): EventsourcedBehaviorT[M, F, S, E] =
+    EventsourcedBehaviorT(M.mapK(actions, ActionT.liftK[F, S, E]), initialState, applyEvent)
 }
 
 final case class Enriched[M, E](metadata: M, event: E)
 
 object EventsourcedBehavior {
-
-  def optionalM[M[_[_]], State, Event](
-    commandHandler: M[Action[Option[State], Event, ?]],
+  def optional[M[_[_]], State, Event](
+    actions: M[Action[Option[State], Event, ?]],
     init: Event => Folded[State],
     applyEvent: (State, Event) => Folded[State]
-  )(implicit M: Algebra[M]): EventsourcedBehavior[M.Out, Option[State], Event] =
-    optional(M.toFunctionK(commandHandler), init, applyEvent)
-
-  def optional[Op[_], State, Event](
-    commandHandler: Op ~> Action[Option[State], Event, ?],
-    init: Event => Folded[State],
-    applyEvent: (State, Event) => Folded[State]
-  ): EventsourcedBehavior[Op, Option[State], Event] =
+  ): EventsourcedBehavior[M, Option[State], Event] =
     EventsourcedBehavior(
-      commandHandler,
+      actions,
       Option.empty[State],
       (os, e) => os.map(s => applyEvent(s, e).map(Some(_))).getOrElse(Folded.impossible)
     )

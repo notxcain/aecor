@@ -5,9 +5,11 @@ import pl.project13.scala.sbt._
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    scalaVersion := "2.11.11-bin-typelevel-4",
-    scalaOrganization := "org.typelevel",
-    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.4-bin-typelevel-4")
+//    scalaVersion := "2.11.11-bin-typelevel-4",
+    scalaVersion := "2.11.12",
+//    scalaOrganization := "org.typelevel",
+//    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.4-bin-typelevel-4")
+    crossScalaVersions := Seq("2.11.12", "2.12.4")
   )
 )
 
@@ -38,9 +40,8 @@ lazy val liberatorVersion = "0.7.0"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
-  libraryDependencies ++= Seq(
-    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion)
-  ),
+  addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
     .filter(_ != "-Xfatal-warnings")
@@ -181,9 +182,6 @@ lazy val exampleSettings = {
     sources in (Compile, doc) := Nil,
     libraryDependencies ++=
       Seq(
-        compilerPlugin(
-          "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
-        ),
         "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion.value,
         "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,

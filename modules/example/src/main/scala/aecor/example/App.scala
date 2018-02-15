@@ -66,7 +66,6 @@ object App {
           EventsourcedTransactionAggregate.behavior.enrich(metaProvider),
           tagging
         )
-        .map(_.andThen(TransactionAggregate.fromFunctionK))
 
     val deployAccounts: Task[AccountId => Account[Task]] =
       runtime
@@ -75,7 +74,6 @@ object App {
           EventsourcedAccount.behavior.enrich(metaProvider),
           Tagging.const[AccountId](EventTag("Account"))
         )
-        .map(_.andThen(Account.fromFunctionK))
 
     def startTransactionProcessing(
       accounts: AccountId => Account[Task],

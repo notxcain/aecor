@@ -22,6 +22,7 @@ import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.effect.Effect
+import cats.~>
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
@@ -33,7 +34,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   def props[F[_]: Effect, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    behavior: EventsourcedBehaviorT[F, Op, State, Event],
+    actions: Op ~> ActionT[F, State, Event, ?],
+    initialState: State,
+    updateState: (State, Event) => Folded[State],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[I],
     idleTimeout: FiniteDuration,
@@ -43,7 +46,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     Props(
       new AkkaPersistenceRuntimeActor(
         entityName,
-        behavior,
+        actions,
+        initialState,
+        updateState,
         snapshotPolicy,
         tagging,
         idleTimeout,
@@ -67,7 +72,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   */
 private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  behavior: EventsourcedBehaviorT[F, Op, State, Event],
+  actions: Op ~> ActionT[F, State, Event, ?],
+  initialState: State,
+  updateState: (State, Event) => Folded[State],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[I],
   idleTimeout: FiniteDuration,
@@ -99,7 +106,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
 
   log.info("[{}] Starting...", persistenceId)
 
-  private var state: State = behavior.initialState
+  private var state: State = initialState
 
   private var eventCount = 0L
 
@@ -164,8 +171,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
 
   private def handleCommand(command: Op[_]): Unit = {
     val opId = UUID.randomUUID()
-    behavior
-      .commandHandler(command)
+    actions(command)
       .run(state)
       .unsafeToFuture()
       .map {
@@ -225,8 +231,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
     }
 
   private def applyEvent(event: Event): Unit =
-    state = behavior
-      .applyEvent(state, event)
+    state = updateState(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
         log.error(error, error.getMessage)

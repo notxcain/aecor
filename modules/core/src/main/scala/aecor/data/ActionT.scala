@@ -2,17 +2,16 @@ package aecor.data
 
 import cats.{ Applicative, Functor, ~> }
 
-import scala.collection.immutable._
 import cats.implicits._
-final case class Action[S, E, A](run: S => (Seq[E], A)) {
+final case class Action[S, E, A](run: S => (List[E], A)) {
   def liftF[F[_]: Applicative]: ActionT[F, S, E, A] = ActionT.lift(this)
 }
 
 object Action {
-  def read[S, E, A](f: S => A): Action[S, E, A] = Action(s => (Seq.empty[E], f(s)))
+  def read[S, E, A](f: S => A): Action[S, E, A] = Action(s => (List.empty[E], f(s)))
 }
 
-final case class ActionT[F[_], State, Event, Result](run: State => F[(Seq[Event], Result)])
+final case class ActionT[F[_], State, Event, Result](run: State => F[(List[Event], Result)])
     extends AnyVal {
   def mapState[State1](f: State1 => State): ActionT[F, State1, Event, Result] =
     ActionT(run.compose(f))

@@ -25,73 +25,21 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[F[_]: Effect, K: KeyEncoder: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def deploy[M[_[_]], F[_]: Effect, State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
     typeName: String,
-    behavior: EventsourcedBehaviorT[F, Op, State, Event],
+    behavior: EventsourcedBehaviorT[M, F, State, Event],
     tagging: Tagging[K],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  ): F[K => Op ~> F] =
+  )(implicit M: Algebra[M]): F[K => M[F]] =
     Effect[F].delay {
       import system.dispatcher
       val props =
         AkkaPersistenceRuntimeActor.props(
           typeName,
-          behavior,
-          snapshotPolicy,
-          tagging,
-          settings.idleTimeout,
-          journalAdapter.writeJournalId,
-          snapshotPolicy.pluginId
-        )
-
-      def extractEntityId: ShardRegion.ExtractEntityId = {
-        case EntityCommand(entityId, c) =>
-          (entityId, AkkaPersistenceRuntimeActor.HandleCommand(c))
-      }
-
-      val numberOfShards = settings.numberOfShards
-
-      def extractShardId: ShardRegion.ExtractShardId = {
-        case EntityCommand(entityId, _) =>
-          (scala.math.abs(entityId.hashCode) % numberOfShards).toString
-        case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
-      }
-
-      val regionRef = ClusterSharding(system).start(
-        typeName = typeName,
-        entityProps = props,
-        settings = settings.clusterShardingSettings,
-        extractEntityId = extractEntityId,
-        extractShardId = extractShardId
-      )
-
-      implicit val askTimeout = Timeout(settings.askTimeout)
-
-      val keyEncoder = KeyEncoder[K]
-
-      i =>
-        new (Op ~> F) {
-          override def apply[A](fa: Op[A]): F[A] =
-            Effect[F].fromFuture {
-              (regionRef ? EntityCommand(keyEncoder(i), fa)).asInstanceOf[Future[A]]
-            }
-        }
-    }
-
-  def deploy2[F[_]: Effect, K: KeyEncoder: KeyDecoder, M[_[_]], Op[_], State, Event: PersistentEncoder: PersistentDecoder](
-    typeName: String,
-    behavior: EventsourcedBehaviorT[F, Op, State, Event],
-    tagging: Tagging[K],
-    snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
-    settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: Algebra.Aux[M, Op]): F[K => M[F]] =
-    Effect[F].delay {
-      import system.dispatcher
-      val props =
-        AkkaPersistenceRuntimeActor.props(
-          typeName,
-          behavior,
+          M.toFunctionK(behavior.actions),
+          behavior.initialState,
+          behavior.applyEvent,
           snapshotPolicy,
           tagging,
           settings.idleTimeout,
@@ -126,8 +74,8 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
 
       i =>
         M.fromFunctionK {
-          new (Op ~> F) {
-            override def apply[A](fa: Op[A]): F[A] =
+          new (M.Out ~> F) {
+            override def apply[A](fa: M.Out[A]): F[A] =
               Effect[F].fromFuture {
                 (regionRef ? EntityCommand(keyEncoder(i), fa)).asInstanceOf[Future[A]]
               }
