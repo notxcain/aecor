@@ -1,6 +1,7 @@
 package aecor.runtime.akkapersistence
 
 import java.net.URLDecoder
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 import java.util.UUID
@@ -8,6 +9,7 @@ import java.util.UUID
 import aecor.data._
 import aecor.util.effect._
 import aecor.encoding.KeyDecoder
+import aecor.gadt.WireProtocol
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.runtime.akkapersistence.serialization.{
@@ -22,7 +24,6 @@ import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.effect.Effect
-import cats.~>
 
 import scala.collection.immutable.Seq
 import scala.concurrent.duration.FiniteDuration
@@ -32,9 +33,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[F[_]: Effect, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+  def props[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    actions: Op ~> ActionT[F, State, Event, ?],
+    actions: M[ActionT[F, State, Event, ?]],
     initialState: State,
     updateState: (State, Event) => Folded[State],
     snapshotPolicy: SnapshotPolicy[State],
@@ -42,7 +43,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     idleTimeout: FiniteDuration,
     journalPluginId: String,
     snapshotPluginId: String
-  ): Props =
+  )(implicit M: WireProtocol[M]): Props =
     Props(
       new AkkaPersistenceRuntimeActor(
         entityName,
@@ -57,7 +58,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
       )
     )
 
-  final case class HandleCommand[A](command: A) extends Message
+  final case class HandleCommand(commandBytes: ByteBuffer) extends Message
   case object Stop
 }
 
@@ -70,9 +71,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I: KeyDecoder, Op[_], State, Event: PersistentEncoder: PersistentDecoder](
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  actions: Op ~> ActionT[F, State, Event, ?],
+  actions: M[ActionT[F, State, Event, ?]],
   initialState: State,
   updateState: (State, Event) => Folded[State],
   snapshotPolicy: SnapshotPolicy[State],
@@ -80,13 +81,17 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
   idleTimeout: FiniteDuration,
   override val journalPluginId: String,
   override val snapshotPluginId: String
-) extends PersistentActor
+)(implicit M: WireProtocol[M])
+    extends PersistentActor
     with ActorLogging
     with Stash {
 
   import context.dispatcher
 
-  case class CommandResult[A](opId: UUID, events: Seq[Event], reply: A)
+  case class CommandResult[A](opId: UUID,
+                              events: Seq[Event],
+                              response: A,
+                              responseEncoder: WireProtocol.Encoder[A])
 
   private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
@@ -154,12 +159,12 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
 
   override def receiveCommand: Receive = {
     case HandleCommand(command) =>
-      handleCommand(command.asInstanceOf[Op[_]])
+      handleCommand(command)
     case ReceiveTimeout =>
       passivate()
     case AkkaPersistenceRuntimeActor.Stop =>
       context.stop(self)
-    case CommandResult(opId, events, reply) =>
+    case CommandResult(opId, events, reply, _) =>
       log.debug(
         "[{}] Received result of unknown command invocation [{}], ignoring reply [{}] and events [{}]",
         persistenceId,
@@ -169,26 +174,29 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
       )
   }
 
-  private def handleCommand(command: Op[_]): Unit = {
+  private def handleCommand(commandBytes: ByteBuffer): Unit = {
+    val pair = M.decoder.decode(commandBytes).fold(throw _, identity)
+    val (invocation, responseEncoder) = (pair.left, pair.right)
     val opId = UUID.randomUUID()
-    actions(command)
+    invocation
+      .invoke(actions)
       .run(state)
       .unsafeToFuture()
       .map {
-        case (events, reply) =>
-          CommandResult(opId, events, reply)
+        case (events, response) =>
+          CommandResult(opId, events, response, responseEncoder)
       }
       .pipeTo(self)(sender)
     context.become {
-      case CommandResult(`opId`, events, reply) =>
+      case CommandResult(`opId`, events, reply, renc) =>
         log.debug(
           "[{}] Command [{}] produced reply [{}] and events [{}]",
           persistenceId,
-          command,
+          invocation,
           reply,
           events
         )
-        handleCommandResult(events, reply)
+        handleCommandResult(events, renc.encode(reply))
         unstashAll()
         context.become(receiveCommand)
       case Status.Failure(e) =>
@@ -200,9 +208,9 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
     }
   }
 
-  private def handleCommandResult[A](events: Seq[Event], reply: A): Unit =
+  private def handleCommandResult[A](events: Seq[Event], replyBytes: ByteBuffer): Unit =
     if (events.isEmpty) {
-      sender() ! reply
+      sender() ! replyBytes
     } else {
       val envelopes =
         events.map(e => Tagged(eventEncoder.encode(e), tagger.tag(id).map(_.value)))
@@ -212,7 +220,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
       var unpersistedEventCount = events.size
       if (unpersistedEventCount == 1) {
         persist(envelopes.head) { _ =>
-          sender() ! reply
+          sender() ! replyBytes
           eventCount += 1
           markSnapshotAsPendingIfNeeded()
           snapshotIfPending()
@@ -223,7 +231,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[F[_]: Effect, I
           eventCount += 1
           markSnapshotAsPendingIfNeeded()
           if (unpersistedEventCount == 0) {
-            sender() ! reply
+            sender() ! replyBytes
             snapshotIfPending()
           }
         }

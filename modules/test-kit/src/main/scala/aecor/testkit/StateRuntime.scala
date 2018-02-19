@@ -1,11 +1,13 @@
 package aecor.testkit
 
+import aecor.ReifiedInvocation
+import aecor.arrow.Invocation
 import aecor.data.EventsourcedBehaviorT
 import aecor.data.Folded.{ Impossible, Next }
 import cats.data._
 import cats.{ Functor, MonadError, ~> }
 import cats.implicits._
-import io.aecor.liberator.{ Algebra, FunctorK }
+import io.aecor.liberator.FunctorK
 
 object StateRuntime {
 
@@ -16,17 +18,16 @@ object StateRuntime {
     */
   def single[M[_[_]], F[_], S, E](
     behavior: EventsourcedBehaviorT[M, F, S, E]
-  )(implicit F: MonadError[F, Throwable], M: Algebra[M]): M[StateT[F, Vector[E], ?]] =
-    M.fromFunctionK {
-      val actionsK = M.toFunctionK(behavior.actions)
-      new (M.Out ~> StateT[F, Vector[E], ?]) {
-        override def apply[A](op: M.Out[A]): StateT[F, Vector[E], A] =
+  )(implicit F: MonadError[F, Throwable], M: ReifiedInvocation[M]): M[StateT[F, Vector[E], ?]] =
+    M.create {
+      new (Invocation[M, ?] ~> StateT[F, Vector[E], ?]) {
+        override def apply[A](op: Invocation[M, A]): StateT[F, Vector[E], A] =
           for {
             events <- StateT.get[F, Vector[E]]
             foldedState = events.foldM(behavior.initialState)(behavior.applyEvent)
             result <- foldedState match {
                        case Next(state) =>
-                         StateT.liftF(actionsK(op).run(state)).flatMap {
+                         StateT.liftF(op.invoke(behavior.actions).run(state)).flatMap {
                            case (es, r) =>
                              StateT
                                .modify[F, Vector[E]](_ ++ es)

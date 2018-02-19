@@ -1,7 +1,11 @@
 package aecor.runtime.akkapersistence
 
+import java.nio.ByteBuffer
+
 import aecor.data._
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
+import aecor.gadt.WireProtocol
+import aecor.gadt.WireProtocol.Encoded
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.readside.{ AkkaPersistenceEventJournalQuery, JournalQuery }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
@@ -12,15 +16,15 @@ import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.~>
-import io.aecor.liberator.Algebra
-
+import io.aecor.liberator.syntax._
 import scala.concurrent.Future
 
 object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
     new AkkaPersistenceRuntime(system, journalAdapter)
 
-  private[akkapersistence] final case class EntityCommand[C[_], A](entityId: String, command: C[A])
+  private[akkapersistence] final case class EntityCommand(entityId: String,
+                                                          commandBytes: ByteBuffer)
 }
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
@@ -31,13 +35,13 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
     tagging: Tagging[K],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: Algebra[M]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M]): F[K => M[F]] =
     Effect[F].delay {
       import system.dispatcher
       val props =
         AkkaPersistenceRuntimeActor.props(
           typeName,
-          M.toFunctionK(behavior.actions),
+          behavior.actions,
           behavior.initialState,
           behavior.applyEvent,
           snapshotPolicy,
@@ -73,14 +77,20 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
       val keyEncoder = KeyEncoder[K]
 
       i =>
-        M.fromFunctionK {
-          new (M.Out ~> F) {
-            override def apply[A](fa: M.Out[A]): F[A] =
-              Effect[F].fromFuture {
-                (regionRef ? EntityCommand(keyEncoder(i), fa)).asInstanceOf[Future[A]]
-              }
+        M.encoder.mapK(new (Encoded ~> F) {
+          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] = {
+            val (bytes, responseDecoder) = fa
+            Effect[F].fromFuture {
+              (regionRef ? EntityCommand(keyEncoder(i), bytes))
+                .asInstanceOf[Future[ByteBuffer]]
+                .map(responseDecoder.decode)
+                .flatMap {
+                  case Right(value) => Future.successful(value)
+                  case Left(error)  => Future.failed(error)
+                }
+            }
           }
-        }
+        })
     }
 
   def journal[K: KeyDecoder, E: PersistentDecoder]: JournalQuery[O, K, E] =

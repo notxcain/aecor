@@ -28,6 +28,7 @@ lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.4"
 lazy val simulacrumVersion = "0.11.0"
+lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
 
@@ -138,7 +139,9 @@ lazy val coreSettings = Seq(
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
-    "io.aecor" %% "liberator" % "0.7.0"
+    "io.aecor" %% "liberator" % "0.7.0",
+    "io.suzaku" %% "boopickle" % "1.2.6",
+    "org.scalameta" %% "scalameta" % scalametaVersion,
   )
 )
 

@@ -4,11 +4,12 @@ import aecor.example.AnyValCirceEncoding
 import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.Rejection
 import aecor.example.domain.transaction.TransactionId
-import io.aecor.liberator.macros.{ algebra, functorK }
+import aecor.macros.wireProtocol
+import io.aecor.liberator.macros.algebra
 import io.circe.{ Decoder, Encoder }
 
 @algebra
-@functorK
+@wireProtocol
 trait Account[F[_]] {
   def open(checkBalance: Boolean): F[Either[Rejection, Unit]]
   def credit(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]
@@ -16,18 +17,19 @@ trait Account[F[_]] {
 }
 
 object Account {
+  import boopickle.Default._
+
+  implicit val rejectionPickler =
+    compositePickler[Rejection]
+      .addConcreteType[AccountDoesNotExist.type]
+      .addConcreteType[InsufficientFunds.type]
+      .addConcreteType[AccountExists.type]
+      .addConcreteType[HoldNotFound.type]
+
   sealed trait Rejection extends Product with Serializable
-
-  sealed trait AuthorizeTransactionRejection
-
-  case object DuplicateTransaction extends AuthorizeTransactionRejection
-
-  case object AccountDoesNotExist extends Rejection with AuthorizeTransactionRejection
-
-  case object InsufficientFunds extends Rejection with AuthorizeTransactionRejection
-
+  case object AccountDoesNotExist extends Rejection
+  case object InsufficientFunds extends Rejection
   case object AccountExists extends Rejection
-
   case object HoldNotFound extends Rejection
 }
 

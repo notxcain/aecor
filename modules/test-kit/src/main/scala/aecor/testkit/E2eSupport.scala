@@ -1,12 +1,14 @@
 package aecor.testkit
 
+import aecor.ReifiedInvocation
+import aecor.arrow.Invocation
 import aecor.data._
 import aecor.testkit.Eventsourced.{ BehaviorFailure, EventEnvelope, InternalState }
 import aecor.util.NoopKeyValueStore
 import cats.data.StateT
 import cats.implicits._
 import cats.{ Monad, MonadError, ~> }
-import io.aecor.liberator.{ Algebra, FunctorK }
+import io.aecor.liberator.FunctorK
 
 import scala.collection.immutable._
 
@@ -23,7 +25,9 @@ trait E2eSupport {
     behavior: EventsourcedBehaviorT[M, F, S, E],
     tagging: Tagging[I],
     journal: EventJournal[F, I, EventEnvelope[E]]
-  )(implicit M: Algebra[M], MF: FunctorK[M], F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
+  )(implicit M: ReifiedInvocation[M],
+    MF: FunctorK[M],
+    F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
     val routeTo: I => Behavior[M, F] =
       Eventsourced[M, F, S, E, I](
         behavior,
@@ -32,11 +36,12 @@ trait E2eSupport {
         Option.empty,
         NoopKeyValueStore[F, I, InternalState[S]]
       )
-    val actionK = M.toFunctionK[PairT[F, Behavior[M, F], ?]](routeTo(id).actions)
-    M.fromFunctionK {
-      new (M.Out ~> F) {
-        override def apply[A](operation: M.Out[A]): F[A] =
-          F.map(actionK(operation))(_._2)
+
+    M.create {
+      new (Invocation[M, ?] ~> F) {
+        private val actions = routeTo(id).actions
+        final override def apply[A](operation: Invocation[M, A]): F[A] =
+          operation.invoke[PairT[F, Behavior[M, F], ?]](actions).map(_._2)
       }
     }
   }

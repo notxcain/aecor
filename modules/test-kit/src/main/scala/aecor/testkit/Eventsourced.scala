@@ -1,5 +1,6 @@
 package aecor.testkit
 
+import aecor.ReifiedInvocation
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
 import aecor.util.KeyValueStore
@@ -8,7 +9,7 @@ import cats.data.{ NonEmptyVector, StateT }
 import cats.implicits._
 import cats.{ MonadError, ~> }
 import io.aecor.liberator.syntax._
-import io.aecor.liberator.{ Algebra, FunctorK }
+import io.aecor.liberator.FunctorK
 
 import scala.collection.immutable.Set
 
@@ -29,7 +30,7 @@ object Eventsourced {
     journal: EventJournal[F, I, EventEnvelope[E]],
     snapshotEach: Option[Long],
     snapshotStore: KeyValueStore[F, I, InternalState[S]]
-  )(implicit M: Algebra[M]): I => Behavior[M, F] = { entityId =>
+  )(implicit M: ReifiedInvocation[M]): I => Behavior[M, F] = { entityId =>
     val internalize =
       new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], EventEnvelope[E], ?]) {
         override def apply[A](
