@@ -8,8 +8,8 @@ import cats.implicits._
 import cats.{ Applicative, Monad }
 
 object StateEventJournal {
-  case class State[I, E](eventsById: Map[I, Vector[EventEnvelope[E]]],
-                         eventsByTag: Map[EventTag, Vector[Identified[I, EventEnvelope[E]]]],
+  case class State[I, E](eventsById: Map[I, Vector[EventEnvelope[I, E]]],
+                         eventsByTag: Map[EventTag, Vector[EventEnvelope[I, E]]],
                          consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
     def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
@@ -17,20 +17,24 @@ object StateEventJournal {
     def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[I, E] =
       copy(consumerOffsets = consumerOffsets.updated(tag -> consumerId, offset))
 
-    def appendEvents(id: I, events: NonEmptyVector[EventEnvelope[E]]): State[I, E] =
+    def appendEvents(id: I, events: NonEmptyVector[EventEnvelope[I, E]]): State[I, E] = {
+      val updatedEventsById = eventsById
+        .updated(id, eventsById.getOrElse(id, Vector.empty) ++ events.toVector)
+      val newEventsByTag: Map[EventTag, Vector[EventEnvelope[I, E]]] = events
+        .map(id -> _)
+        .toVector
+        .flatMap {
+          case i @ (_, a) =>
+            a.tags.toVector.map(_ -> i)
+        }
+        .groupBy(_._1)
+        .mapValues(_.map(_._2._2))
       copy(
-        eventsById = eventsById
-          .updated(id, eventsById.getOrElse(id, Vector.empty) ++ events.toVector),
+        eventsById = updatedEventsById,
         eventsByTag =
-          eventsByTag |+| events
-            .map(Identified(id, _))
-            .toVector
-            .flatMap { i =>
-              i.a.tags.toVector.map(_ -> i)
-            }
-            .groupBy(_._1)
-            .mapValues(_.map(_._2))
+          eventsByTag |+| newEventsByTag
       )
+    }
   }
 
   object State {
@@ -44,17 +48,17 @@ object StateEventJournal {
 
 class StateEventJournal[F[_]: Monad, I, A, E](extract: A => State[I, E],
                                               update: (A, State[I, E]) => A)
-    extends EventJournal[StateT[F, A, ?], I, EventEnvelope[E]] {
-  override def append(id: I, events: NonEmptyVector[EventEnvelope[E]]): StateT[F, A, Unit] =
+    extends EventJournal[StateT[F, A, ?], I, EventEnvelope[I, E]] {
+  override def append(id: I, events: NonEmptyVector[EventEnvelope[I, E]]): StateT[F, A, Unit] =
     StateT
       .modify[F, State[I, E]](_.appendEvents(id, events))
       .transformS(extract, update)
 
   override def foldById[S](id: I, offset: Long, zero: S)(
-    f: (S, EventEnvelope[E]) => Folded[S]
+    f: (S, EventEnvelope[I, E]) => Folded[S]
   ): StateT[F, A, Folded[S]] =
     StateT
-      .inspect[F, State[I, E], Vector[EventEnvelope[E]]](
+      .inspect[F, State[I, E], Vector[EventEnvelope[I, E]]](
         _.eventsById
           .get(id)
           .map(_.drop(offset.toInt))
@@ -64,15 +68,15 @@ class StateEventJournal[F[_]: Monad, I, A, E](extract: A => State[I, E],
       .transformS(extract, update)
 
   def eventsByTag(tag: EventTag,
-                  consumerId: ConsumerId): Processable[StateT[F, A, ?], Identified[I, E]] =
-    new Processable[StateT[F, A, ?], Identified[I, E]] {
-      override def process(f: Identified[I, E] => StateT[F, A, Unit]): StateT[F, A, Unit] =
+                  consumerId: ConsumerId): Processable[StateT[F, A, ?], EntityEvent[I, E]] =
+    new Processable[StateT[F, A, ?], EntityEvent[I, E]] {
+      override def process(f: EntityEvent[I, E] => StateT[F, A, Unit]): StateT[F, A, Unit] =
         for {
           offset0 <- StateT
                       .inspect[F, State[I, E], Int](_.getConsumerOffset(tag, consumerId))
                       .transformS(extract, update)
           result <- StateT
-                     .inspect[F, State[I, E], Vector[(Identified[I, EventEnvelope[E]], Int)]] {
+                     .inspect[F, State[I, E], Vector[(EventEnvelope[I, E], Int)]] {
                        _.eventsByTag
                          .getOrElse(tag, Vector.empty)
                          .zipWithIndex
@@ -83,7 +87,7 @@ class StateEventJournal[F[_]: Monad, I, A, E](extract: A => State[I, E],
           _ <- result.traverse {
                 case (i, offset) =>
                   for {
-                    _ <- f(i.map(_.event))
+                    _ <- f(i.entityEvent)
                     _ <- StateT
                           .modify[F, State[I, E]](_.setConsumerOffset(tag, consumerId, offset + 1))
                           .transformS(extract, update)

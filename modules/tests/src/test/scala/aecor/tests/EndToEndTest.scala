@@ -88,7 +88,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
   val wrappedEventJournal = new ScheduleEventJournal[StateT[SpecF, SpecState, ?]] {
     override def processNewEvents(
-      f: Identified[ScheduleBucketId, ScheduleEvent] => StateT[SpecF, SpecState, Unit]
+      f: EntityEvent[ScheduleBucketId, ScheduleEvent] => StateT[SpecF, SpecState, Unit]
     ): StateT[SpecF, SpecState, Unit] =
       schduleEventJournal
         .eventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)

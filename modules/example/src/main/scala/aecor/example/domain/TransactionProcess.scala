@@ -1,6 +1,6 @@
 package aecor.example.domain
 
-import aecor.data.Identified
+import aecor.data.EntityEvent
 import aecor.example.domain.account.{
   Account,
   AccountId,
@@ -13,7 +13,7 @@ import cats.implicits._
 import cats.{ Monad, MonadError }
 
 object TransactionProcess {
-  type Input = (Identified[TransactionId, TransactionEvent])
+  type Input = (EntityEvent[TransactionId, TransactionEvent])
 
   trait TransactionProcessFailure[F[_]] {
     def failProcess[A](reason: String): F[A]
@@ -30,7 +30,11 @@ object TransactionProcess {
   def apply[F[_]: Monad](transactions: TransactionId => TransactionAggregate[F],
                          accounts: AccountId => Account[F],
                          failure: TransactionProcessFailure[F]): Input => F[Unit] = {
-    case Identified(transactionId, TransactionEvent.TransactionCreated(From(from), _, amount)) =>
+    case EntityEvent(
+        transactionId,
+        _,
+        TransactionEvent.TransactionCreated(From(from), _, amount)
+        ) =>
       for {
         out <- accounts(from)
                 .debit(AccountTransactionId(transactionId, AccountTransactionKind.Normal), amount)
@@ -41,7 +45,7 @@ object TransactionProcess {
                 transactions(transactionId).authorize
             }
       } yield ()
-    case Identified(transactionId, TransactionEvent.TransactionAuthorized) =>
+    case EntityEvent(transactionId, _, TransactionEvent.TransactionAuthorized) =>
       for {
         txn <- transactions(transactionId).getInfo.flatMap {
                 case Some(x) => x.pure[F]

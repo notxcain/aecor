@@ -1,6 +1,6 @@
 package aecor.tests.e2e
 
-import aecor.data.Identified
+import aecor.data.EntityEvent
 import aecor.tests.e2e.CounterEvent.CounterIncremented
 import aecor.tests.e2e.notification.{ Notification, NotificationEvent, NotificationId }
 import aecor.util.FunctionBuilder.syntax._
@@ -10,13 +10,13 @@ import shapeless.{ :+:, CNil, HNil }
 
 object NotificationProcess {
   type Input =
-    Identified[CounterId, CounterEvent] :+: Identified[NotificationId, NotificationEvent] :+: CNil
+    EntityEvent[CounterId, CounterEvent] :+: EntityEvent[NotificationId, NotificationEvent] :+: CNil
 
   def apply[F[_]: Monad](counters: CounterId => Counter[F],
                          notifications: NotificationId => Notification[F]): Input => F[Unit] =
     build {
-      at[Identified[CounterId, CounterEvent]] {
-        case Identified(counterId, CounterIncremented) =>
+      at[EntityEvent[CounterId, CounterEvent]] {
+        case EntityEvent(counterId, _, CounterIncremented) =>
           for {
             value <- counters(counterId).value
             _ <- if (value % 2 == 0) {
@@ -27,8 +27,8 @@ object NotificationProcess {
           } yield ()
         case _ => ().pure[F]
       } ::
-        at[Identified[NotificationId, NotificationEvent]] {
-        case Identified(nid, NotificationEvent.NotificationCreated(_)) =>
+        at[EntityEvent[NotificationId, NotificationEvent]] {
+        case EntityEvent(nid, _, NotificationEvent.NotificationCreated(_)) =>
           notifications(nid).markAsSent
         case _ =>
           ().pure[F]

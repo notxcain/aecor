@@ -39,7 +39,7 @@ private[schedule] class DefaultSchedule[F[_]: Effect](
     aggregateJournal
       .eventsByTag(eventTag, ConsumerId(scheduleName + consumerId.value))
       .flatMapConcat {
-        case m if m.value.entityId.scheduleName == scheduleName => Source.single(m)
+        case m if m.value.event.entityId.scheduleName == scheduleName => Source.single(m)
         case other =>
           Source
             .fromFuture(other.commit.unsafeToFuture())

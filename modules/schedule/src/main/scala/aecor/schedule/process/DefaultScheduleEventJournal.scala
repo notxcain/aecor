@@ -2,7 +2,7 @@ package aecor.schedule.process
 
 import java.util.UUID
 
-import aecor.data.{ Committable, ConsumerId, EventTag, Identified }
+import aecor.data.{ Committable, ConsumerId, EntityEvent, EventTag }
 import aecor.runtime.akkapersistence.readside.CommittableEventJournalQuery
 import aecor.schedule.{ ScheduleBucketId, ScheduleEvent }
 import aecor.util.effect._
@@ -30,12 +30,12 @@ class DefaultScheduleEventJournal[F[_]: Effect](
     extends ScheduleEventJournal[F] {
   import materializer.executionContext
   override def processNewEvents(
-    f: Identified[ScheduleBucketId, ScheduleEvent] => F[Unit]
+    f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
   ): F[Unit] =
     Effect[F].fromFuture {
       aggregateJournal
         .currentEventsByTag(eventTag, consumerId)
-        .mapAsync(parallelism)(_.map(_.identified).map(f).traverse(_.unsafeToFuture()))
+        .mapAsync(parallelism)(_.map(_.event).map(f).traverse(_.unsafeToFuture()))
         .fold(Committable.unit[F])(Keep.right)
         .mapAsync(1)(_.commit.unsafeToFuture())
         .runWith(Sink.ignore)

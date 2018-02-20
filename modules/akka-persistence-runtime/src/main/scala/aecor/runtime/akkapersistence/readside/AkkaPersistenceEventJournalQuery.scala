@@ -1,6 +1,6 @@
 package aecor.runtime.akkapersistence.readside
 
-import aecor.data.EventTag
+import aecor.data.{ EntityEvent, EventTag }
 import aecor.encoding.KeyDecoder
 import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntimeActor, JournalAdapter }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentRepr }
@@ -38,7 +38,7 @@ private[akkapersistence] final class AkkaPersistenceEventJournalQuery[
                       .decode(repr)
                       .right
                       .map { event =>
-                        JournalEntry(offsetValue, id, sequenceNr, event)
+                        JournalEntry(offsetValue, EntityEvent(id, sequenceNr, event))
                       }
                       .fold(Future.failed, Future.successful)
                   case None =>

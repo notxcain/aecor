@@ -91,7 +91,7 @@ object App {
           AkkaStreamProcess[Task](
             journal
               .eventsByTag(tag, consumerId)
-              .map(_.map(_.map(_.event).identified))
+              .map(_.map(_.map(_.event).event))
               .mapAsync(30) {
                 _.traverse(processStep).runAsync
               }

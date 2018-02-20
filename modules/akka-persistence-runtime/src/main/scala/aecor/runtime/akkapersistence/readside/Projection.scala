@@ -1,7 +1,6 @@
 package aecor.runtime.akkapersistence.readside
 
-import aecor.data.Folded
-
+import aecor.data.{ EntityEvent, Folded }
 import cats.MonadError
 import cats.implicits._
 
@@ -10,18 +9,13 @@ object Projection {
     def illegalFold(event: E, state: S): A
     def missingEvent(event: E, state: S): A
   }
-  final case class Input[I, E](entityId: I, sequenceNr: Long, event: E)
-  object Input {
-    def fromJournalEntry[O, I, A](journalEntry: JournalEntry[O, I, A]): Input[I, A] =
-      Input(journalEntry.entityId, journalEntry.sequenceNr, journalEntry.event)
-  }
   def apply[F[_], Err, Key, Event, State](store: Store[F, Key, Versioned[State]],
                                           zero: Event => Folded[State],
                                           update: (Event, State) => Folded[State])(
     implicit F: MonadError[F, Err],
-    Error: ProjectionError[Err, Input[Key, Event], Option[Versioned[State]]]
-  ): Input[Key, Event] => F[Unit] = {
-    case input @ Input(id, seqNr, event) =>
+    Error: ProjectionError[Err, EntityEvent[Key, Event], Option[Versioned[State]]]
+  ): EntityEvent[Key, Event] => F[Unit] = {
+    case input @ EntityEvent(id, seqNr, event) =>
       for {
         state <- store.readState(id)
         currentVersion = state.fold(0L)(_.version)

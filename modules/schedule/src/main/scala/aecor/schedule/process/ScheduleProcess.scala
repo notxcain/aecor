@@ -3,7 +3,7 @@ package aecor.schedule.process
 import java.time.temporal.ChronoUnit
 import java.time.{ Clock => _, _ }
 
-import aecor.data.{ ConsumerId, EventTag, Identified, TagConsumer }
+import aecor.data._
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ ScheduleBucket, ScheduleBucketId, ScheduleEntryRepository }
 import aecor.util.KeyValueStore
@@ -28,10 +28,10 @@ object ScheduleProcess {
 
     val updateRepository: F[Unit] =
       journal.processNewEvents {
-        case Identified(id, ScheduleEntryAdded(entryId, _, dueDate, _)) =>
+        case EntityEvent(id, _, ScheduleEntryAdded(entryId, _, dueDate, _)) =>
           repository
             .insertScheduleEntry(id, entryId, dueDate)
-        case Identified(id, ScheduleEntryFired(entryId, _, _)) =>
+        case EntityEvent(id, _, ScheduleEntryFired(entryId, _, _)) =>
           repository.markScheduleEntryAsFired(id, entryId)
       }
     def fireEntries(from: LocalDateTime,

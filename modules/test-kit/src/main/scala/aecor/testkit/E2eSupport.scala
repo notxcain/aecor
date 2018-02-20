@@ -24,7 +24,7 @@ trait E2eSupport {
   final def deploy[M[_[_]], F[_], S, E, I](
     behavior: EventsourcedBehaviorT[M, F, S, E],
     tagging: Tagging[I],
-    journal: EventJournal[F, I, EventEnvelope[E]]
+    journal: EventJournal[F, I, EventEnvelope[I, E]]
   )(implicit M: ReifiedInvocation[M],
     MF: FunctorK[M],
     F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>

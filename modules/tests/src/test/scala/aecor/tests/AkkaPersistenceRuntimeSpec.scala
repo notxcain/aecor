@@ -72,9 +72,9 @@ class AkkaPersistenceRuntimeSpec
   test("Journal should work") {
     implicit val materializer = ActorMaterializer()
     val journal = runtime.journal[CounterId, CounterEvent]
-    val events = journal.currentEventsByTag(CounterEvent.tag, None).runWith(Sink.seq).futureValue
+    val entries = journal.currentEventsByTag(CounterEvent.tag, None).runWith(Sink.seq).futureValue
 
-    val map = events.groupBy(_.entityId)
+    val map = entries.map(_.event).groupBy(_.entityId)
     map(CounterId("1")).size shouldBe 2
     map(CounterId("2")).size shouldBe 1
   }
