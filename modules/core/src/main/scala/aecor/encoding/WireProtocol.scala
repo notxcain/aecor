@@ -7,7 +7,6 @@ import aecor.arrow.Invocation
 import aecor.data.PairE
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.encoding.WireProtocol.{ Decoder, Encoder }
-import akka.util.ByteString
 
 import scala.util.{ Failure, Success, Try }
 
@@ -17,16 +16,16 @@ trait WireProtocol[M[_[_]]] extends ReifiedInvocation[M] {
 }
 
 object WireProtocol {
-  type Encoded[A] = (ByteString, Decoder[A])
+  type Encoded[A] = (ByteBuffer, Decoder[A])
 
   trait Encoder[A] {
-    def encode(a: A): ByteString
+    def encode(a: A): ByteBuffer
   }
 
   object Encoder {
     def fromPickler[A: boopickle.Default.Pickler]: Encoder[A] = new Encoder[A] {
-      override def encode(a: A): ByteString =
-        ByteString(boopickle.Default.Pickle.intoBytes(a))
+      override def encode(a: A): ByteBuffer =
+        boopickle.Default.Pickle.intoBytes(a)
     }
   }
 

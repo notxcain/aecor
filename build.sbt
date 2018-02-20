@@ -133,15 +133,13 @@ lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
     "io.aecor" %% "liberator" % "0.7.0",
     "io.suzaku" %% "boopickle" % "1.2.6",
-    "org.scalameta" %% "scalameta" % scalametaVersion,
+    "org.scalameta" %% "scalameta" % scalametaVersion
   )
 )
 
@@ -161,6 +159,7 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
   libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
@@ -170,7 +169,10 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
 )
 
 lazy val akkaGenericSettings = Seq(
-  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion
+  )
 )
 
 
