@@ -81,7 +81,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
           override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] =
             Effect[F].fromFuture {
               val (bytes, responseDecoder) = fa
-              (regionRef ? EntityCommand(keyEncoder(key), bytes))
+              (regionRef ? EntityCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
                 .asInstanceOf[Future[ByteBuffer]]
                 .map(responseDecoder.decode)
                 .flatMap {

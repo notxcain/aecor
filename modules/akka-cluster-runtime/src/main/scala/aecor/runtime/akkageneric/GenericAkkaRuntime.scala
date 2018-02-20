@@ -65,7 +65,7 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
           new (Invocation[M, ?] ~> F) {
             override def apply[A](fa: Invocation[M, A]): F[A] = Effect[F].fromFuture {
               val (bytes, decoder) = fa.invoke(M.encoder)
-              (shardRegionRef ? Command(keyEncoder(key), bytes))
+              (shardRegionRef ? Command(keyEncoder(key), bytes.asReadOnlyBuffer()))
                 .asInstanceOf[Future[ByteBuffer]]
                 .map(decoder.decode)
                 .flatMap {
