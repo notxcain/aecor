@@ -4,7 +4,6 @@ import aecor.ReifiedInvocation
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
 import aecor.util.KeyValueStore
-import akka.cluster.sharding.ShardRegion.EntityId
 import cats.data.{ NonEmptyVector, StateT }
 import cats.implicits._
 import cats.{ MonadError, ~> }
@@ -14,6 +13,7 @@ import io.aecor.liberator.FunctorK
 import scala.collection.immutable.Set
 
 object Eventsourced {
+  type EntityId = String
   final case class InternalState[S](entityState: S, version: Long) {}
 
   sealed abstract class BehaviorFailure extends Exception
