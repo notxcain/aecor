@@ -5,21 +5,20 @@ import pl.project13.scala.sbt._
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-//    scalaVersion := "2.11.11-bin-typelevel-4",
     scalaVersion := "2.11.12",
-//    scalaOrganization := "org.typelevel",
-//    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.4-bin-typelevel-4")
     crossScalaVersions := Seq("2.11.12", "2.12.4")
   )
 )
 
 lazy val akkaVersion = "2.5.9"
 lazy val akkaPersistenceCassandraVersion = "0.59"
+lazy val akkaPersistenceJdbcVersion = "3.2.0"
 lazy val catsVersion = "1.0.1"
 lazy val catsEffectVersion = "0.8"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
+lazy val boopickleVersion = "1.2.6"
 
 lazy val monixVersion = "3.0.0-M3"
 lazy val scalaCheckVersion = "1.13.4"
@@ -137,8 +136,8 @@ lazy val coreSettings = Seq(
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
-    "io.aecor" %% "liberator" % "0.7.0",
-    "io.suzaku" %% "boopickle" % "1.2.6",
+    "io.aecor" %% "liberator" % liberatorVersion,
+    "io.suzaku" %% "boopickle" % boopickleVersion,
     "org.scalameta" %% "scalameta" % scalametaVersion
   )
 )
@@ -164,7 +163,7 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion,
-    "com.github.dnvriend" %% "akka-persistence-jdbc" % "3.2.0"
+    "com.github.dnvriend" %% "akka-persistence-jdbc" % akkaPersistenceJdbcVersion
   )
 )
 
@@ -177,17 +176,11 @@ lazy val akkaGenericSettings = Seq(
 
 
 lazy val exampleSettings = {
-  val akkaKryoVersion = SettingKey[String]("akka-kryo-version", "")
-
   Seq(
-    akkaKryoVersion := {
-      if (scalaVersion.value startsWith "2.11") "0.5.0" else "0.5.1"
-    },
     resolvers += Resolver.sonatypeRepo("releases"),
     sources in (Compile, doc) := Nil,
     libraryDependencies ++=
       Seq(
-        "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion.value,
         "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-reactive" % monixVersion,
