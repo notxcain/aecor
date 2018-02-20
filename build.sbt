@@ -1,46 +1,47 @@
 import ReleaseTransformations._
 import sbtrelease.Version.Bump
+import pl.project13.scala.sbt._
 
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    scalaVersion := "2.11.11-bin-typelevel-4",
-    scalaOrganization := "org.typelevel",
-    crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.2-bin-typelevel-4")
+    scalaVersion := "2.11.12",
+    crossScalaVersions := Seq("2.11.12", "2.12.4")
   )
 )
 
-lazy val akkaVersion = "2.5.3"
-lazy val akkaPersistenceCassandra = "0.54"
-lazy val catsVersion = "0.9.0"
+lazy val akkaVersion = "2.5.9"
+lazy val akkaPersistenceCassandraVersion = "0.59"
+lazy val akkaPersistenceJdbcVersion = "3.2.0"
+lazy val catsVersion = "1.0.1"
+lazy val catsEffectVersion = "0.8"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
+lazy val boopickleVersion = "1.2.6"
 
-lazy val monixVersion = "2.3.0"
-lazy val fs2Version = "0.9.6"
+lazy val monixVersion = "3.0.0-M3"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
-lazy val shapelessVersion = "2.3.2"
-lazy val kindProjectorVersion = "0.9.3"
-lazy val paradiseVersion = "2.1.0"
-lazy val simulacrumVersion = "0.10.0"
+lazy val shapelessVersion = "2.3.3"
+lazy val kindProjectorVersion = "0.9.4"
+lazy val simulacrumVersion = "0.11.0"
+lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.8.0"
-lazy val akkaHttpVersion = "10.0.5"
-lazy val akkaHttpJsonVersion = "1.16.0"
-lazy val scalametaParadiseVersion = "3.0.0-M9"
+lazy val circeVersion = "0.9.0"
+lazy val akkaHttpVersion = "10.0.11"
+lazy val akkaHttpJsonVersion = "1.19.0"
+lazy val scalametaParadiseVersion = "3.0.0-M10"
 
-lazy val liberatorVersion = "0.4.3"
+lazy val liberatorVersion = "0.7.0"
 
 lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
-  libraryDependencies ++= Seq(
-    compilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion)
-  ),
+  addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
     .filter(_ != "-Xfatal-warnings")
@@ -50,6 +51,7 @@ lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
 lazy val aecor = project
   .in(file("."))
+  .withId("aecor")
   .settings(moduleName := "aecor", name := "Aecor")
   .settings(aecorSettings)
   .settings(noPublishSettings)
@@ -59,104 +61,84 @@ lazy val aecor = project
     distributedProcessing,
     example,
     schedule,
-    effectMonix,
-    effectFs2,
-    tests
+    tests,
+    benchmarks
   )
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
-lazy val core =
-  project
-    .settings(moduleName := "aecor-core", name := "Aecor Core")
+def aecorModule(id: String, description: String): Project =
+  Project(id, file(s"modules/$id"))
+   .settings(
+     moduleName := id,
+     name := description
+   )
+
+lazy val core = aecorModule("core", "Aecor Core")
     .settings(aecorSettings)
     .settings(coreSettings)
 
-lazy val akkaPersistence = project
-  .in(file("aecor-akka-persistence"))
-  .settings(
-    moduleName := "aecor-akka-persistence",
-    name := "Aecor Runtime based on Akka Cluster Sharding and Persistence"
+lazy val akkaPersistence = aecorModule("akka-persistence-runtime",
+    "Aecor Runtime based on Akka Cluster Sharding and Persistence"
   )
   .dependsOn(core)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
-lazy val akkaGeneric = project
-  .in(file("aecor-akka-generic"))
-  .settings(
-    moduleName := "aecor-akka-generic",
-    name := "Aecor Runtime based on Akka Cluster Sharding"
-  )
+lazy val akkaGeneric = aecorModule("akka-cluster-runtime", "Aecor Runtime based on Akka Cluster Sharding")
   .dependsOn(core)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
 lazy val distributedProcessing =
-  project
-    .in(file("distributed-processing"))
-    .settings(moduleName := "aecor-distributed-processing", name := "Aecor Distributed Processing")
+  aecorModule("distributed-processing", "Aecor Distributed Processing")
     .dependsOn(core)
     .settings(aecorSettings)
     .settings(distributedProcessingSettings)
 
-lazy val schedule = project
+lazy val schedule = aecorModule("schedule", "Aecor Schedule")
   .dependsOn(akkaPersistence, distributedProcessing)
-  .settings(moduleName := "aecor-schedule", name := "Aecor Schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
-lazy val effectMonix = project
-  .in(file("aecor-monix"))
-  .settings(moduleName := "aecor-monix", name := "Aecor Monix")
-  .dependsOn(core)
-  .settings(aecorSettings)
-  .settings(effectMonixSettings)
-
-lazy val effectFs2 = project
-  .in(file("aecor-fs2"))
-  .settings(moduleName := "aecor-fs2", name := "Aecor FS2")
-  .dependsOn(core)
-  .settings(aecorSettings)
-  .settings(effectFs2Settings)
-
-lazy val testKit = project
-  .in(file("aecor-test-kit"))
-  .settings(moduleName := "aecor-test-kit", name := "Aecor Test Kit")
+lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
   .dependsOn(core)
   .settings(aecorSettings)
 
-lazy val tests = project
+lazy val tests = aecorModule("tests", "Aecor Tests")
   .dependsOn(
     core,
     example,
     schedule,
-    effectMonix,
-    effectFs2,
     testKit,
     akkaPersistence,
     distributedProcessing,
     akkaGeneric
   )
-  .settings(moduleName := "aecor-tests", name := "Aecor Tests")
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
-lazy val example = project
-  .dependsOn(core, schedule, effectMonix, distributedProcessing)
-  .settings(moduleName := "aecor-example", name := "Aecor Example Application")
+lazy val example = aecorModule("example", "Aecor Example Application")
+  .dependsOn(core, schedule, distributedProcessing)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
 
+lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
+  .dependsOn(core)
+  .settings(aecorSettings)
+  .settings(noPublishSettings)
+  .enablePlugins(JmhPlugin)
+
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    compilerPlugin("org.scalamacros" % "paradise" % paradiseVersion cross CrossVersion.patch),
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
-    "org.typelevel" %% "cats" % catsVersion,
-    "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
+    "org.typelevel" %% "cats-core" % catsVersion,
+    "org.typelevel" %% "cats-effect" % catsEffectVersion,
+    "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
+    "io.aecor" %% "liberator" % liberatorVersion,
+    "io.suzaku" %% "boopickle" % boopickleVersion,
+    "org.scalameta" %% "scalameta" % scalametaVersion
   )
 )
 
@@ -174,43 +156,33 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   )
 )
 
-lazy val akkaPersistenceSettings = Seq(
+lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
   libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandra
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion,
+    "com.github.dnvriend" %% "akka-persistence-jdbc" % akkaPersistenceJdbcVersion
   )
 )
 
 lazy val akkaGenericSettings = Seq(
-  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion
+  )
 )
 
-lazy val effectMonixSettings = Seq(
-  libraryDependencies ++= Seq("io.monix" %% "monix-eval" % monixVersion)
-)
-
-lazy val effectFs2Settings = Seq(libraryDependencies ++= Seq("co.fs2" %% "fs2-core" % fs2Version))
 
 lazy val exampleSettings = {
-  val akkaKryoVersion = SettingKey[String]("akka-kryo-version", "")
-
   Seq(
-    akkaKryoVersion := {
-      if (scalaVersion.value startsWith "2.11") "0.5.0" else "0.5.1"
-    },
     resolvers += Resolver.sonatypeRepo("releases"),
     sources in (Compile, doc) := Nil,
     libraryDependencies ++=
       Seq(
-        compilerPlugin(
-          "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
-        ),
-        "com.github.romix.akka" %% "akka-kryo-serialization" % akkaKryoVersion.value,
         "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-        "io.monix" %% "monix-cats" % monixVersion,
         "io.monix" %% "monix-reactive" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
         "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
@@ -228,7 +200,9 @@ lazy val testingSettings = Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
+    "org.typelevel" %% "cats-testkit" % catsVersion % Test
   )
 )
 
@@ -240,30 +214,30 @@ lazy val commonProtobufSettings =
   )
 
 lazy val commonScalacOptions = Seq(
-  "-deprecation",
-  "-encoding",
-  "UTF-8",
-  "-feature",
-  "-language:existentials",
-  "-language:higherKinds",
-  "-language:implicitConversions",
-  "-language:experimental.macros",
-  "-unchecked",
-  "-Xfatal-warnings",
-  "-Xlint",
-  "-Yno-adapted-args",
-  "-Ywarn-dead-code",
-  "-Ywarn-numeric-widen",
-  "-Ywarn-value-discard",
-  "-Ywarn-unused-import",
-  "-Ypartial-unification"
+    "-deprecation",
+    "-encoding",
+    "UTF-8",
+    "-feature",
+    "-language:existentials",
+    "-language:higherKinds",
+    "-language:implicitConversions",
+    "-language:experimental.macros",
+    "-unchecked",
+    "-Xfatal-warnings",
+    "-Xlint",
+    "-Yno-adapted-args",
+    "-Ywarn-dead-code",
+    "-Ywarn-numeric-widen",
+    "-Ywarn-value-discard",
+    "-Ywarn-unused-import",
+    "-Ypartial-unification"
 )
 
 lazy val warnUnusedImport = Seq(scalacOptions in (Compile, console) ~= {
   _.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))
 }, scalacOptions in (Test, console) := (scalacOptions in (Compile, console)).value)
 
-lazy val noPublishSettings = Seq(publish := (), publishLocal := (), publishArtifact := false)
+lazy val noPublishSettings = Seq(publish := (()), publishLocal := (()), publishArtifact := false)
 
 lazy val publishSettings = Seq(
   releaseCrossBuild := true,
@@ -312,7 +286,7 @@ lazy val sharedReleaseProcess = Seq(
     publishArtifacts,
     setNextVersion,
     commitNextVersion,
-    ReleaseStep(action = Command.process("sonatypeReleaseAll", _)),
+    ReleaseStep(action = "sonatypeReleaseAll" :: _),
     pushChanges
   )
 )

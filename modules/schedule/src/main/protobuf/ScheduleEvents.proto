@@ -1,0 +1,18 @@
+syntax = "proto2";
+
+package aecor.schedule.serialization.protobuf;
+option java_package = "aecor.schedule.serialization.protobuf.msg";
+option optimize_for = SPEED;
+
+message ScheduleEntryAdded {
+  required string entryId = 2;
+  required string correlationId = 3;
+  required int64 dueToInEpochMillisUTC = 4;
+  required int64 timestamp = 6;
+}
+
+message ScheduleEntryFired {
+  required string entryId = 2;
+  required string correlationId = 3;
+  required int64 timestamp = 5;
+}

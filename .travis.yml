@@ -1,7 +1,7 @@
 language: scala
 scala:
-  - 2.11.11-bin-typelevel-4
-  - 2.12.2-bin-typelevel-4
+  - 2.11.12
+  - 2.12.4
 
 jdk:
   - oraclejdk8
