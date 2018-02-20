@@ -25,6 +25,10 @@ object WireProtocolMacro {
 
   final case class Method(name: Term.Name, typeParams: Seq[Type.Param], params: Seq[Term.Param], out: Type)
 
+  trait AnyValPickler {
+    implicit def anyValPickler[A <: AnyVal, U](implicit A: shapeless.Unwrapped.Aux[A, U], U: boopickle.Pickler[U]): boopickle.Pickler[A] = boopickle.Default.transformPickler(A.wrap)(A.unwrap)
+  }
+
   def apply(commonFields: List[String], base: Defn.Trait, companion: Option[Defn.Object]): Term.Block = {
     val typeName = base.name
     val traitStats = base.templ.stats.get
@@ -58,11 +62,8 @@ object WireProtocolMacro {
     val companionStats: Seq[Stat] = Seq(
       q"""
         implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] =
-         new aecor.encoding.WireProtocol[$unifiedBase] {
+         new aecor.encoding.WireProtocol[$unifiedBase] with aecor.macros.WireProtocolMacro.AnyValPickler {
             import boopickle.Default._
-
-            implicit def anyValPickler[A <: AnyVal, U](implicit A: shapeless.Unwrapped.Aux[A, U], U: boopickle.Pickler[U]): boopickle.Pickler[A] =
-               boopickle.Default.transformPickler(A.wrap)(A.unwrap)
 
             final def mapK[F[_], G[_]](mf: $typeName[..$abstractTypes, F], fg: _root_.cats.arrow.FunctionK[F, G]): $typeName[..$abstractTypes, G] =
               new ${Ctor.Name(typeName.value)}[..$abstractTypes, G] {

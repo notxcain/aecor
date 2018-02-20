@@ -52,7 +52,7 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
       throw new IllegalArgumentException(error)
     }
 
-  private final case class Result(id: UUID, value: Try[(Behavior[M, F], ByteBuffer)])
+  private case class Result(id: UUID, value: Try[(Behavior[M, F], ByteBuffer)])
 
   setIdleTimeout()
 

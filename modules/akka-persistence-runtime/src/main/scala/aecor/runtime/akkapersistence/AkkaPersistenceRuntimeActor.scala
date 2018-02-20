@@ -88,7 +88,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
 
   import context.dispatcher
 
-  private final case class CommandResult(opId: UUID, events: Seq[Event], resultBytes: ByteBuffer)
+  private case class CommandResult(opId: UUID, events: Seq[Event], resultBytes: ByteBuffer)
 
   private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())

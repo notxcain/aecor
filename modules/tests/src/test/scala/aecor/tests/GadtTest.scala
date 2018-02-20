@@ -5,7 +5,6 @@ import java.nio.ByteBuffer
 import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.macros.wireProtocol
-import cats.implicits._
 import cats.{ Id, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
@@ -27,7 +26,7 @@ class GadtTest extends FunSuite with Matchers {
     }
 
     val server: ByteBuffer => DecodingResult[ByteBuffer] = { in =>
-      protocol.decoder.decode(in).map { p =>
+      protocol.decoder.decode(in).right.map { p =>
         val r: Id[p.A] = p.left.invoke(actions)
         p.right.encode(r)
       }
@@ -36,7 +35,7 @@ class GadtTest extends FunSuite with Matchers {
     val client = protocol.encoder
       .mapK(new (WireProtocol.Encoded ~> DecodingResult) {
         override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): DecodingResult[A] =
-          server(fa._1).flatMap(fa._2.decode)
+          server(fa._1).right.flatMap(fa._2.decode)
       })
 
     client.scdsc("1234") shouldBe Right(4)

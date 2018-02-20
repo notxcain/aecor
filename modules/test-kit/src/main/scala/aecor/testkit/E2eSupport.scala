@@ -25,9 +25,7 @@ trait E2eSupport {
     behavior: EventsourcedBehaviorT[M, F, S, E],
     tagging: Tagging[I],
     journal: EventJournal[F, I, EventEnvelope[I, E]]
-  )(implicit M: ReifiedInvocation[M],
-    MF: FunctorK[M],
-    F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
+  )(implicit M: ReifiedInvocation[M], F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
     val routeTo: I => Behavior[M, F] =
       Eventsourced[M, F, S, E, I](
         behavior,

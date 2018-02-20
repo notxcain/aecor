@@ -11,7 +11,7 @@ private[aecor] trait ScheduleBucket[F[_]] {
   def fireEntry(entryId: String): F[Unit]
 }
 
-private object ScheduleBucket {
+private[aecor] object ScheduleBucket {
   import boopickle.Default._
   implicit val localDateTimePickler: Pickler[LocalDateTime] = transformPickler(
     (ldt: (Long, Int)) => LocalDateTime.ofEpochSecond(ldt._1, ldt._2, ZoneOffset.UTC)
