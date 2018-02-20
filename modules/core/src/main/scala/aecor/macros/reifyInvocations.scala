@@ -53,19 +53,32 @@ object FunctorKMacro {
                 ..${
                   methods.map {
                     case Method(name, tps, params, out) =>
-                      q"final def $name[..$tps](..$params): G[$out] = fg(mf.$name(..${params.map(_.name.value).map(Term.Name(_))}))"
+                      if (params.nonEmpty)
+                        q"final def $name[..$tps](..$params): G[$out] = fg(mf.$name(..${params.map(_.name.value).map(Term.Name(_))}))"
+                      else
+                        q"final def $name[..$tps]: G[$out] = fg(mf.$name)"
                   }
                 }
               }
-            final val instance: $typeName[..$abstractTypes, $unifiedInvocation] = new $typeName[..$abstractTypes, $unifiedInvocation] {
+
+            final val instance: $typeName[..$abstractTypes, $unifiedInvocation] = new ${Ctor.Name(typeName.value)}[..$abstractTypes, $unifiedInvocation] {
               ..${
                 methods.map {
                   case Method(name, tps, params, out) =>
-                    q"""final def $name[..$tps](..$params): aecor.arrow.Invocation[$unifiedBase, $out] =
-                       new aecor.arrow.Invocation[$unifiedBase, $out] {
-                         final def invoke[F[_]](mf: $typeName[..$abstractTypes, F]): F[$out] =
-                          mf.$name(..${params.map(_.name.value).map(Term.Name(_))})
-                     """
+                    if (params.nonEmpty)
+                      q"""final def $name[..$tps](..$params): aecor.arrow.Invocation[$unifiedBase, $out] =
+                         new aecor.arrow.Invocation[$unifiedBase, $out] {
+                           final def invoke[F[_]](mf: $typeName[..$abstractTypes, F]): F[$out] =
+                             mf.$name(..${params.map(_.name.value).map(Term.Name(_))})
+                         }
+                       """
+                    else
+                      q"""final def $name[..$tps]: aecor.arrow.Invocation[$unifiedBase, $out] =
+                         new aecor.arrow.Invocation[$unifiedBase, $out] {
+                           final def invoke[F[_]](mf: $typeName[..$abstractTypes, F]): F[$out] =
+                             mf.$name
+                         }
+                       """
                 }
               }
             }

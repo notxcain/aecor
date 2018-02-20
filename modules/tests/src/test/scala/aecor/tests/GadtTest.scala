@@ -2,12 +2,11 @@ package aecor.tests
 
 import java.nio.ByteBuffer
 
-import aecor.gadt.WireProtocol
-import aecor.gadt.WireProtocol.Decoder.DecodingResult
+import aecor.encoding.WireProtocol
+import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.macros.wireProtocol
 import cats.implicits._
 import cats.{ Id, ~> }
-import io.aecor.liberator.macros.functorK
 import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
 

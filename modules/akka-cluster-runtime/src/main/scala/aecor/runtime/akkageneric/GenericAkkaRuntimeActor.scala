@@ -1,36 +1,40 @@
 package aecor.runtime.akkageneric
 
 import java.net.URLDecoder
+import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
+import aecor.arrow.Invocation
 import aecor.data.{ Behavior, PairT }
-import aecor.util.effect._
 import aecor.encoding.KeyDecoder
+import aecor.encoding.WireProtocol
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.PerformOp
+import aecor.util.effect._
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import cats.effect.Effect
-import io.aecor.liberator.Algebra
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
-object GenericAkkaRuntimeActor {
-  def props[I: KeyDecoder, M[_[_]]: Algebra, F[_]: Effect](createBehavior: I => Behavior[M, F],
-                                                           idleTimeout: FiniteDuration): Props =
+private[aecor] object GenericAkkaRuntimeActor {
+  def props[I: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
+    createBehavior: I => Behavior[M, F],
+    idleTimeout: FiniteDuration
+  ): Props =
     Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
 
-  private[akkageneric] final case class PerformOp[I, Op[_], A](op: Op[A])
+  private[akkageneric] final case class PerformOp(op: ByteBuffer)
   private[akkageneric] case object Stop
 }
 
 private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]: Effect](
   createBehavior: I => Behavior[M, F],
   idleTimeout: FiniteDuration
-)(implicit M: Algebra[M])
+)(implicit M: WireProtocol[M])
     extends Actor
     with Stash
     with ActorLogging {
@@ -48,49 +52,65 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
       throw new IllegalArgumentException(error)
     }
 
-  private case class Result(id: UUID, value: Try[(Behavior[M, F], Any)])
+  private final case class Result(id: UUID, value: Try[(Behavior[M, F], ByteBuffer)])
 
   setIdleTimeout()
 
   override def receive: Receive = withBehavior(createBehavior(id))
 
   private def withBehavior(behavior: Behavior[M, F]): Receive = {
-    val actionsK = M.toFunctionK[PairT[F, Behavior[M, F], ?]](behavior.actions)
+    case PerformOp(opBytes) =>
+      M.decoder
+        .decode(opBytes) match {
+        case Right(pair) =>
+          performInvocation(behavior.actions, pair.left, pair.right)
+        case Left(decodingError) =>
+          val error = s"Failed to decode invocation, because of $decodingError"
+          log.error(error)
+          sender() ! Status.Failure(decodingError)
+      }
 
-    {
-      case PerformOp(op) =>
-        val opId = UUID.randomUUID()
+    case ReceiveTimeout =>
+      passivate()
+    case GenericAkkaRuntimeActor.Stop =>
+      context.stop(self)
+    case Result(_, _) =>
+      log.warning(
+        "Ignoring result of another operation. Probably targeted previous instance of actor."
+      )
+  }
 
-        (actionsK(op.asInstanceOf[M.Out[Any]]): F[(Behavior[M, F], Any)]).toIO // Stupid type hint to make IDEA happy
-          .map(x => Result(opId, Success(x)))
-          .unsafeToFuture()
-          .recover {
-            case NonFatal(e) => Result(opId, Failure(e))
-          }
-          .pipeTo(self)(sender)
+  def performInvocation[A](actions: M[PairT[F, Behavior[M, F], ?]],
+                           invocation: Invocation[M, A],
+                           resultEncoder: WireProtocol.Encoder[A]): Unit = {
+    val opId = UUID.randomUUID()
+    val invocationResult: F[(Behavior[M, F], A)] = // Stupid type hint to make IDEA happy
+      invocation.invoke[PairT[F, Behavior[M, F], ?]](actions) // Stupid type hint to make scalac happy
 
-        become {
-          case Result(`opId`, value) =>
-            value match {
-              case Success((newBehavior, reply)) =>
-                sender() ! reply
-                become(withBehavior(newBehavior))
-              case Failure(cause) =>
-                sender() ! Status.Failure(cause)
-                throw cause
-            }
-            unstashAll()
-          case _ =>
-            stash()
+    invocationResult.toIO
+      .map {
+        case (nextBehavior, response) =>
+          Result(opId, Success((nextBehavior, resultEncoder.encode(response))))
+      }
+      .unsafeToFuture()
+      .recover {
+        case NonFatal(e) => Result(opId, Failure(e))
+      }
+      .pipeTo(self)(sender)
+
+    become {
+      case Result(`opId`, value) =>
+        value match {
+          case Success((newBehavior, reply)) =>
+            sender() ! reply
+            become(withBehavior(newBehavior))
+          case Failure(cause) =>
+            sender() ! Status.Failure(cause)
+            throw cause
         }
-      case ReceiveTimeout =>
-        passivate()
-      case GenericAkkaRuntimeActor.Stop =>
-        context.stop(self)
-      case Result(_, _) =>
-        log.warning(
-          "Ignoring result of another operation. Probably targeted previous instance of actor."
-        )
+        unstashAll()
+      case _ =>
+        stash()
     }
   }
 

@@ -4,14 +4,11 @@ import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
 import aecor.macros.wireProtocol
-import io.aecor.liberator.macros.{ algebra }
 
 final case class TransactionId(value: String) extends AnyVal
 
 final case class From[A](value: A) extends AnyVal
 final case class To[A](value: A) extends AnyVal
-
-@algebra
 @wireProtocol
 trait TransactionAggregate[F[_]] {
   def create(fromAccountId: From[AccountId], toAccountId: To[AccountId], amount: Amount): F[Unit]
@@ -22,7 +19,6 @@ trait TransactionAggregate[F[_]] {
 }
 
 object TransactionAggregate {
-
   final case class TransactionInfo(fromAccountId: From[AccountId],
                                    toAccountId: To[AccountId],
                                    amount: Amount,

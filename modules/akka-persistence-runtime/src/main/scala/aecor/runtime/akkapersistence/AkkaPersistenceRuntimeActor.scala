@@ -6,10 +6,10 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 import java.util.UUID
 
+import aecor.arrow.Invocation
 import aecor.data._
 import aecor.util.effect._
-import aecor.encoding.KeyDecoder
-import aecor.gadt.WireProtocol
+import aecor.encoding.{ KeyDecoder, WireProtocol }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.runtime.akkapersistence.serialization.{
@@ -88,10 +88,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
 
   import context.dispatcher
 
-  case class CommandResult[A](opId: UUID,
-                              events: Seq[Event],
-                              response: A,
-                              responseEncoder: WireProtocol.Encoder[A])
+  private final case class CommandResult(opId: UUID, events: Seq[Event], resultBytes: ByteBuffer)
 
   private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
@@ -164,31 +161,43 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
       passivate()
     case AkkaPersistenceRuntimeActor.Stop =>
       context.stop(self)
-    case CommandResult(opId, events, reply, _) =>
-      log.debug(
-        "[{}] Received result of unknown command invocation [{}], ignoring reply [{}] and events [{}]",
+    case CommandResult(opId, events, result) =>
+      log.warning(
+        "[{}] Received result of unknown command invocation [{}], ignoring",
         persistenceId,
-        opId,
-        reply,
-        events
+        opId
       )
   }
 
-  private def handleCommand(commandBytes: ByteBuffer): Unit = {
-    val pair = M.decoder.decode(commandBytes).fold(throw _, identity)
-    val (invocation, responseEncoder) = (pair.left, pair.right)
+  private def handleCommand(commandBytes: ByteBuffer): Unit =
+    M.decoder.decode(commandBytes) match {
+      case Right(pair) =>
+        performInvocation(pair.left, pair.right)
+      case Left(decodingFailure) =>
+        sender() ! Status.Failure(decodingFailure)
+    }
+
+  def performInvocation[A](invocation: Invocation[M, A],
+                           resultEncoder: WireProtocol.Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
     invocation
       .invoke(actions)
       .run(state)
       .unsafeToFuture()
       .map {
-        case (events, response) =>
-          CommandResult(opId, events, response, responseEncoder)
+        case (events, result) =>
+          log.debug(
+            "[{}] Command [{}] produced reply [{}] and events [{}]",
+            persistenceId,
+            invocation,
+            result,
+            events
+          )
+          CommandResult(opId, events, resultEncoder.encode(result))
       }
       .pipeTo(self)(sender)
     context.become {
-      case CommandResult(`opId`, events, reply, renc) =>
+      case CommandResult(`opId`, events, reply) =>
         log.debug(
           "[{}] Command [{}] produced reply [{}] and events [{}]",
           persistenceId,
@@ -196,7 +205,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
           reply,
           events
         )
-        handleCommandResult(events, renc.encode(reply))
+        handleCommandResult(events, reply)
         unstashAll()
         context.become(receiveCommand)
       case Status.Failure(e) =>

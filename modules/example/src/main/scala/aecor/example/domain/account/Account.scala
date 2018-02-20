@@ -5,10 +5,8 @@ import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.Rejection
 import aecor.example.domain.transaction.TransactionId
 import aecor.macros.wireProtocol
-import io.aecor.liberator.macros.algebra
 import io.circe.{ Decoder, Encoder }
 
-@algebra
 @wireProtocol
 trait Account[F[_]] {
   def open(checkBalance: Boolean): F[Either[Rejection, Unit]]

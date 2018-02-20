@@ -2,14 +2,13 @@ package aecor.tests.e2e
 
 import aecor.data.Folded.syntax._
 import aecor.data._
+import aecor.macros.wireProtocol
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
-import io.aecor.liberator.macros.{ algebra, functorK }
 
 object notification {
   type NotificationId = String
 
-  @algebra
-  @functorK
+  @wireProtocol
   trait Notification[F[_]] {
     def createNotification(counterId: CounterId): F[Unit]
     def markAsSent: F[Unit]

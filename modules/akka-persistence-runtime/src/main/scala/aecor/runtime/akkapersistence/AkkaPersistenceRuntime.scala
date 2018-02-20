@@ -4,8 +4,8 @@ import java.nio.ByteBuffer
 
 import aecor.data._
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
-import aecor.gadt.WireProtocol
-import aecor.gadt.WireProtocol.Encoded
+import aecor.encoding.WireProtocol
+import aecor.encoding.WireProtocol.Encoded
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.readside.{ AkkaPersistenceEventJournalQuery, JournalQuery }
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
@@ -23,7 +23,7 @@ object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
     new AkkaPersistenceRuntime(system, journalAdapter)
 
-  private[akkapersistence] final case class EntityCommand(entityId: String,
+  private[akkapersistence] final case class EntityCommand(entityKey: String,
                                                           commandBytes: ByteBuffer)
 }
 
@@ -52,8 +52,8 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
         )
 
       def extractEntityId: ShardRegion.ExtractEntityId = {
-        case EntityCommand(entityId, c) =>
-          (entityId, AkkaPersistenceRuntimeActor.HandleCommand(c))
+        case EntityCommand(entityId, bytes) =>
+          (entityId, AkkaPersistenceRuntimeActor.HandleCommand(bytes))
       }
 
       val numberOfShards = settings.numberOfShards
@@ -76,12 +76,12 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
 
       val keyEncoder = KeyEncoder[K]
 
-      i =>
+      key =>
         M.encoder.mapK(new (Encoded ~> F) {
-          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] = {
-            val (bytes, responseDecoder) = fa
+          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] =
             Effect[F].fromFuture {
-              (regionRef ? EntityCommand(keyEncoder(i), bytes))
+              val (bytes, responseDecoder) = fa
+              (regionRef ? EntityCommand(keyEncoder(key), bytes))
                 .asInstanceOf[Future[ByteBuffer]]
                 .map(responseDecoder.decode)
                 .flatMap {
@@ -89,7 +89,6 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                   case Left(error)  => Future.failed(error)
                 }
             }
-          }
         })
     }
 

@@ -3,9 +3,7 @@ package aecor.schedule
 import java.time.{ LocalDateTime, ZoneOffset }
 
 import aecor.macros.wireProtocol
-import io.aecor.liberator.macros.algebra
 
-@algebra
 @wireProtocol
 private[aecor] trait ScheduleBucket[F[_]] {
   def addScheduleEntry(entryId: String, correlationId: String, dueDate: LocalDateTime): F[Unit]

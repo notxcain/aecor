@@ -75,7 +75,6 @@ class AkkaPersistenceRuntimeSpec
     val events = journal.currentEventsByTag(CounterEvent.tag, None).runWith(Sink.seq).futureValue
 
     val map = events.groupBy(_.entityId)
-    println(map)
     map(CounterId("1")).size shouldBe 2
     map(CounterId("2")).size shouldBe 1
   }
