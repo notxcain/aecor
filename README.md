@@ -29,26 +29,17 @@ scalacOptions += "-Ypartial-unification"
 Let's start with defining domain events:
 
 ```scala
-sealed trait SubscriptionEvent
+sealed abstract class SubscriptionEvent
 object SubscriptionEvent {
-  case class SubscriptionCreated(subscriptionId: String, userId: String, productId: String, planId: String) extends SubscriptionEvent
-  case class SubscriptionPaused(subscriptionId: String) extends SubscriptionEvent
-  case class SubscriptionResumed(subscriptionId: String) extends SubscriptionEvent
-  case class SubscriptionCancelled(subscriptionId: String) extends SubscriptionEvent
+  final case class SubscriptionCreated(userId: String, productId: String, planId: String) extends SubscriptionEvent
+  final case object SubscriptionPaused extends SubscriptionEvent
+  final case object SubscriptionResumed extends SubscriptionEvent
+  final case object SubscriptionCancelled extends SubscriptionEvent
 
-  implicit val persistentEncoder: PersistentEncoder[SubscriptionEvent] = `define it as you wish`
-  implicit val persistentDecoder: PersistentDecoder[SubscriptionEvent] = `and this one too`
+  implicit val persistentEncoder: PersistentEncoder[SubscriptionEvent] = ???
+  implicit val persistentDecoder: PersistentDecoder[SubscriptionEvent] = ???
 }
-```
 
-Then we define how this events affect aggregate state:
-
-`Folder[F, E, S]` instance represents the ability to fold `E`s into `S`, with effect `F` on each step.
-Aecor runtime uses `Folded[A]` data type, with two possible states:
-`Next(a)` - says that `a` should be used as a state for next folding step
-`Impossible` - says that folding should be aborted (e.g. underlying runtime actor throws `IllegalStateException`)
-
-```scala
 sealed trait SubscriptionStatus
 object SubscriptionStatus {
   case object Active extends SubscriptionStatus
@@ -56,7 +47,7 @@ object SubscriptionStatus {
   case object Cancelled extends SubscriptionStatus
 }
 
-case class Subscription(status: SubscriptionStatus) {
+final case class SubscriptionState(status: SubscriptionStatus) {
   def applyEvent(e: SubscriptionEvent): Folded[Subscription] = e match {
     case e: SubscriptionCreated =>
       impossible
@@ -68,92 +59,70 @@ case class Subscription(status: SubscriptionStatus) {
       subscription.copy(status = Cancelled).next
   }
 }
-object Subscription {
+object SubscriptionState {
   import SubscriptionStatus._
-  def init(e: SubscriptionEvent): Folded[Subscription] = e match {
+  def init(e: SubscriptionEvent): Folded[SubscriptionState] = e match {
     case SubscriptionCreated(subscriptionId, userId, productId, planId) =>
       Subscription(Active).next
     case _ => impossible
   }
-  def folder: Folder[Folded, SubscriptionEvent, Option[Subscription]] =
-    Folder.optionInstance(init)(_.applyEvent)
-}
-```
-
-
-Now let's define a behavior that converts operation to its handler.
-A `Handler[F, State, Event, Reply]` is just a wrapper around `State => (Seq[Event], Reply)`,
-you can think of it as `Kleisli[(Seq[Event], ?), State, Reply]`
-i.e. a side-effecting function with a side effect being a sequence of events representing state change caused by operation.
-
-```scala
-
-sealed trait SubscriptionOp[A] {
-  def subscriptionId: String
-}
-object SubscriptionOp {
-  case class CreateSubscription(subscriptionId: String, userId: String, productId: String, planId: String) extends SubscriptionOp[Unit]
-  case class PauseSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
-  case class ResumeSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
-  case class CancelSubscription(subscriptionId: String) extends SubscriptionOp[Unit]
 }
 
-def handler[F[_]](implicit F: Applicative[F]) = Lambda[SubscriptionOp ~> Handler[F, Option[Subscription], SubscriptionEvent, ?]] {
-  case CreateSubscription(subscriptionId, userId, productId, planId) => {
+@wireProtocol
+trait Subscription[F[_]] {
+  def createSubscription(userId: String, productId: String, planId: String): F[Unit]
+  def pauseSubscription: F[Unit]
+  def resumeSubscription: F[Unit]
+  def cancelSubscription: F[Unit]
+}
+
+object SubscriptionActions extends Subscription[Action[Option[Subscription], SubscriptionEvent, ?]] {
+  def createSubscription(userId: String, productId: String, planId: String): F[Unit] = Action {
     case Some(subscription) =>
-      // Do nothing reply with ()
-      F.pure(Seq.empty -> ())
-    case None =>
-      // Produce event and reply with ()
-      F.pure(Seq(SubscriptionCreated(subscriptionId, userId, productId, planId)) -> ())
+    // Do nothing reply with ()
+    List.empty -> ()
+  case None =>
+    // Produce event and reply with ()
+    List(SubscriptionCreated(userId, productId, planId)) -> ()
   }
-  case PauseSubscription(subscriptionId) => {
+  def pauseSubscription: F[Unit] = Action {
     case Some(subscription) if subscription.status == Active =>
-      F.pure(Seq(SubscriptionPaused(subscriptionId)) -> ())
+      List(SubscriptionPaused) -> ()
     case _ =>
-      F.pure(Seq.empty -> ())
+      List.empty -> ()
   }
-  case ResumeSubscription(subscriptionId) => {
+  def resumeSubscription: F[Unit] = Action {
     case Some(subscription) if subscription.status == Paused =>
-      F.pure(Seq(SubscriptionResumed(subscriptionId)) -> ())
+      List(SubscriptionResumed) -> ()
     case _ =>
-      F.pure(Seq.empty -> ())
+      List.empty -> ()
   }
-  case CancelSubscription(subscriptionId) => {
+   
+  def cancelSubscription: F[Unit] = Action {
     case Some(subscription) =>
-      F.pure(Seq(SubscriptionCancelled(subscriptionId)) -> ())
+      List(SubscriptionCancelled) -> ()
     case _ =>
-      F.pure(Seq.empty -> ())
+      List.empty -> ()
   }
 }
-```
 
-Then you define a correlation function, entity name and a value provided by correlation function form unique primary key for aggregate.
-It should not be changed between releases, at least without prior event migration.
-
-```scala
-def correlation: Correlation[SubscriptionOp] = _.subscriptionId
-```
-
-After that we are ready to launch.
-
-```scala
-import monix.cats._
 import monix.eval.Task
-import aecor.effect.monix._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
 
-val system = ActorSystem("foo")
+val system = ActorSystem("system")
 
-val subscriptions: SubscriptionOp ~> Task =
-  AkkaPersistenceRuntime(
-    system,
+val runtime = AkkaPersistenctRuntime(system)
+
+val behavior = EventsourcedBehavior.optional(
+  SubscriptionActions,
+  SubscriptionState.init,
+  _.applyEvent(_)
+)
+
+val deploySubscriptions: Task[SubscriptionId => Subscription[Task]] =
+  runtime.deploy(
     "Subscription",
-    correlation,
-    EventsourcedBehavior(
-      handler,
-      Subscription.folder
-    ),
-    Tagging.const[SubscriptionEvent](EventTag("Payment"))
+    behavior.lifted[Task],
+    Tagging.const[SubscriptionId](EventTag("Subscription"))
   )
 ```
