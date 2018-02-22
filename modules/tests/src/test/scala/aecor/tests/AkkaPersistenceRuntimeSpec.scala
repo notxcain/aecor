@@ -52,7 +52,7 @@ class AkkaPersistenceRuntimeSpec
     val deployCounters: Task[CounterId => Counter[Task]] =
       runtime.deploy(
         "Counter",
-        CounterBehavior.instance.lifted[Task],
+        CounterBehavior.instance.lift[Task],
         Tagging.const[CounterId](CounterEvent.tag)
       )
     val program = for {

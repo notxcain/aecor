@@ -1,8 +1,8 @@
 package aecor.tests.e2e
 
-import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
-import cats.Applicative
-import cats.data.StateT
+import aecor.tests.e2e.TestCounterViewRepository.State
+import cats.mtl.MonadState
+import aecor.testkit.Lens
 
 trait CounterViewRepository[F[_]] {
   def getCounterState(id: CounterId): F[Option[Long]]
@@ -10,28 +10,26 @@ trait CounterViewRepository[F[_]] {
 }
 
 object TestCounterViewRepository {
-  case class TestCounterViewRepositoryState(value: Map[CounterId, Long])
-  object TestCounterViewRepositoryState {
-    def init: TestCounterViewRepositoryState = TestCounterViewRepositoryState(Map.empty)
+  case class State(values: Map[CounterId, Long]) {
+    def getCounterState(id: CounterId): Option[Long] =
+      values.get(id)
+    def setCounterState(id: CounterId, value: Long): State = 
+      State(values.updated(id, value))
   }
-  def apply[F[_]: Applicative, A](
-    extract: A => TestCounterViewRepositoryState,
-    update: (A, TestCounterViewRepositoryState) => A
-  ): TestCounterViewRepository[F, A] =
-    new TestCounterViewRepository(extract, update)
+  object State {
+    def init: State = State(Map.empty)
+  }
+  def apply[F[_]: MonadState[?[_], S], S](
+    lens: Lens[S, State]
+  ): TestCounterViewRepository[F, S] =
+    new TestCounterViewRepository(lens)
 }
 
-class TestCounterViewRepository[F[_]: Applicative, A](
-  extract: A => TestCounterViewRepositoryState,
-  update: (A, TestCounterViewRepositoryState) => A
-) extends CounterViewRepository[StateT[F, A, ?]] {
-  def getCounterState(id: CounterId): StateT[F, A, Option[Long]] =
-    StateT
-      .get[F, TestCounterViewRepositoryState]
-      .map(_.value.get(id))
-      .transformS(extract, update)
-  def setCounterState(id: CounterId, value: Long): StateT[F, A, Unit] =
-    StateT
-      .modify[F, TestCounterViewRepositoryState](x => x.copy(x.value.updated(id, value)))
-      .transformS(extract, update)
+class TestCounterViewRepository[F[_]: MonadState[?[_], S], S](lens: Lens[S, State]
+  ) extends CounterViewRepository[F] {
+  private val F = lens.transformMonadState(MonadState[F, S])
+  def getCounterState(id: CounterId): F[Option[Long]] =
+    F.inspect(_.getCounterState(id))
+  def setCounterState(id: CounterId, value: Long): F[Unit] =
+    F.modify(_.setCounterState(id, value))
 }

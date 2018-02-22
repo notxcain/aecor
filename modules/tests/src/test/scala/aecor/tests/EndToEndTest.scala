@@ -6,96 +6,94 @@ import aecor.data._
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
 import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
-import aecor.testkit.StateEventJournal.State
-import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueStore }
-import aecor.tests.e2e.TestCounterViewRepository.TestCounterViewRepositoryState
+import aecor.testkit.{ E2eSupport,  StateClock, StateEventJournal, StateKeyValueStore }
 import aecor.tests.e2e._
+import aecor.testkit.E2eSupport._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
-import cats.data.StateT
-import cats.effect.Sync
 import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
+import aecor.testkit.Lens
 import shapeless.Coproduct
-
 import scala.concurrent.duration._
 
 class EndToEndTest extends FunSuite with Matchers with E2eSupport {
-
-  def instant[F[_]: Sync]: F[Instant] =
-    Sync[F].delay(Instant.ofEpochMilli(System.currentTimeMillis()))
+  import cats.mtl.instances.all._
 
   case class SpecState(
     counterJournalState: StateEventJournal.State[CounterId, CounterEvent],
     notificationJournalState: StateEventJournal.State[NotificationId, NotificationEvent],
     scheduleJournalState: StateEventJournal.State[ScheduleBucketId, ScheduleEvent],
-    counterViewState: TestCounterViewRepositoryState,
+    counterViewState: TestCounterViewRepository.State,
     time: Instant,
     scheduleEntries: Vector[ScheduleEntry],
     offsetStoreState: Map[TagConsumer, LocalDateTime]
   )
 
-  val offsetStore =
-    StateKeyValueStore[SpecF, SpecState, TagConsumer, LocalDateTime](
-      _.offsetStoreState,
-      (s, os) => s.copy(offsetStoreState = os)
-    )
-
-  val clock = StateClock[SpecF, SpecState](ZoneOffset.UTC, _.time, (s, t) => s.copy(time = t))
+  val clock = StateClock[F, SpecState](ZoneOffset.UTC, Lens(_.time, (s, t) => s.copy(time = t)))
 
   def counterEventJournal =
     mkJournal[CounterId, CounterEvent](
+      Lens(
       _.counterJournalState,
       (x, a) => x.copy(counterJournalState = a)
+      )
     )
 
   def counters =
-    deploy(
-      CounterBehavior.instance.lifted[StateT[SpecF, SpecState, ?]],
-      Tagging.const(CounterEvent.tag),
-      counterEventJournal
+    runtime.deploy(
+      behavior(
+        CounterBehavior.instance.lift[F],
+        Tagging.const(CounterEvent.tag),
+        counterEventJournal
+      )
     )
 
   def notificationEventJournal =
     mkJournal[NotificationId, NotificationEvent](
-      _.notificationJournalState,
-      (x, a) => x.copy(notificationJournalState = a)
+      Lens(_.notificationJournalState, (x, a) => x.copy(notificationJournalState = a))
     )
 
-  def notifications =
-    deploy(
-      notification.behavior.lifted[StateT[SpecF, SpecState, ?]],
+  def notifications = runtime.deploy(
+    behavior(
+      notification.behavior.lift[F],
       Tagging.const(NotificationEvent.tag),
       notificationEventJournal
     )
+  )
 
   def schduleEventJournal =
     mkJournal[ScheduleBucketId, ScheduleEvent](
-      _.scheduleJournalState,
-      (x, a) => x.copy(scheduleJournalState = a)
+      Lens(_.scheduleJournalState, (x, a) => x.copy(scheduleJournalState = a))
     )
 
-  val scheduleBuckets = deploy(
-    DefaultScheduleBucket.behavior(clock.zonedDateTime),
-    Tagging.const(EventTag("Schedule")),
-    schduleEventJournal
+  val scheduleBuckets = runtime.deploy(
+    behavior(
+      DefaultScheduleBucket.behavior(clock.zonedDateTime),
+      Tagging.const(EventTag("Schedule")),
+      schduleEventJournal
+    )
   )
 
-  val scheduleEntryRepository = TestScheduleEntryRepository[SpecF, SpecState](
-    _.scheduleEntries,
-    (x, a) => x.copy(scheduleEntries = a)
+  val scheduleEntryRepository = TestScheduleEntryRepository[F, SpecState](
+    Lens(_.scheduleEntries, (x, a) => x.copy(scheduleEntries = a))
   )
 
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
-  val wrappedEventJournal = new ScheduleEventJournal[StateT[SpecF, SpecState, ?]] {
+  val wrappedEventJournal = new ScheduleEventJournal[F] {
     override def processNewEvents(
-      f: EntityEvent[ScheduleBucketId, ScheduleEvent] => StateT[SpecF, SpecState, Unit]
-    ): StateT[SpecF, SpecState, Unit] =
+      f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
+    ): F[Unit] =
       schduleEventJournal
-        .eventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
+        .currentEventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
         .process(f)
   }
 
-  val scheduleProcess = ScheduleProcess[StateT[SpecF, SpecState, ?]](
+  val offsetStore =
+    StateKeyValueStore[F, SpecState, TagConsumer, LocalDateTime](
+      Lens(_.offsetStoreState, (s, os) => s.copy(offsetStoreState = os))
+    )
+
+  val scheduleProcess = ScheduleProcess[F](
     journal = wrappedEventJournal,
     dayZero = LocalDate.now(),
     consumerId = scheduleProcessConsumerId,
@@ -111,30 +109,30 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   val notificationProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
 
-  override def otherStuff: Vector[StateT[SpecF, SpecState, Unit]] =
-    Vector(scheduleProcess)
-
-  override def processes: Vector[WiredProcess[StateT[SpecF, SpecState, ?]]] = Vector(
+  val processes = Processes(Vector(
     wireProcess(
       CounterViewProcess(
-        TestCounterViewRepository[SpecF, SpecState](
+        TestCounterViewRepository[F, SpecState](Lens(
           _.counterViewState,
           (x, a) => x.copy(counterViewState = a)
-        )
+        ))
       ),
       counterEventJournal
-        .eventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
+        .currentEventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
     ),
     wireProcess(
       NotificationProcess(counters, notifications),
       counterEventJournal
-        .eventsByTag(CounterEvent.tag, notificationProcessConsumerId)
+        .currentEventsByTag(CounterEvent.tag, notificationProcessConsumerId)
         .map(Coproduct[NotificationProcess.Input](_)),
       notificationEventJournal
-        .eventsByTag(NotificationEvent.tag, notificationProcessConsumerId)
+        .currentEventsByTag(NotificationEvent.tag, notificationProcessConsumerId)
         .map(Coproduct[NotificationProcess.Input](_))
-    )
-  )
+    ),
+    scheduleProcess
+  ))
+
+  import processes._
 
   def tickSeconds(seconds: Long) = wired(clock.tick)(java.time.Duration.ofSeconds(seconds))
 
@@ -156,17 +154,17 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     val Right((state, _)) = program
       .run(
         SpecState(
-          State.init,
-          State.init,
-          State.init,
-          TestCounterViewRepositoryState.init,
+          StateEventJournal.State.init,
+          StateEventJournal.State.init,
+          StateEventJournal.State.init,
+          TestCounterViewRepository.State.init,
           Instant.now(),
           Vector.empty,
           Map.empty
         )
       )
 
-    state.counterViewState.value shouldBe Map(first -> 1L, second -> 2L)
+    state.counterViewState.values shouldBe Map(first -> 1L, second -> 2L)
 
     state.notificationJournalState.eventsById
       .getOrElse("1-2", Vector.empty) should have size (2)
@@ -176,7 +174,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
     val buckets = wiredK(scheduleBuckets)
 
-    def program(n: Int): StateT[SpecF, SpecState, Unit] =
+    def program(n: Int): F[Unit] =
       for {
         now <- clock.localDateTime
         bucketId = ScheduleBucketId("foo", "b")
@@ -186,7 +184,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
         _ <- tickSeconds(3)
         _ <- tickSeconds(2)
         _ <- if (n == 0) {
-              ().pure[StateT[SpecF, SpecState, ?]]
+              ().pure[F]
             } else {
               program(n - 1)
             }
@@ -195,10 +193,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     val Right((state, _)) = program(100)
       .run(
         SpecState(
-          State.init,
-          State.init,
-          State.init,
-          TestCounterViewRepositoryState.init,
+          StateEventJournal.State.init,
+          StateEventJournal.State.init,
+          StateEventJournal.State.init,
+          TestCounterViewRepository.State.init,
           Instant.now(Clock.systemUTC()),
           Vector.empty,
           Map.empty

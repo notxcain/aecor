@@ -1,29 +1,20 @@
 package aecor.testkit
 
 import aecor.util.KeyValueStore
-import cats.Applicative
-import cats.data.StateT
+import cats.mtl.MonadState
 
 object StateKeyValueStore {
-  def apply[F[_]: Applicative, S, K, A](
-    extract: S => Map[K, A],
-    update: (S, Map[K, A]) => S
-  ): KeyValueStore[StateT[F, S, ?], K, A] =
-    new StateKeyValueStore(extract, update)
+  def apply[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K, A]]): KeyValueStore[F, K, A] =
+    new StateKeyValueStore(lens)
 }
 
-class StateKeyValueStore[F[_]: Applicative, S, K, A](extract: S => Map[K, A],
-                                                     update: (S, Map[K, A]) => S)
-    extends KeyValueStore[StateT[F, S, ?], K, A] {
+class StateKeyValueStore[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K, A]])
+    extends KeyValueStore[F, K, A] {
+  private val F = lens.transformMonadState(MonadState[F, S])
+  override def setValue(key: K, value: A): F[Unit] =
+    F.modify(_.updated(key, value))
 
-  override def setValue(key: K, value: A): StateT[F, S, Unit] =
-    StateT
-      .modify[F, Map[K, A]](_.updated(key, value))
-      .transformS(extract, update)
-
-  override def getValue(key: K): StateT[F, S, Option[A]] =
-    StateT
-      .inspect[F, Map[K, A], Option[A]](_.get(key))
-      .transformS(extract, update)
+  override def getValue(key: K): F[Option[A]] =
+    F.inspect(_.get(key))
 
 }

@@ -1,6 +1,6 @@
 package aecor.testkit
 
-import aecor.ReifiedInvocation
+import aecor.ReifiedInvocations
 import aecor.arrow.Invocation
 import aecor.data.EventsourcedBehaviorT
 import aecor.data.Folded.{ Impossible, Next }
@@ -16,9 +16,11 @@ object StateRuntime {
     *  Construct runtime for single instance of aggregate
     *
     */
-  def single[M[_[_]], F[_], S, E](
-    behavior: EventsourcedBehaviorT[M, F, S, E]
-  )(implicit F: MonadError[F, Throwable], M: ReifiedInvocation[M]): M[StateT[F, Vector[E], ?]] =
+  def single[M[_[_]], F[_], S, E](behavior: EventsourcedBehaviorT[M, F, S, E])(
+    implicit F: MonadError[F, Throwable],
+    M: ReifiedInvocations[M],
+    FK: FunctorK[M]
+  ): M[StateT[F, Vector[E], ?]] =
     M.create {
       new (Invocation[M, ?] ~> StateT[F, Vector[E], ?]) {
         override def apply[A](op: Invocation[M, A]): StateT[F, Vector[E], A] =

@@ -11,7 +11,7 @@ import aecor.schedule.process.{
   PeriodicProcessRuntime,
   ScheduleProcess
 }
-import aecor.util.{ Clock, KeyValueStore }
+import aecor.util.{ ClockT, KeyValueStore }
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
@@ -42,7 +42,7 @@ object Schedule {
   def start[F[_]: Effect](
     entityName: String,
     dayZero: LocalDate,
-    clock: Clock[F],
+    clock: ClockT[F],
     repository: ScheduleEntryRepository[F],
     offsetStore: KeyValueStore[F, TagConsumer, UUID],
     settings: ScheduleSettings = ScheduleSettings(

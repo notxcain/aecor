@@ -5,7 +5,7 @@ import java.util.UUID
 
 import aecor.data._
 import aecor.runtime.akkapersistence.readside.{ CommittableEventJournalQuery, JournalEntry }
-import aecor.util.Clock
+import aecor.util.ClockT
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect
@@ -15,7 +15,7 @@ import aecor.util.effect._
 import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule[F[_]: Effect](
-  clock: Clock[F],
+  clock: ClockT[F],
   buckets: ScheduleBucketId => ScheduleBucket[F],
   bucketLength: FiniteDuration,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],

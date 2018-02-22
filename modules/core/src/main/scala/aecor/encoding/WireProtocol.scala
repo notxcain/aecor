@@ -2,7 +2,6 @@ package aecor.encoding
 
 import java.nio.ByteBuffer
 
-import aecor.ReifiedInvocation
 import aecor.arrow.Invocation
 import aecor.data.PairE
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
@@ -10,7 +9,7 @@ import aecor.encoding.WireProtocol.{ Decoder, Encoder }
 
 import scala.util.{ Failure, Success, Try }
 
-trait WireProtocol[M[_[_]]] extends ReifiedInvocation[M] {
+trait WireProtocol[M[_[_]]] {
   def decoder: Decoder[PairE[Invocation[M, ?], Encoder]]
   def encoder: M[WireProtocol.Encoded]
 }
@@ -23,9 +22,8 @@ object WireProtocol {
   }
 
   object Encoder {
-    def fromPickler[A: boopickle.Default.Pickler]: Encoder[A] = new Encoder[A] {
-      override def encode(a: A): ByteBuffer =
-        boopickle.Default.Pickle.intoBytes(a)
+    def instance[A](f: A => ByteBuffer): Encoder[A] = new Encoder[A] {
+      override def encode(a: A): ByteBuffer = f(a)
     }
   }
 
@@ -51,8 +49,5 @@ object WireProtocol {
           case Success(value)     => Right(value)
         }
     }
-    def fromPickler[A: boopickle.Default.Pickler]: Decoder[A] =
-      fromTry(b => Try(boopickle.Default.Unpickle[A].fromBytes(b)))
-
   }
 }

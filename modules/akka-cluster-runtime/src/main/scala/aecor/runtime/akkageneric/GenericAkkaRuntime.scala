@@ -2,6 +2,7 @@ package aecor.runtime.akkageneric
 
 import java.nio.ByteBuffer
 
+import aecor.ReifiedInvocations
 import aecor.arrow.Invocation
 import aecor.data.Behavior
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
@@ -14,6 +15,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.~>
 import aecor.util.effect._
+import io.aecor.liberator.FunctorK
 
 import scala.concurrent.Future
 
@@ -28,7 +30,9 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
     typeName: String,
     createBehavior: K => Behavior[M, F],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M]): F[K => M[F]] =
+  )(implicit M: ReifiedInvocations[M],
+    MFK: FunctorK[M],
+    WireProtocol: WireProtocol[M]): F[K => M[F]] =
     Effect[F].delay {
 
       import system.dispatcher
@@ -64,7 +68,7 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
         M.create {
           new (Invocation[M, ?] ~> F) {
             override def apply[A](fa: Invocation[M, A]): F[A] = Effect[F].fromFuture {
-              val (bytes, decoder) = fa.invoke(M.encoder)
+              val (bytes, decoder) = fa.invoke(WireProtocol.encoder)
               (shardRegionRef ? Command(keyEncoder(key), bytes.asReadOnlyBuffer()))
                 .asInstanceOf[Future[ByteBuffer]]
                 .map(decoder.decode)

@@ -16,7 +16,9 @@ import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.~>
+import io.aecor.liberator.FunctorK
 import io.aecor.liberator.syntax._
+
 import scala.concurrent.Future
 
 object AkkaPersistenceRuntime {
@@ -35,7 +37,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
     tagging: Tagging[K],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], FK: FunctorK[M]): F[K => M[F]] =
     Effect[F].delay {
       import system.dispatcher
       val props =
