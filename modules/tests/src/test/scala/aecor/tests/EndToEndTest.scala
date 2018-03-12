@@ -5,13 +5,13 @@ import java.time._
 import aecor.data._
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
-import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
-import aecor.testkit.{ E2eSupport,  StateClock, StateEventJournal, StateKeyValueStore }
+import aecor.schedule.process.{ScheduleEventJournal, ScheduleProcess}
+import aecor.testkit.{E2eSupport, StateClock, StateEventJournal, StateKeyValueStore}
 import aecor.tests.e2e._
 import aecor.testkit.E2eSupport._
-import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
+import aecor.tests.e2e.notification.{NotificationEvent, NotificationId}
 import cats.implicits._
-import org.scalatest.{ FunSuite, Matchers }
+import org.scalatest.{FunSuite, Matchers}
 import aecor.testkit.Lens
 import shapeless.Coproduct
 import scala.concurrent.duration._
@@ -20,13 +20,13 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   import cats.mtl.instances.all._
 
   case class SpecState(
-    counterJournalState: StateEventJournal.State[CounterId, CounterEvent],
-    notificationJournalState: StateEventJournal.State[NotificationId, NotificationEvent],
-    scheduleJournalState: StateEventJournal.State[ScheduleBucketId, ScheduleEvent],
-    counterViewState: TestCounterViewRepository.State,
-    time: Instant,
-    scheduleEntries: Vector[ScheduleEntry],
-    offsetStoreState: Map[TagConsumer, LocalDateTime]
+      counterJournalState: StateEventJournal.State[CounterId, CounterEvent],
+      notificationJournalState: StateEventJournal.State[NotificationId, NotificationEvent],
+      scheduleJournalState: StateEventJournal.State[ScheduleBucketId, ScheduleEvent],
+      counterViewState: TestCounterViewRepository.State,
+      time: Instant,
+      scheduleEntries: Vector[ScheduleEntry],
+      offsetStoreState: Map[TagConsumer, LocalDateTime]
   )
 
   val clock = StateClock[F, SpecState](ZoneOffset.UTC, Lens(_.time, (s, t) => s.copy(time = t)))
@@ -34,8 +34,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   def counterEventJournal =
     mkJournal[CounterId, CounterEvent](
       Lens(
-      _.counterJournalState,
-      (x, a) => x.copy(counterJournalState = a)
+        _.counterJournalState,
+        (x, a) => x.copy(counterJournalState = a)
       )
     )
 
@@ -81,7 +81,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
   val wrappedEventJournal = new ScheduleEventJournal[F] {
     override def processNewEvents(
-      f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
+        f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
     ): F[Unit] =
       schduleEventJournal
         .currentEventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
@@ -109,28 +109,30 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   val notificationProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
 
-  val processes = Processes(Vector(
+  val processes = Processes[F, SpecState](
     wireProcess(
-      CounterViewProcess(
-        TestCounterViewRepository[F, SpecState](Lens(
-          _.counterViewState,
-          (x, a) => x.copy(counterViewState = a)
-        ))
+        CounterViewProcess(
+          TestCounterViewRepository[F, SpecState](
+            Lens(
+              _.counterViewState,
+              (x, a) => x.copy(counterViewState = a)
+            )
+          )
+        ),
+        counterEventJournal
+          .currentEventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
       ),
-      counterEventJournal
-        .currentEventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
-    ),
-    wireProcess(
-      NotificationProcess(counters, notifications),
-      counterEventJournal
-        .currentEventsByTag(CounterEvent.tag, notificationProcessConsumerId)
-        .map(Coproduct[NotificationProcess.Input](_)),
-      notificationEventJournal
-        .currentEventsByTag(NotificationEvent.tag, notificationProcessConsumerId)
-        .map(Coproduct[NotificationProcess.Input](_))
-    ),
-    scheduleProcess
-  ))
+      wireProcess(
+        NotificationProcess(counters, notifications),
+        counterEventJournal
+          .currentEventsByTag(CounterEvent.tag, notificationProcessConsumerId)
+          .map(Coproduct[NotificationProcess.Input](_)),
+        notificationEventJournal
+          .currentEventsByTag(NotificationEvent.tag, notificationProcessConsumerId)
+          .map(Coproduct[NotificationProcess.Input](_))
+      ),
+      scheduleProcess
+  )
 
   import processes._
 

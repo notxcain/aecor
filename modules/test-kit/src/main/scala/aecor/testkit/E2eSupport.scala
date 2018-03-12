@@ -44,11 +44,12 @@ object E2eSupport {
   }
 
   abstract class Processes[F[_]](items: Vector[F[Unit]]) {
-    type S
-    implicit def F: MonadState[F, S]
-    implicit def monad = F.monad
+    protected type S
+    protected implicit def F: MonadState[F, S]
 
-    def runProcesses: F[Unit] =
+    final private implicit def monad = F.monad
+
+    final def runProcesses: F[Unit] =
       for {
         stateBefore <- F.get
         _ <- items.sequence
@@ -72,9 +73,9 @@ object E2eSupport {
   }
 
   object Processes {
-    def apply[F[_], S0](items: Vector[F[Unit]])(implicit F0: MonadState[F, S0]): Processes[F] =
-      new Processes[F](items) {
-        override type S = S0
+    def apply[F[_], S0](items: F[Unit]*)(implicit F0: MonadState[F, S0]): Processes[F] =
+      new Processes[F](items.toVector) {
+        final override type S = S0
         override implicit def F: MonadState[F, S] = F0
       }
   }

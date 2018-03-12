@@ -1,23 +1,27 @@
 package aecor.runtime.akkapersistence.readside
 
-import aecor.data.{ EntityEvent, Folded }
-import cats.MonadError
+import aecor.data.{EntityEvent, Folded}
+import cats.Monad
 import cats.implicits._
+import aecor.util.KeyValueStore
 
 object Projection {
-  trait ProjectionError[A, E, S] {
-    def illegalFold(event: E, state: S): A
-    def missingEvent(event: E, state: S): A
+  case class Versioned[A](version: Long, a: A)
+  
+  trait Failure[F[_], K, E, S] {
+    def illegalFold[A](event: EntityEvent[K, E], state: Option[S]): F[A]
+    def missingEvent[A](key: K, seqNr: Long): F[A]
   }
-  def apply[F[_], Err, Key, Event, State](store: Store[F, Key, Versioned[State]],
-                                          zero: Event => Folded[State],
-                                          update: (Event, State) => Folded[State])(
-    implicit F: MonadError[F, Err],
-    Error: ProjectionError[Err, EntityEvent[Key, Event], Option[Versioned[State]]]
+
+  def apply[F[_]: Monad, Key, Event, State](
+      store: KeyValueStore[F, Key, Versioned[State]],
+      zero: Event => Folded[State],
+      update: (Event, State) => Folded[State],
+      failure: Failure[F, Key, Event, State]
   ): EntityEvent[Key, Event] => F[Unit] = {
-    case input @ EntityEvent(id, seqNr, event) =>
+    case input @ EntityEvent(key, seqNr, event) =>
       for {
-        state <- store.readState(id)
+        state <- store.getValue(key)
         currentVersion = state.fold(0L)(_.version)
         _ <- if (seqNr <= currentVersion) {
               ().pure[F]
@@ -25,19 +29,12 @@ object Projection {
               state
                 .map(_.a)
                 .fold(zero(event))(update(event, _))
-                .fold(F.raiseError[Unit](Error.illegalFold(input, state))) { a =>
-                  store.saveState(id, Versioned(currentVersion + 1, a))
+                .fold(failure.illegalFold[Unit](input, state.map(_.a))) { a =>
+                  store.setValue(key, Versioned(currentVersion + 1, a))
                 }
             } else {
-              F.raiseError(Error.missingEvent(input, state))
+              failure.missingEvent(key, currentVersion + 1)
             }
       } yield ()
   }
 }
-
-trait Store[F[_], I, S] {
-  def readState(i: I): F[Option[S]]
-  def saveState(i: I, s: S): F[Unit]
-}
-
-case class Versioned[A](version: Long, a: A)
