@@ -46,7 +46,7 @@ final object KeyDecoder {
     final def apply(key: String): Option[A] = f(key)
   }
 
-  implicit def anyVal[A](implicit A: AnyValKeyDecoder[A]): KeyDecoder[A] = A
+  implicit def anyVal[A <: AnyVal](implicit A: AnyValKeyDecoder[A]): KeyDecoder[A] = A
 
   private[this] def numberInstance[A](f: String => A): KeyDecoder[A] = new KeyDecoder[A] {
     final def apply(key: String): Option[A] =
