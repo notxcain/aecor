@@ -44,7 +44,8 @@ lazy val commonSettings = Seq(
   addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
-    .filter(_ != "-Xfatal-warnings")
+    .filter(_ != "-Xfatal-warnings"),
+  sources in (Compile, doc) := Nil
 ) ++ warnUnusedImport
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
