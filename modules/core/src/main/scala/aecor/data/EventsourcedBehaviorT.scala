@@ -36,6 +36,6 @@ object EventsourcedBehavior {
     EventsourcedBehavior(
       actions,
       Option.empty[State],
-      (os, e) => os.map(s => applyEvent(s, e).map(Some(_))).getOrElse(Folded.impossible)
+      (os, e) => os.map(s => applyEvent(s, e)).getOrElse(init(e)).map(Some(_))
     )
 }
