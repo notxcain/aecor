@@ -59,7 +59,7 @@ object WireProtocolMacro {
       q"""
         implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] =
          new aecor.encoding.WireProtocol[$unifiedBase] {
-            import _root_.aecor.encoding.AecorBoopickleDefault._
+            import _root_.boopickle.Default._
 
             final def mapK[F[_], G[_]](mf: $typeName[..$abstractTypes, F], fg: _root_.cats.arrow.FunctionK[F, G]): $typeName[..$abstractTypes, G] =
               new ${Ctor.Name(typeName.value)}[..$abstractTypes, G] {
