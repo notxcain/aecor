@@ -1,23 +1,23 @@
 package aecor.runtime.akkapersistence.readside
 
-import aecor.data.{EntityEvent, Folded}
+import aecor.data.{ EntityEvent, Folded }
 import cats.Monad
 import cats.implicits._
 import aecor.util.KeyValueStore
 
 object Projection {
-  case class Versioned[A](version: Long, a: A)
-  
+  final case class Versioned[A](version: Long, a: A)
+
   trait Failure[F[_], K, E, S] {
     def illegalFold[A](event: EntityEvent[K, E], state: Option[S]): F[A]
     def missingEvent[A](key: K, seqNr: Long): F[A]
   }
 
   def apply[F[_]: Monad, Key, Event, State](
-      store: KeyValueStore[F, Key, Versioned[State]],
-      zero: Event => Folded[State],
-      update: (Event, State) => Folded[State],
-      failure: Failure[F, Key, Event, State]
+    store: KeyValueStore[F, Key, Versioned[State]],
+    zero: Event => Folded[State],
+    update: (Event, State) => Folded[State],
+    failure: Failure[F, Key, Event, State]
   ): EntityEvent[Key, Event] => F[Unit] = {
     case input @ EntityEvent(key, seqNr, event) =>
       for {

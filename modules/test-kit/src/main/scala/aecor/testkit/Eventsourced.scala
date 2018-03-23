@@ -12,7 +12,7 @@ import io.aecor.liberator.FunctorK
 
 object Eventsourced {
   type EntityId = String
-  final case class InternalState[S](entityState: S, version: Long) {}
+  final case class InternalState[S](entityState: S, version: Long)
 
   sealed abstract class BehaviorFailure extends Exception
   object BehaviorFailure {
@@ -29,9 +29,7 @@ object Eventsourced {
   )(implicit M: ReifiedInvocations[M]): I => Behavior[M, F] = { entityId =>
     val internalize =
       new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], E, ?]) {
-        override def apply[A](
-          fa: ActionT[F, S, E, A]
-        ): ActionT[F, InternalState[S], E, A] =
+        override def apply[A](fa: ActionT[F, S, E, A]): ActionT[F, InternalState[S], E, A] =
           fa.mapState(_.entityState)
       }
 
@@ -81,7 +79,11 @@ object Eventsourced {
           case Next((snapshotNeeded, nextState)) =>
             val tags = tagging.tag(entityId)
             val appendEvents = journal
-              .append(entityId, state.version, NonEmptyVector.of(events.head, events.tail: _*).map(TaggedEvent(_, tags)))
+              .append(
+                entityId,
+                state.version,
+                NonEmptyVector.of(events.head, events.tail: _*).map(TaggedEvent(_, tags))
+              )
             val snapshotIfNeeded = if (snapshotNeeded) {
               snapshotStore.setValue(entityId, nextState)
             } else {
@@ -98,7 +100,9 @@ object Eventsourced {
       loadState.map { initialState =>
         val x = effectiveBehavior.actions.mapK {
           new (ActionT[F, InternalState[S], E, ?] ~> StateT[F, InternalState[S], ?]) {
-            override def apply[A](action: ActionT[F, InternalState[S], E, A]): StateT[F, InternalState[S], A] =
+            override def apply[A](
+              action: ActionT[F, InternalState[S], E, A]
+            ): StateT[F, InternalState[S], A] =
               StateT { state =>
                 for {
                   x <- action.run(state)
