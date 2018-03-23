@@ -18,7 +18,7 @@ lazy val catsEffectVersion = "0.8"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
-lazy val boopickleVersion = "master-SNAPSHOT"
+lazy val boopickleVersion = "c5f487d547f78af80657d1e91701543223f18e6a"
 
 lazy val monixVersion = "3.0.0-M3"
 lazy val scalaCheckVersion = "1.13.4"
@@ -139,7 +139,7 @@ lazy val coreSettings = Seq(
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
     "com.github.mpilquist" %% "simulacrum" % simulacrumVersion,
     "io.aecor" %% "liberator" % liberatorVersion,
-    "com.github.suzaku-io.boopickle" %% "boopickle" % boopickleVersion,
+    "com.github.fdietze.boopickle" %% "boopickle" % boopickleVersion,
     "org.scalameta" %% "scalameta" % scalametaVersion
   )
 )
