@@ -20,7 +20,7 @@ final object KeyEncoder {
     def apply(key: A): String = f(key)
   }
 
-  implicit def anyVal[A](implicit A: AnyValKeyEncoder[A]): KeyEncoder[A] = A
+  implicit def anyVal[A <: AnyVal](implicit A: AnyValKeyEncoder[A]): KeyEncoder[A] = A
 
   implicit val encodeKeyString: KeyEncoder[String] = new KeyEncoder[String] {
     final def apply(key: String): String = key
