@@ -2,13 +2,13 @@ package aecor.tests.e2e
 
 import aecor.data.Folded.syntax._
 import aecor.data._
-import aecor.macros.wireProtocol
+import aecor.macros.boopickleWireProtocol
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
 
 object notification {
   type NotificationId = String
 
-  @wireProtocol
+  @boopickleWireProtocol
   trait Notification[F[_]] {
     def create(counterId: CounterId): F[Unit]
     def markAsSent: F[Unit]
@@ -29,9 +29,7 @@ object notification {
   }
 
   def notificationActions = new Notification[Action[NotificationState, NotificationEvent, ?]] {
-    override def create(
-      counterId: CounterId
-    ): Action[NotificationState, NotificationEvent, Unit] =
+    override def create(counterId: CounterId): Action[NotificationState, NotificationEvent, Unit] =
       Action { _ =>
         List(NotificationCreated(counterId)) -> (())
       }

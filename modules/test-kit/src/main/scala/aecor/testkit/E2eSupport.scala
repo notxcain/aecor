@@ -3,7 +3,7 @@ package aecor.testkit
 import aecor.ReifiedInvocations
 import aecor.arrow.Invocation
 import aecor.data.{ PairT, _ }
-import aecor.testkit.Eventsourced.{ BehaviorFailure,  InternalState }
+import aecor.testkit.Eventsourced.{ BehaviorFailure, InternalState }
 import aecor.util.NoopKeyValueStore
 import cats.data.StateT
 import cats.implicits._
@@ -15,15 +15,12 @@ import scala.collection.immutable._
 
 object E2eSupport {
 
-
   final def behavior[M[_[_]]: FunctorK, F[_], S, E, I](
     behavior: EventsourcedBehaviorT[M, F, S, E],
-    tagging: Tagging[I],
     journal: EventJournal[F, I, E]
   )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): I => Behavior[M, F] =
     Eventsourced[M, F, S, E, I](
       behavior,
-      tagging,
       journal,
       Option.empty,
       NoopKeyValueStore[F, I, InternalState[S]]
@@ -89,11 +86,14 @@ trait E2eSupport {
   type F[A] = StateT[Either[BehaviorFailure, ?], SpecState, A]
 
   final def mkJournal[I, E](
-    lens: Lens[SpecState, StateEventJournal.State[I, E]]
-  ): EventJournal[F, I, E] =
-    StateEventJournal[F, I, SpecState, E](lens)
+    lens: Lens[SpecState, StateEventJournal.State[I, E]],
+    tagging: Tagging[I]
+  ): EventJournal[F, I, E] with CurrentEventsByTagQuery[F, I, E] =
+    StateEventJournal[F, I, SpecState, E](lens, tagging)
 
-  final def wireProcess[In](process: In => F[Unit], source: Processable[F, In], sources: Processable[F, In]*)(implicit F: Monad[F]): F[Unit] =
+  final def wireProcess[In](process: In => F[Unit],
+                            source: Processable[F, In],
+                            sources: Processable[F, In]*)(implicit F: Monad[F]): F[Unit] =
     sources
       .fold(source)(_ merge _)
       .process(process)

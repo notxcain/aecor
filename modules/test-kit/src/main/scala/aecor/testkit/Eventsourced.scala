@@ -20,13 +20,12 @@ object Eventsourced {
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
-  def apply[M[_[_]]: FunctorK, F[_]: MonadError[?[_], BehaviorFailure], S, E, I](
+  def apply[M[_[_]]: FunctorK, F[_]: MonadError[?[_], BehaviorFailure], S, E, K](
     entityBehavior: EventsourcedBehaviorT[M, F, S, E],
-    tagging: Tagging[I],
-    journal: EventJournal[F, I, E],
+    journal: EventJournal[F, K, E],
     snapshotEach: Option[Long],
-    snapshotStore: KeyValueStore[F, I, InternalState[S]]
-  )(implicit M: ReifiedInvocations[M]): I => Behavior[M, F] = { entityId =>
+    snapshotStore: KeyValueStore[F, K, InternalState[S]]
+  )(implicit M: ReifiedInvocations[M]): K => Behavior[M, F] = { entityId =>
     val internalize =
       new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], E, ?]) {
         override def apply[A](fa: ActionT[F, S, E, A]): ActionT[F, InternalState[S], E, A] =
@@ -77,13 +76,8 @@ object Eventsourced {
           }
         folded match {
           case Next((snapshotNeeded, nextState)) =>
-            val tags = tagging.tag(entityId)
             val appendEvents = journal
-              .append(
-                entityId,
-                state.version,
-                NonEmptyVector.of(events.head, events.tail: _*).map(TaggedEvent(_, tags))
-              )
+              .append(entityId, state.version, NonEmptyVector.of(events.head, events.tail: _*))
             val snapshotIfNeeded = if (snapshotNeeded) {
               snapshotStore.setValue(entityId, nextState)
             } else {

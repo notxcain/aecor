@@ -14,7 +14,7 @@ lazy val akkaVersion = "2.5.9"
 lazy val akkaPersistenceCassandraVersion = "0.59"
 lazy val akkaPersistenceJdbcVersion = "3.2.0"
 lazy val catsVersion = "1.0.1"
-lazy val catsEffectVersion = "0.8"
+lazy val catsEffectVersion = "0.10"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -26,7 +26,6 @@ lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.4"
-lazy val simulacrumVersion = "0.11.0"
 lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
@@ -143,10 +142,10 @@ lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
+    "io.aecor" %% "liberator" % liberatorVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
-    "org.typelevel" %% "cats-effect" % catsEffectVersion,
-    "com.github.mpilquist" %% "simulacrum" % simulacrumVersion
+    "org.typelevel" %% "cats-effect" % catsEffectVersion
   )
 )
 
@@ -154,7 +153,6 @@ lazy val boopickleWireProtocolSettings = Seq(
   sources in (Compile, doc) := Nil,
   scalacOptions in (Compile, console) := Seq(),
   libraryDependencies ++= Seq(
-    "io.aecor" %% "liberator" % liberatorVersion,
     "com.github.fdietze.boopickle" %% "boopickle" % boopickleVersion,
     "org.scalameta" %% "scalameta" % scalametaVersion
   )
@@ -169,14 +167,12 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
   )
 )
 
 lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
@@ -187,8 +183,7 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
 
 lazy val akkaGenericSettings = Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-    "com.typesafe.akka" %% "akka-slf4j" % akkaVersion
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
   )
 )
 

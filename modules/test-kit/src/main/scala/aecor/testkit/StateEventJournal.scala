@@ -5,7 +5,6 @@ import aecor.testkit.StateEventJournal.State
 import cats.data.{ NonEmptyVector }
 import cats.implicits._
 import cats.mtl.MonadState
-import cats.Monad
 
 object StateEventJournal {
   case class State[I, E](eventsById: Map[I, Vector[E]],
@@ -21,9 +20,7 @@ object StateEventJournal {
       val updatedEventsById = eventsById
         .updated(id, eventsById.getOrElse(id, Vector.empty) ++ events.map(_.event).toVector)
 
-      val newEventsByTag: Map[EventTag, Vector[EntityEvent[I, E]]] = events
-        .toVector
-        .zipWithIndex
+      val newEventsByTag: Map[EventTag, Vector[EntityEvent[I, E]]] = events.toVector.zipWithIndex
         .flatMap {
           case (e, idx) =>
             e.tags.toVector.map(t => t -> EntityEvent(id, idx + offset, e.event))
@@ -42,41 +39,45 @@ object StateEventJournal {
     def init[I, E]: State[I, E] = State(Map.empty, Map.empty, Map.empty)
   }
 
-  def apply[F[_]: Monad: MonadState[?[_], A], I, A, E](
-    lens: Lens[A, State[I, E]]
-  ): StateEventJournal[F, I, A, E] =
-    new StateEventJournal(lens)
+  def apply[F[_]: MonadState[?[_], A], K, A, E](
+    lens: Lens[A, State[K, E]],
+    tagging: Tagging[K]
+  ): StateEventJournal[F, K, A, E] =
+    new StateEventJournal(lens, tagging)
+
 }
 
-class StateEventJournal[F[_]: MonadState[?[_], S]: Monad, I, S, E](lens: Lens[S, State[I, E]]) extends EventJournal[F, I, E] {
-  val F = lens.transformMonadState(MonadState[F, S])
+final class StateEventJournal[F[_], K, S, E](lens: Lens[S, State[K, E]], tagging: Tagging[K])(
+  implicit MS: MonadState[F, S]
+) extends EventJournal[F, K, E]
+    with CurrentEventsByTagQuery[F, K, E] {
+  private final implicit val monad = MS.monad
+  private final val F = lens.transformMonadState(MonadState[F, S])
 
-  override def append(id: I, offset: Long, events: NonEmptyVector[TaggedEvent[E]]): F[Unit] =
-    F.modify(_.appendEvents(id, offset, events))
+  override def append(id: K, offset: Long, events: NonEmptyVector[E]): F[Unit] =
+    F.modify(_.appendEvents(id, offset, events.map(e => TaggedEvent(e, tagging.tag(id)))))
 
-  override def foldById[A](id: I, offset: Long, zero: A)(
-    f: (A, E) => Folded[A]
-  ): F[Folded[A]] =
+  override def foldById[A](id: K, offset: Long, zero: A)(f: (A, E) => Folded[A]): F[Folded[A]] =
     F.inspect(
-      _.eventsById
-        .get(id)
-        .map(_.drop(offset.toInt))
-        .getOrElse(Vector.empty)
-    )
-    .map(_.foldM(zero)(f))
+        _.eventsById
+          .get(id)
+          .map(_.drop(offset.toInt))
+          .getOrElse(Vector.empty)
+      )
+      .map(_.foldM(zero)(f))
 
   override def currentEventsByTag(tag: EventTag,
-                                  consumerId: ConsumerId): Processable[F, EntityEvent[I, E]] =
-    new Processable[F, EntityEvent[I, E]] {
-      override def process(f: EntityEvent[I, E] => F[Unit]): F[Unit] =
+                                  consumerId: ConsumerId): Processable[F, EntityEvent[K, E]] =
+    new Processable[F, EntityEvent[K, E]] {
+      override def process(f: EntityEvent[K, E] => F[Unit]): F[Unit] =
         for {
           offset0 <- F.inspect(_.getConsumerOffset(tag, consumerId))
           result <- F.inspect(
-                      _.eventsByTag
-                        .getOrElse(tag, Vector.empty)
-                        .zipWithIndex
-                        .drop(offset0)
-                    )
+                     _.eventsByTag
+                       .getOrElse(tag, Vector.empty)
+                       .zipWithIndex
+                       .drop(offset0)
+                   )
           _ <- result.traverse {
                 case (i, offset) =>
                   for {
@@ -88,3 +89,5 @@ class StateEventJournal[F[_]: MonadState[?[_], S]: Monad, I, S, E](lens: Lens[S,
     }
 
 }
+
+final case class TaggedEvent[E](event: E, tags: Set[EventTag])

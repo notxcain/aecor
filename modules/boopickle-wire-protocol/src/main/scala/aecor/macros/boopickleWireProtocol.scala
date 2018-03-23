@@ -58,10 +58,8 @@ object BoopickleWireProtocolMacro {
 
     val companionStats: Seq[Stat] = Seq(
       q"""
-        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] =
-         new aecor.encoding.WireProtocol[$unifiedBase] {
-            import _root_.boopickle.Default._
-
+        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.aecor.ReifiedInvocations[$unifiedBase]  =
+         new aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.aecor.ReifiedInvocations[$unifiedBase]{
             final def mapK[F[_], G[_]](mf: $typeName[..$abstractTypes, F], fg: _root_.cats.arrow.FunctionK[F, G]): $typeName[..$abstractTypes, G] =
               new ${Ctor.Name(typeName.value)}[..$abstractTypes, G] {
                 ..${
@@ -97,6 +95,7 @@ object BoopickleWireProtocolMacro {
       }
             }
 
+            import _root_.boopickle.Default._
 
             final val encoder = new ${Ctor.Name(typeName.value)}[..$abstractTypes, aecor.encoding.WireProtocol.Encoded] {
               ..${
@@ -104,15 +103,15 @@ object BoopickleWireProtocolMacro {
           case q"def $name[..$tps](..$params): ${someF: Type.Name}[$out]" if someF.value == theF.value =>
             q"""
                         final def $name[..$tps](..$params): aecor.encoding.WireProtocol.Encoded[$out] = (
-                          boopickle.Default.Pickle.intoBytes((${Lit.String(name.value)}, ..${params.map(_.name.value).map(Term.Name(_))})),
-                          aecor.encoding.WireProtocol.Decoder.fromPickler[$out]
+                          Pickle.intoBytes((${Lit.String(name.value)}, ..${params.map(_.name.value).map(Term.Name(_))})),
+                          _root_.aecor.encoding.WireProtocol.Decoder.fromTry(bs => _root_.scala.util.Try(Unpickle[$out].fromBytes(bs)))
                         )
                       """
           case q"def $name: ${someF: Type.Name}[$out]" if someF.value == theF.value =>
             q"""
                         final val ${Pat.Var.Term(name)}: aecor.encoding.WireProtocol.Encoded[$out] = (
-                          boopickle.Default.Pickle.intoBytes(${Lit.String(name.value)}),
-                          aecor.encoding.WireProtocol.Decoder.fromPickler[$out]
+                          Pickle.intoBytes(${Lit.String(name.value)}),
+                          aecor.encoding.WireProtocol.Decoder.fromTry(bs => _root_.scala.util.Try(Unpickle[$out].fromBytes(bs)))
                         )
                       """
           case other =>
@@ -121,10 +120,10 @@ object BoopickleWireProtocolMacro {
       }
             }
 
-            final val decoder: aecor.encoding.WireProtocol.Decoder[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] =
-              new aecor.encoding.WireProtocol.Decoder[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] {
-                override def decode(bytes: java.nio.ByteBuffer): aecor.encoding.WireProtocol.Decoder.DecodingResult[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] = {
-                  val state = boopickle.UnpickleState(bytes)
+            final val decoder: _root_.aecor.encoding.WireProtocol.Decoder[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] =
+              new _root_.aecor.encoding.WireProtocol.Decoder[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] {
+                override def decode(bytes: _root_.java.nio.ByteBuffer): _root_.aecor.encoding.WireProtocol.Decoder.DecodingResult[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] = {
+                  val state = _root_.boopickle.UnpickleState(bytes)
                   state.unpickle[String] match {
                      ..case ${
         val cases = traitStats.map {
@@ -143,7 +142,7 @@ object BoopickleWireProtocolMacro {
                                   s"$$name$$args"
                                 }
                               }
-                              aecor.data.PairE(invocation, aecor.encoding.WireProtocol.Encoder.fromPickler[$out])
+                              aecor.data.PairE(invocation, aecor.encoding.WireProtocol.Encoder.instance[$out](Pickle.intoBytes))
                             })
                         """
             p"case $nameLit => $stats"
@@ -154,7 +153,7 @@ object BoopickleWireProtocolMacro {
                                 final override def invoke[F[_]](mf: $unifiedBase[F]): F[$out] =
                                   mf.$name
                               }
-                              aecor.data.PairE(invocation, aecor.encoding.WireProtocol.Encoder.fromPickler[$out])
+                              aecor.data.PairE(invocation, aecor.encoding.WireProtocol.Encoder.instance[$out](Pickle.intoBytes))
                             })
                         """
             val nameLit = Lit.String(name.value)

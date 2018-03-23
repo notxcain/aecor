@@ -10,14 +10,14 @@ class reifyInvocations extends scala.annotation.StaticAnnotation {
   inline def apply(defn: Any): Any = meta {
     Common.parseTraitAndCompanion(defn) match {
       case Some((t, c)) =>
-        WireProtocolMacro(t, c)
+        ReifiedInvocationsMacro(t, c)
       case None =>
         defn
     }
   }
 }
 
-object FunctorKMacro {
+object ReifiedInvocationsMacro {
 
   def apply(base: Defn.Trait, companion: Defn.Object): Term.Block = {
     val t = Common.Trait.fromDefn(base)
