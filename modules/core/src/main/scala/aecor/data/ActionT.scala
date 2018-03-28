@@ -26,17 +26,15 @@ object ActionT {
         }
     }
 
-  def enrich[F[_]: FlatMap, S, E, M](
-    meta: F[M]
-  ): ActionT[F, S, E, ?] ~> ActionT[F, S, Enriched[M, E], ?] =
-    new (ActionT[F, S, E, ?] ~> ActionT[F, S, Enriched[M, E], ?]) {
-      override def apply[A](action: ActionT[F, S, E, A]): ActionT[F, S, Enriched[M, E], A] =
+  def mapEventsF[F[_]: FlatMap, S, E, E1](
+    f: List[E] => F[List[E1]]
+  ): ActionT[F, S, E, ?] ~> ActionT[F, S, E1, ?] =
+    new (ActionT[F, S, E, ?] ~> ActionT[F, S, E1, ?]) {
+      override def apply[A](action: ActionT[F, S, E, A]): ActionT[F, S, E1, A] =
         ActionT { s =>
           action.run(s).flatMap {
             case (es, a) =>
-              meta.map { m =>
-                (es.map(Enriched(m, _)), a)
-              }
+              f(es).map((_, a))
           }
         }
     }
