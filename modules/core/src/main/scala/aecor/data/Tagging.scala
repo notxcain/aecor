@@ -10,7 +10,7 @@ object Tagging {
     private def tagForPartition(partition: Int) = EventTag(s"${tag.value}$partition")
     def tags: Seq[EventTag] = (0 to numberOfPartitions).map(tagForPartition)
     override def tag(a: A): Set[EventTag] =
-      Set(tags(a.hashCode % numberOfPartitions))
+      Set(tags(scala.math.abs(a.hashCode % numberOfPartitions)))
   }
   final case class Const[-A](tag: EventTag) extends Tagging[A] {
     override def tag(a: A): Set[EventTag] = Set(tag)
