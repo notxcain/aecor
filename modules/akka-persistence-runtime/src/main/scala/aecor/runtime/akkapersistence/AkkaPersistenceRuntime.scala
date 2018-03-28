@@ -8,7 +8,7 @@ import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Encoded
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.readside.{ AkkaPersistenceEventJournalQuery, JournalQuery }
-import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.runtime.akkapersistence.serialization.{ Message, PersistentDecoder, PersistentEncoder }
 import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
@@ -17,6 +17,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.~>
 import io.aecor.liberator.syntax._
+
 import scala.concurrent.Future
 
 object AkkaPersistenceRuntime {
@@ -25,6 +26,7 @@ object AkkaPersistenceRuntime {
 
   private[akkapersistence] final case class EntityCommand(entityKey: String,
                                                           commandBytes: ByteBuffer)
+      extends Message
 }
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,

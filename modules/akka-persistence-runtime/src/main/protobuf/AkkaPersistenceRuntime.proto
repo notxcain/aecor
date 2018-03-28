@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+package aecor.runtime.akkapersistence.serialization;
+option java_package = "aecor.runtime.akkapersistence.serialization.msg";
+option optimize_for = SPEED;
+
+message EntityCommand {
+    required string entityId = 1;
+    required bytes commandBytes = 2;
+}
+
+
