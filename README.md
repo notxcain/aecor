@@ -38,9 +38,9 @@ final case class SubscriptionId(value: java.util.UUID) extends AnyVal
 Then define what actions we're able to perform on `Subscription`
 
 ```scala
-import aecor.macros.wireProtocol
+import aecor.macros.boopickleWireProtocol
 
-@wireProtocol
+@boopickleWireProtocol
 trait Subscription[F[_]] {
   def createSubscription(userId: String, productId: String, planId: String): F[Unit]
   def pauseSubscription: F[Unit]
@@ -55,7 +55,7 @@ There is an abstract type `F[_]` which stays for an effect (see [Rob Norris, Fun
 
 Also being polymorphic in effect improves the reuse of this interface, you'll see it later.
 
-`@wireProtocol` - is a macro annotation that automates derivation of a `WireProtocol`, which is used by Akka Runtime to encode and decode actions and corresponding responses.
+`@boopickleWireProtocol` - is a macro annotation that automates derivation of a `WireProtocol`, which is used by Akka Runtime to encode and decode actions and corresponding responses.
 
 We are event sourced, so let's define our events:
 

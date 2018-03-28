@@ -23,9 +23,8 @@ object WireProtocol {
   }
 
   object Encoder {
-    def fromPickler[A: boopickle.Default.Pickler]: Encoder[A] = new Encoder[A] {
-      override def encode(a: A): ByteBuffer =
-        boopickle.Default.Pickle.intoBytes(a)
+    def instance[A](f: A => ByteBuffer): Encoder[A] = new Encoder[A] {
+      override def encode(a: A): ByteBuffer = f(a)
     }
   }
 
@@ -51,8 +50,6 @@ object WireProtocol {
           case Success(value)     => Right(value)
         }
     }
-    def fromPickler[A: boopickle.Default.Pickler]: Decoder[A] =
-      fromTry(b => Try(boopickle.Default.Unpickle[A].fromBytes(b)))
 
   }
 }

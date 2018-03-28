@@ -4,10 +4,10 @@ import aecor.example.AnyValCirceEncoding
 import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.Rejection
 import aecor.example.domain.transaction.TransactionId
-import aecor.macros.wireProtocol
+import aecor.macros.boopickleWireProtocol
 import io.circe.{ Decoder, Encoder }
 
-@wireProtocol
+@boopickleWireProtocol
 trait Account[F[_]] {
   def open(checkBalance: Boolean): F[Either[Rejection, Unit]]
   def credit(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]
