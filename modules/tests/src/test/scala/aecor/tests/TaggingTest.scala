@@ -8,7 +8,7 @@ class TaggingTest extends FunSuite with Matchers with GeneratorDrivenPropertyChe
   test("Const Tagging") {
     val tagging = Tagging.const[Int](EventTag("foo"))
     forAll { x: Int =>
-      tagging.tag(x) shouldBe Set("foo")
+      tagging.tag(x) shouldBe Set(EventTag("foo"))
     }
   }
 
@@ -16,7 +16,7 @@ class TaggingTest extends FunSuite with Matchers with GeneratorDrivenPropertyChe
     val tagging = Tagging.partitioned[Int](10)(EventTag(""))
 
     forAll { x: Int =>
-      tagging.tags should contain(tagging.tag(x))
+      tagging.tags should contain(tagging.tag(x).head)
     }
   }
 }

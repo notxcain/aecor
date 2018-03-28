@@ -4,14 +4,14 @@ import java.nio.ByteBuffer
 
 import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
-import aecor.macros.wireProtocol
+import aecor.macros.boopickleWireProtocol
 import cats.{ Id, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
 
 class GadtTest extends FunSuite with Matchers {
 
-  @wireProtocol
+  @boopickleWireProtocol
   trait Foo[F[_]] {
     def include(i: Int): F[Unit]
     def scdsc(s: String): F[Int]

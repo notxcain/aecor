@@ -2,13 +2,13 @@ package aecor.tests.e2e
 
 import aecor.data.Folded.syntax._
 import aecor.data._
-import aecor.macros.wireProtocol
+import aecor.macros.boopickleWireProtocol
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import io.circe.generic.auto._
 
-@wireProtocol
+@boopickleWireProtocol
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
