@@ -64,7 +64,8 @@ lazy val aecor = project
     example,
     schedule,
     tests,
-    benchmarks
+    benchmarks,
+    testKit
   )
   .dependsOn(core, example % "compile-internal", tests % "test-internal -> test")
 
