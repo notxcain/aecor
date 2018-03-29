@@ -9,7 +9,7 @@ import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.effect.Effect
 import com.datastax.driver.core.Session
-
+import cats.implicits._
 import scala.concurrent.{ ExecutionContext, Future }
 
 object CassandraOffsetStore {
@@ -26,17 +26,16 @@ object CassandraOffsetStore {
     implicit executionContext: ExecutionContext
   ): Session => Future[Unit] = _.executeAsync(config.createTableQuery).asScala.map(_ => ())
 
-  def apply[F[_]: Effect](session: CassandraSession, config: CassandraOffsetStore.Config)(
-    implicit executionContext: ExecutionContext
-  ): CassandraOffsetStore[F] =
+  def apply[F[_]: Effect](session: CassandraSession,
+                          config: CassandraOffsetStore.Config): CassandraOffsetStore[F] =
     new CassandraOffsetStore(session, config)
 
 }
 
-class CassandraOffsetStore[F[_]: Effect] private[akkapersistence] (
+class CassandraOffsetStore[F[_]] private[akkapersistence] (
   session: CassandraSession,
   config: CassandraOffsetStore.Config
-)(implicit executionContext: ExecutionContext)
+)(implicit F: Effect[F])
     extends KeyValueStore[F, TagConsumer, UUID] {
 
   private val selectOffsetStatement =
@@ -46,23 +45,24 @@ class CassandraOffsetStore[F[_]: Effect] private[akkapersistence] (
     session.prepare(config.updateOffsetQuery)
 
   override def setValue(key: TagConsumer, value: UUID): F[Unit] =
-    Effect[F].fromFuture {
-      updateOffsetStatement
-        .map { stmt =>
-          stmt
-            .bind()
-            .setUUID("offset", value)
-            .setString("tag", key.tag.value)
-            .setString("consumer_id", key.consumerId.value)
-        }
-        .flatMap(session.executeWrite)
-        .map(_ => ())
-    }
+    F.fromFuture {
+        updateOffsetStatement
+      }
+      .map { stmt =>
+        stmt
+          .bind()
+          .setUUID("offset", value)
+          .setString("tag", key.tag.value)
+          .setString("consumer_id", key.consumerId.value)
+      }
+      .flatMap(x => F.fromFuture(session.executeWrite(x)))
+      .void
 
-  override def getValue(key: TagConsumer): F[Option[UUID]] = Effect[F].fromFuture {
-    selectOffsetStatement
+  override def getValue(key: TagConsumer): F[Option[UUID]] =
+    F.fromFuture {
+        selectOffsetStatement
+      }
       .map(_.bind(key.consumerId.value, key.tag.value))
-      .flatMap(session.selectOne)
+      .flatMap(x => F.fromFuture(session.selectOne(x)))
       .map(_.map(_.getUUID("offset")))
-  }
 }

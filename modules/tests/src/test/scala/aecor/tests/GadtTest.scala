@@ -8,6 +8,14 @@ import aecor.macros.boopickleWireProtocol
 import cats.{ Id, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
+import java.util.UUID
+import GadtTest._
+
+object GadtTest {
+
+  final case class FooId(value: UUID) extends AnyVal
+
+}
 
 class GadtTest extends FunSuite with Matchers {
 
@@ -15,14 +23,17 @@ class GadtTest extends FunSuite with Matchers {
   trait Foo[F[_]] {
     def include(i: Int): F[Unit]
     def scdsc(s: String): F[Int]
+    def id: F[FooId]
   }
 
   val protocol = Foo.aecorWireProtocol
 
   test("encdec") {
+    val uuid = UUID.randomUUID
     val actions = new Foo[Id] {
       override def include(i: Int): Id[Unit] = ()
       override def scdsc(s: String): Id[Int] = s.length
+      override def id: Id[FooId] = FooId(uuid)
     }
 
     val server: ByteBuffer => DecodingResult[ByteBuffer] = { in =>
@@ -38,6 +49,8 @@ class GadtTest extends FunSuite with Matchers {
           server(fa._1).right.flatMap(fa._2.decode)
       })
 
+    client.include(1) shouldBe Right(())
     client.scdsc("1234") shouldBe Right(4)
+    client.id shouldBe Right(FooId(uuid))
   }
 }

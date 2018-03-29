@@ -2,15 +2,15 @@ package aecor.encoding
 
 import java.nio.ByteBuffer
 
-import aecor.ReifiedInvocation
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data.PairE
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.encoding.WireProtocol.{ Decoder, Encoder }
+import io.aecor.liberator.ReifiedInvocations
 
 import scala.util.{ Failure, Success, Try }
 
-trait WireProtocol[M[_[_]]] extends ReifiedInvocation[M] {
+trait WireProtocol[M[_[_]]] extends ReifiedInvocations[M] {
   def decoder: Decoder[PairE[Invocation[M, ?], Encoder]]
   def encoder: M[WireProtocol.Encoded]
 }

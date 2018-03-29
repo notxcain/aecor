@@ -6,7 +6,7 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 import java.util.UUID
 
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data._
 import aecor.util.effect._
 import aecor.encoding.{ KeyDecoder, WireProtocol }

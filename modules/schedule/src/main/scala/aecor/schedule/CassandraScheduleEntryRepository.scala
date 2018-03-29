@@ -16,13 +16,13 @@ import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
 import aecor.util.effect._
 import scala.concurrent.{ ExecutionContext, Future }
+import cats.implicits._
 
-class CassandraScheduleEntryRepository[F[_]: Effect](
-  cassandraSession: CassandraSession,
-  queries: Queries
-)(implicit materializer: Materializer)
-    extends ScheduleEntryRepository[F] {
-  import materializer.executionContext
+class CassandraScheduleEntryRepository[F[_]](cassandraSession: CassandraSession, queries: Queries)(
+  implicit materializer: Materializer,
+  F: Effect[F]
+) extends ScheduleEntryRepository[F] {
+
   private val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository[F]])
   private val preparedInsertEntry = cassandraSession.prepare(queries.insertEntry)
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
@@ -31,64 +31,63 @@ class CassandraScheduleEntryRepository[F[_]: Effect](
   override def insertScheduleEntry(id: ScheduleBucketId,
                                    entryId: String,
                                    dueDate: LocalDateTime): F[Unit] =
-    Effect[F].fromFuture {
-      preparedInsertEntry
-        .map(
-          _.bind()
-            .setString("schedule_name", id.scheduleName)
-            .setString("schedule_bucket", id.scheduleBucket)
-            .setString("entry_id", entryId)
-            .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
-            .set("due_date", dueDate.toInstant(ZoneOffset.UTC), classOf[Instant])
-            .setBool("fired", false)
-        )
-        .flatMap(cassandraSession.executeWrite)
-        .map(_ => ())
-    }
+    F.fromFuture(preparedInsertEntry)
+      .map(
+        _.bind()
+          .setString("schedule_name", id.scheduleName)
+          .setString("schedule_bucket", id.scheduleBucket)
+          .setString("entry_id", entryId)
+          .setString("time_bucket", TimeBucket(dueDate.toLocalDate).key)
+          .set("due_date", dueDate.toInstant(ZoneOffset.UTC), classOf[Instant])
+          .setBool("fired", false)
+      )
+      .flatMap(x => F.fromFuture(cassandraSession.executeWrite(x)))
+      .void
 
   override def markScheduleEntryAsFired(id: ScheduleBucketId, entryId: String): F[Unit] =
-    Effect[F].fromFuture {
-      preparedSelectEntry
-        .map(
-          _.bind()
-            .setString("schedule_name", id.scheduleName)
-            .setString("schedule_bucket", id.scheduleBucket)
-            .setString("entry_id", entryId)
-        )
-        .flatMap(cassandraSession.selectOne)
-        .flatMap {
-          case Some(row) =>
-            preparedInsertEntry
-              .map(
-                _.bind()
-                  .setString("schedule_name", id.scheduleName)
-                  .setString("schedule_bucket", id.scheduleBucket)
-                  .setString("entry_id", entryId)
-                  .setString("time_bucket", row.getString("time_bucket"))
-                  .setTimestamp("due_date", row.getTimestamp("due_date"))
-                  .setBool("fired", true)
-              )
-              .flatMap(cassandraSession.executeWrite)
-              .map(_ => ())
-          case None =>
-            Future.successful(())
-        }
-    }
+    F.fromFuture(preparedSelectEntry)
+      .map(
+        _.bind()
+          .setString("schedule_name", id.scheduleName)
+          .setString("schedule_bucket", id.scheduleBucket)
+          .setString("entry_id", entryId)
+      )
+      .flatMap(x => F.fromFuture(cassandraSession.selectOne(x)))
+      .flatMap {
+        case Some(row) =>
+          F.fromFuture(preparedInsertEntry)
+            .map(
+              _.bind()
+                .setString("schedule_name", id.scheduleName)
+                .setString("schedule_bucket", id.scheduleBucket)
+                .setString("entry_id", entryId)
+                .setString("time_bucket", row.getString("time_bucket"))
+                .setTimestamp("due_date", row.getTimestamp("due_date"))
+                .setBool("fired", true)
+            )
+            .flatMap(x => F.fromFuture(cassandraSession.executeWrite(x)))
+            .void
+        case None =>
+          ().pure[F]
+      }
 
   private def getBucket(timeBucket: TimeBucket,
                         from: LocalDateTime,
                         to: LocalDateTime): Source[ScheduleEntry, NotUsed] =
     Source
-      .fromFuture(
-        preparedSelectEntries.map(
-          _.bind()
-            .setString("time_bucket", timeBucket.key)
-            .set("from_due_date", from.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
-            .set("to_due_date", to.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
-        )
+      .single(())
+      .mapAsync(1) { _ =>
+        preparedSelectEntries
+      }
+      .map(
+        _.bind()
+          .setString("time_bucket", timeBucket.key)
+          .set("from_due_date", from.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
+          .set("to_due_date", to.atOffset(ZoneOffset.UTC).toInstant, classOf[Instant])
       )
       .flatMapConcat(cassandraSession.select)
       .map(fromRow)
+      .mapMaterializedValue(_ => NotUsed)
       .named(s"getBucket($timeBucket, $from, $to)")
 
   private def getEntries(
@@ -117,9 +116,9 @@ class CassandraScheduleEntryRepository[F[_]: Effect](
   override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
     f: (ScheduleEntry) => F[Unit]
   ): F[Option[ScheduleEntry]] =
-    Effect[F].fromFuture {
+    F.fromFuture {
       getEntries(from, to)
-        .mapAsync(parallelism)(x => f(x).unsafeToFuture().map(_ => x))
+        .mapAsync(parallelism)(x => f(x).as(x).unsafeToFuture())
         .runWith(Sink.lastOption)
     }
 

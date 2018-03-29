@@ -4,7 +4,6 @@ import scala.annotation.compileTimeOnly
 import scala.collection.immutable.Seq
 import scala.meta._
 
-
 @compileTimeOnly("Can not expand boopickleWireProtocol")
 class boopickleWireProtocol extends scala.annotation.StaticAnnotation {
   inline def apply(defn: Any): Any = meta {
@@ -55,12 +54,12 @@ object BoopickleWireProtocolMacro {
         abort(s"Illegal method [$other]")
     }
 
-    val unifiedInvocation = t"({type X[A] = aecor.arrow.Invocation[$unifiedBase, A]})#X"
+    val unifiedInvocation = t"({type X[A] = io.aecor.liberator.Invocation[$unifiedBase, A]})#X"
 
     val companionStats: Seq[Stat] = Seq(
       q"""
-        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.aecor.ReifiedInvocation[$unifiedBase]  =
-         new aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.aecor.ReifiedInvocation[$unifiedBase]{
+        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.io.aecor.liberator.ReifiedInvocations[$unifiedBase]  =
+         new aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.io.aecor.liberator.ReifiedInvocations[$unifiedBase]{
             final def mapK[F[_], G[_]](mf: $typeName[..$abstractTypes, F], fg: _root_.cats.arrow.FunctionK[F, G]): $typeName[..$abstractTypes, G] =
               new ${Ctor.Name(typeName.value)}[..$abstractTypes, G] {
                 ..${
@@ -74,20 +73,20 @@ object BoopickleWireProtocolMacro {
       }
               }
 
-            final val instance: $typeName[..$abstractTypes, $unifiedInvocation] = new ${Ctor.Name(typeName.value)}[..$abstractTypes, $unifiedInvocation] {
+            final val invocations: $typeName[..$abstractTypes, $unifiedInvocation] = new ${Ctor.Name(typeName.value)}[..$abstractTypes, $unifiedInvocation] {
               ..${
         methods.map {
           case Method(name, tps, params, out) =>
             if (params.nonEmpty)
-              q"""final def $name[..$tps](..$params): aecor.arrow.Invocation[$unifiedBase, $out] =
-                         new aecor.arrow.Invocation[$unifiedBase, $out] {
+              q"""final def $name[..$tps](..$params): io.aecor.liberator.Invocation[$unifiedBase, $out] =
+                         new io.aecor.liberator.Invocation[$unifiedBase, $out] {
                            final def invoke[F[_]](mf: $typeName[..$abstractTypes, F]): F[$out] =
                              mf.$name(..${params.map(_.name.value).map(Term.Name(_))})
                          }
                        """
             else
-              q"""final def $name[..$tps]: aecor.arrow.Invocation[$unifiedBase, $out] =
-                         new aecor.arrow.Invocation[$unifiedBase, $out] {
+              q"""final def $name[..$tps]: io.aecor.liberator.Invocation[$unifiedBase, $out] =
+                         new io.aecor.liberator.Invocation[$unifiedBase, $out] {
                            final def invoke[F[_]](mf: $typeName[..$abstractTypes, F]): F[$out] =
                              mf.$name
                          }
@@ -135,7 +134,7 @@ object BoopickleWireProtocolMacro {
             val stats = q"""
                             aecor.encoding.WireProtocol.Decoder.DecodingResult.fromTry(scala.util.Try {
                               val args = state.unpickle[$tupleTpeBase[..${params.map { case param"$n:${Some(tpe)}" => toType(tpe) }}]]
-                              val invocation = new aecor.arrow.Invocation[$unifiedBase, $out] {
+                              val invocation = new io.aecor.liberator.Invocation[$unifiedBase, $out] {
                                 final override def invoke[F[_]](mf: $unifiedBase[F]): F[$out] =
                                   mf.$name(..$arglist)
                                 final override def toString = {
@@ -150,7 +149,7 @@ object BoopickleWireProtocolMacro {
           case q"def $name: ${someF: Type.Name}[$out]" if someF.value == theF.value =>
             val stats = q"""
                             aecor.encoding.WireProtocol.Decoder.DecodingResult.fromTry(scala.util.Try {
-                              val invocation = new aecor.arrow.Invocation[$unifiedBase, $out] {
+                              val invocation = new io.aecor.liberator.Invocation[$unifiedBase, $out] {
                                 final override def invoke[F[_]](mf: $unifiedBase[F]): F[$out] =
                                   mf.$name
                               }
