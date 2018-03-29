@@ -7,6 +7,7 @@ import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Encoded
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.CommandResult
 import aecor.runtime.akkapersistence.readside.{ AkkaPersistenceEventJournalQuery, JournalQuery }
 import aecor.runtime.akkapersistence.serialization.{ Message, PersistentDecoder, PersistentEncoder }
 import aecor.util.effect._
@@ -85,9 +86,9 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
             Effect[F]
               .fromFuture {
                 (regionRef ? EntityCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                  .asInstanceOf[Future[ByteBuffer]]
+                  .asInstanceOf[Future[CommandResult]]
               }
-              .map(responseDecoder.decode)
+              .map(result => responseDecoder.decode(result.bytes))
               .flatMap(F.fromEither(_))
           }
         })
