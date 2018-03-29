@@ -1,13 +1,12 @@
 package aecor.testkit
 
-import aecor.ReifiedInvocation
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data.EventsourcedBehaviorT
 import aecor.data.Folded.{ Impossible, Next }
 import cats.data._
 import cats.{ Functor, MonadError, ~> }
 import cats.implicits._
-import io.aecor.liberator.FunctorK
+import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
 object StateRuntime {
 
@@ -18,8 +17,8 @@ object StateRuntime {
     */
   def single[M[_[_]], F[_], S, E](
     behavior: EventsourcedBehaviorT[M, F, S, E]
-  )(implicit F: MonadError[F, Throwable], M: ReifiedInvocation[M]): M[StateT[F, Vector[E], ?]] =
-    M.create {
+  )(implicit F: MonadError[F, Throwable], M: ReifiedInvocations[M]): M[StateT[F, Vector[E], ?]] =
+    M.mapInvocations {
       new (Invocation[M, ?] ~> StateT[F, Vector[E], ?]) {
         override def apply[A](op: Invocation[M, A]): StateT[F, Vector[E], A] =
           for {

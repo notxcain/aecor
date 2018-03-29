@@ -2,7 +2,7 @@ package aecor.runtime.akkageneric
 
 import java.nio.ByteBuffer
 
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data.Behavior
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.encoding.WireProtocol
@@ -61,7 +61,7 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
       val keyEncoder = KeyEncoder[K]
 
       key =>
-        M.create {
+        M.mapInvocations {
           new (Invocation[M, ?] ~> F) {
             override def apply[A](fa: Invocation[M, A]): F[A] = Effect[F].fromFuture {
               val (bytes, decoder) = fa.invoke(M.encoder)

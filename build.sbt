@@ -13,12 +13,12 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.9"
 lazy val akkaPersistenceCassandraVersion = "0.59"
 lazy val akkaPersistenceJdbcVersion = "3.2.0"
-lazy val catsVersion = "1.0.1"
+lazy val catsVersion = "1.1.0"
 lazy val catsEffectVersion = "0.10"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
-lazy val boopickleVersion = "c5f487d547f78af80657d1e91701543223f18e6a"
+lazy val boopickleVersion = "1.3.0"
 
 lazy val monixVersion = "3.0.0-M3"
 lazy val scalaCheckVersion = "1.13.4"
@@ -35,7 +35,7 @@ lazy val akkaHttpVersion = "10.0.11"
 lazy val akkaHttpJsonVersion = "1.19.0"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
-lazy val liberatorVersion = "0.7.0"
+lazy val liberatorVersion = "0.8.0"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
@@ -153,7 +153,7 @@ lazy val boopickleWireProtocolSettings = Seq(
   sources in (Compile, doc) := Nil,
   scalacOptions in (Compile, console) := Seq(),
   libraryDependencies ++= Seq(
-    "com.github.fdietze.boopickle" %% "boopickle" % boopickleVersion,
+    "io.suzaku" %% "boopickle" % boopickleVersion,
     "org.scalameta" %% "scalameta" % scalametaVersion
   )
 )

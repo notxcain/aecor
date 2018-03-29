@@ -1,14 +1,13 @@
 package aecor.testkit
 
-import aecor.ReifiedInvocation
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data._
 import aecor.testkit.Eventsourced.{ BehaviorFailure, EventEnvelope, InternalState }
 import aecor.util.NoopKeyValueStore
 import cats.data.StateT
 import cats.implicits._
 import cats.{ Monad, MonadError, ~> }
-import io.aecor.liberator.FunctorK
+import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
 import scala.collection.immutable._
 
@@ -25,7 +24,7 @@ trait E2eSupport {
     behavior: EventsourcedBehaviorT[M, F, S, E],
     tagging: Tagging[I],
     journal: EventJournal[F, I, EventEnvelope[I, E]]
-  )(implicit M: ReifiedInvocation[M], F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
+  )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
     val routeTo: I => Behavior[M, F] =
       Eventsourced[M, F, S, E, I](
         behavior,
@@ -35,7 +34,7 @@ trait E2eSupport {
         NoopKeyValueStore[F, I, InternalState[S]]
       )
 
-    M.create {
+    M.mapInvocations {
       new (Invocation[M, ?] ~> F) {
         private val actions = routeTo(id).actions
         final override def apply[A](operation: Invocation[M, A]): F[A] =
