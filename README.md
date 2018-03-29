@@ -22,7 +22,7 @@ To start using Aecor Akka Persistence Runtime add the following to your `build.s
 scalaVersion := "2.12.4"
 scalacOptions += "-Ypartial-unification"
 addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M10" cross CrossVersion.full)
-libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.16.0-SNAPSHOT"
+libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.16.0"
 ```
 
 ### Entity Behavior Definition
@@ -166,11 +166,13 @@ Now that actions are define we're ready to deploy
 ```scala
 
 import monix.eval.Task
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
+import aecor.runtime.akkapersistence._
 
 val system = ActorSystem("system")
 
-val runtime = AkkaPersistenceRuntime(system)
+val journalAdapter = CassandraJournalAdapter(system)
+
+val runtime = AkkaPersistenceRuntime(system, journalAdapter)
 
 val behavior = EventsourcedBehavior.optional(
   SubscriptionActions,
