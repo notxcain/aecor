@@ -36,7 +36,6 @@ final class DistributedProcessing private (system: ActorSystem) {
                             clusterShardingSettings = ClusterShardingSettings(system)
                           )): F[KillSwitch[F]] =
     Effect[F].delay {
-      import system.dispatcher
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
         DistributedProcessingWorker.props(processes),
         "worker",

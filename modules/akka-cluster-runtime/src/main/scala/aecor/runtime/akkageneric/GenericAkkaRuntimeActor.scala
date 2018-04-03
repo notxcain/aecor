@@ -5,7 +5,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data.{ Behavior, PairT }
 import aecor.encoding.KeyDecoder
 import aecor.encoding.WireProtocol

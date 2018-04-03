@@ -6,11 +6,11 @@ import java.nio.charset.StandardCharsets
 import java.time.{ Duration, Instant }
 import java.util.UUID
 
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data._
 import aecor.util.effect._
 import aecor.encoding.{ KeyDecoder, WireProtocol }
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.HandleCommand
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{ HandleCommand, CommandResult }
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
 import aecor.runtime.akkapersistence.serialization.{
   Message,
@@ -59,6 +59,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     )
 
   final case class HandleCommand(commandBytes: ByteBuffer) extends Message
+  final case class CommandResult(bytes: ByteBuffer) extends Message
   case object Stop
 }
 
@@ -88,7 +89,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
 
   import context.dispatcher
 
-  private case class CommandResult(opId: UUID, events: Seq[Event], resultBytes: ByteBuffer)
+  private case class ActionResult(opId: UUID, events: Seq[Event], resultBytes: ByteBuffer)
 
   private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
@@ -161,7 +162,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
       passivate()
     case AkkaPersistenceRuntimeActor.Stop =>
       context.stop(self)
-    case CommandResult(opId, events, result) =>
+    case ActionResult(opId, events, result) =>
       log.warning(
         "[{}] Received result of unknown command invocation [{}], ignoring",
         persistenceId,
@@ -193,19 +194,12 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
             result,
             events
           )
-          CommandResult(opId, events, resultEncoder.encode(result))
+          ActionResult(opId, events, resultEncoder.encode(result))
       }
       .pipeTo(self)(sender)
     context.become {
-      case CommandResult(`opId`, events, reply) =>
-        log.debug(
-          "[{}] Command [{}] produced reply [{}] and events [{}]",
-          persistenceId,
-          invocation,
-          reply,
-          events
-        )
-        handleCommandResult(events, reply)
+      case ActionResult(`opId`, events, reply) =>
+        handleCommandResult(events, CommandResult(reply))
         unstashAll()
         context.become(receiveCommand)
       case Status.Failure(e) =>
@@ -217,9 +211,9 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
     }
   }
 
-  private def handleCommandResult[A](events: Seq[Event], replyBytes: ByteBuffer): Unit =
+  private def handleCommandResult[A](events: Seq[Event], response: CommandResult): Unit =
     if (events.isEmpty) {
-      sender() ! replyBytes
+      sender() ! response
     } else {
       val envelopes =
         events.map(e => Tagged(eventEncoder.encode(e), tagger.tag(id).map(_.value)))
@@ -229,7 +223,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
       var unpersistedEventCount = events.size
       if (unpersistedEventCount == 1) {
         persist(envelopes.head) { _ =>
-          sender() ! replyBytes
+          sender() ! response
           eventCount += 1
           markSnapshotAsPendingIfNeeded()
           snapshotIfPending()
@@ -240,7 +234,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_]: 
           eventCount += 1
           markSnapshotAsPendingIfNeeded()
           if (unpersistedEventCount == 0) {
-            sender() ! replyBytes
+            sender() ! response
             snapshotIfPending()
           }
         }

@@ -22,7 +22,7 @@ To start using Aecor Akka Persistence Runtime add the following to your `build.s
 scalaVersion := "2.12.4"
 scalacOptions += "-Ypartial-unification"
 addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M10" cross CrossVersion.full)
-libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.16.0-SNAPSHOT"
+libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.16.0"
 ```
 
 ### Entity Behavior Definition
@@ -38,9 +38,9 @@ final case class SubscriptionId(value: java.util.UUID) extends AnyVal
 Then define what actions we're able to perform on `Subscription`
 
 ```scala
-import aecor.macros.wireProtocol
+import aecor.macros.boopickleWireProtocol
 
-@wireProtocol
+@boopickleWireProtocol
 trait Subscription[F[_]] {
   def createSubscription(userId: String, productId: String, planId: String): F[Unit]
   def pauseSubscription: F[Unit]
@@ -55,7 +55,7 @@ There is an abstract type `F[_]` which stays for an effect (see [Rob Norris, Fun
 
 Also being polymorphic in effect improves the reuse of this interface, you'll see it later.
 
-`@wireProtocol` - is a macro annotation that automates derivation of a `WireProtocol`, which is used by Akka Runtime to encode and decode actions and corresponding responses.
+`@boopickleWireProtocol` - is a macro annotation that automates derivation of a `WireProtocol`, which is used by Akka Runtime to encode and decode actions and corresponding responses.
 
 We are event sourced, so let's define our events:
 
@@ -166,11 +166,13 @@ Now that actions are define we're ready to deploy
 ```scala
 
 import monix.eval.Task
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
+import aecor.runtime.akkapersistence._
 
 val system = ActorSystem("system")
 
-val runtime = AkkaPersistenceRuntime(system)
+val journalAdapter = CassandraJournalAdapter(system)
+
+val runtime = AkkaPersistenceRuntime(system, journalAdapter)
 
 val behavior = EventsourcedBehavior.optional(
   SubscriptionActions,

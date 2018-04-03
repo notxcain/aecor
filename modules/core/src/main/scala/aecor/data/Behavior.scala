@@ -1,11 +1,10 @@
 package aecor.data
 
-import aecor.ReifiedInvocations
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import cats.data.StateT
 import cats.implicits._
 import cats.{ FlatMap, Functor, ~> }
-import io.aecor.liberator.{ FunctorK }
+import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
 /**
   * `Behavior[M, F]` says that all actions of `M` will cause an effect `F`
@@ -28,9 +27,9 @@ object Behavior {
 
   def roll[F[_]: FlatMap, M[_[_]]: FunctorK: ReifiedInvocations](
     f: F[Behavior[M, F]]
-  ): Behavior[M, F] =
+  )(implicit M: ReifiedInvocations[M]): Behavior[M, F] =
     Behavior[M, F] {
-      ReifiedInvocations[M].create[PairT[F, Behavior[M, F], ?]] {
+      M.mapInvocations[PairT[F, Behavior[M, F], ?]] {
         new (Invocation[M, ?] ~> PairT[F, Behavior[M, F], ?]) {
           override def apply[A](op: Invocation[M, A]): PairT[F, Behavior[M, F], A] =
             f.flatMap(x => op.invoke[PairT[F, Behavior[M, F], ?]](x.actions))
@@ -38,12 +37,11 @@ object Behavior {
       }
     }
 
-  def fromState[S, M[_[_]], F[_]: FlatMap](
-    state: S,
-    f: M[StateT[F, S, ?]]
-  )(implicit M: ReifiedInvocations[M], _M: FunctorK[M]): Behavior[M, F] =
+  def fromState[S, M[_[_]], F[_]: FlatMap](state: S, f: M[StateT[F, S, ?]])(
+    implicit M: ReifiedInvocations[M]
+  ): Behavior[M, F] =
     Behavior[M, F] {
-      M.create[PairT[F, Behavior[M, F], ?]] {
+      M.mapInvocations[PairT[F, Behavior[M, F], ?]] {
         new (Invocation[M, ?] ~> PairT[F, Behavior[M, F], ?]) {
           override def apply[A](op: Invocation[M, A]): PairT[F, Behavior[M, F], A] =
             op.invoke(f).run(state).map {

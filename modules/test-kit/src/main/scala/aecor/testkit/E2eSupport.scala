@@ -1,15 +1,14 @@
 package aecor.testkit
 
-import aecor.ReifiedInvocations
-import aecor.arrow.Invocation
-import aecor.data.{ PairT, _ }
+import io.aecor.liberator.Invocation
+import aecor.data._
 import aecor.testkit.Eventsourced.{ BehaviorFailure, InternalState }
 import aecor.util.NoopKeyValueStore
 import cats.data.StateT
 import cats.implicits._
 import cats.mtl.MonadState
-import cats.{ Monad, MonadError, ~>, FlatMap }
-import io.aecor.liberator.FunctorK
+import cats.{ FlatMap, Monad, MonadError, ~> }
+import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
 import scala.collection.immutable._
 
@@ -31,7 +30,7 @@ object E2eSupport {
       f: K => Behavior[M, F]
     )(implicit F: FlatMap[F]): K => M[F] = { key =>
       val actions = f(key).actions
-      ReifiedInvocations[M].create {
+      ReifiedInvocations[M].mapInvocations {
         new (Invocation[M, ?] ~> F) {
           final override def apply[A](invocation: Invocation[M, A]): F[A] =
             invocation.invoke[PairT[F, Behavior[M, F], ?]](actions).map(_._2)

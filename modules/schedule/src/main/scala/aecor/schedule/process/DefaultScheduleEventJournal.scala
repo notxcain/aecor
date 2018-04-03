@@ -28,14 +28,13 @@ class DefaultScheduleEventJournal[F[_]: Effect](
   eventTag: EventTag
 )(implicit materializer: Materializer)
     extends ScheduleEventJournal[F] {
-  import materializer.executionContext
   override def processNewEvents(
     f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
   ): F[Unit] =
     Effect[F].fromFuture {
       aggregateJournal
         .currentEventsByTag(eventTag, consumerId)
-        .mapAsync(parallelism)(_.map(_.event).map(f).traverse(_.unsafeToFuture()))
+        .mapAsync(parallelism)(_.map(_.event).traverse(f).unsafeToFuture())
         .fold(Committable.unit[F])(Keep.right)
         .mapAsync(1)(_.commit.unsafeToFuture())
         .runWith(Sink.ignore)

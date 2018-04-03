@@ -3,24 +3,22 @@ package aecor.data
 import aecor.IsK
 import cats.{ Applicative, FlatMap, Id, Monad, ~> }
 import io.aecor.liberator.FunctorK
+import cats.syntax.functor._
 
 final case class EventsourcedBehaviorT[M[_[_]], F[_], S, E](actions: M[ActionT[F, S, E, ?]],
                                                             initialState: S,
                                                             applyEvent: (S, E) => Folded[S]) {
   def enrich[Env](env: F[Env])(implicit M: FunctorK[M],
                                F: FlatMap[F]): EventsourcedBehaviorT[M, F, S, Enriched[Env, E]] =
-    EventsourcedBehaviorT(
-      M.mapK(actions, ActionT.mapEventsF(env)),
-      initialState,
-      (s, e) => applyEvent(s, e.event)
-    )
+    xmapEventsF(es => env.map(en => es.map(ev => Enriched(en, ev))))(_.event)
 
-  def mapEventsF[E1](f: List[E] => F[List[E1]])(implicit M: FunctorK[M],
-                                                F: FlatMap[F]): EventsourcedBehaviorT[M, F, S, E1] =
+  def xmapEventsF[E1](
+    f: List[E] => F[List[E1]]
+  )(extract: E1 => E)(implicit M: FunctorK[M], F: FlatMap[F]): EventsourcedBehaviorT[M, F, S, E1] =
     EventsourcedBehaviorT(
       M.mapK(actions, ActionT.mapEventsF(f)),
       initialState,
-      (s, e) => applyEvent(s, e.event)
+      (s, e) => applyEvent(s, extract(e))
     )
 
   def liftEnrich[G[_], Env](fm: G[Env])(

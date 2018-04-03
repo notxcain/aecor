@@ -2,8 +2,7 @@ package aecor.runtime.akkageneric
 
 import java.nio.ByteBuffer
 
-import aecor.ReifiedInvocations
-import aecor.arrow.Invocation
+import io.aecor.liberator.Invocation
 import aecor.data.Behavior
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.encoding.WireProtocol
@@ -15,7 +14,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.~>
 import aecor.util.effect._
-import io.aecor.liberator.FunctorK
+import cats.implicits._
 
 import scala.concurrent.Future
 
@@ -25,18 +24,13 @@ object GenericAkkaRuntime {
   private final case class Command(entityId: String, bytes: ByteBuffer)
 }
 
-final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
+final class GenericAkkaRuntime[F[_]] private (system: ActorSystem)(implicit F: Effect[F]) {
   def deploy[K: KeyEncoder: KeyDecoder, M[_[_]]](
     typeName: String,
     createBehavior: K => Behavior[M, F],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  )(implicit M: ReifiedInvocations[M],
-    MFK: FunctorK[M],
-    WireProtocol: WireProtocol[M]): F[K => M[F]] =
-    Effect[F].delay {
-
-      import system.dispatcher
-
+  )(implicit M: WireProtocol[M]): F[K => M[F]] =
+    F.delay {
       val numberOfShards = settings.numberOfShards
 
       val extractEntityId: ShardRegion.ExtractEntityId = {
@@ -65,17 +59,17 @@ final class GenericAkkaRuntime[F[_]: Effect] private (system: ActorSystem) {
       val keyEncoder = KeyEncoder[K]
 
       key =>
-        M.create {
+        M.mapInvocations {
           new (Invocation[M, ?] ~> F) {
-            override def apply[A](fa: Invocation[M, A]): F[A] = Effect[F].fromFuture {
-              val (bytes, decoder) = fa.invoke(WireProtocol.encoder)
-              (shardRegionRef ? Command(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                .asInstanceOf[Future[ByteBuffer]]
-                .map(decoder.decode)
-                .flatMap {
-                  case Right(a)              => Future.successful(a)
-                  case Left(decodingFailure) => Future.failed(decodingFailure)
+            override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
+              val (bytes, decoder) = fa.invoke(M.encoder)
+              Effect[F]
+                .fromFuture {
+                  (shardRegionRef ? Command(keyEncoder(key), bytes.asReadOnlyBuffer()))
+                    .asInstanceOf[Future[ByteBuffer]]
                 }
+                .map(decoder.decode)
+                .flatMap(F.fromEither)
             }
           }
         }

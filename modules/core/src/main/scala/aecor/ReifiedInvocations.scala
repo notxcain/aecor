@@ -1,8 +1,7 @@
 package aecor
 
-import aecor.arrow.Invocation
 import cats.~>
-import io.aecor.liberator.FunctorK
+import io.aecor.liberator.{ FunctorK, Invocation }
 
 trait ReifiedInvocations[M[_[_]]] {
   def instance: M[Invocation[M, ?]]

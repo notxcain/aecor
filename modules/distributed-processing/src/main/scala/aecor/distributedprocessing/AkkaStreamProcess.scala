@@ -14,7 +14,6 @@ object AkkaStreamProcess {
       flow: Flow[A, Unit, FlowMat]
     )(implicit F: Async[F], materializer: Materializer): Process[F] =
       Process(run = F.delay {
-        import materializer.executionContext
         val (killSwitch, terminated) = source
           .viaMat(KillSwitches.single)(Keep.right)
           .via(flow)
