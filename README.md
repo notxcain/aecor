@@ -187,3 +187,9 @@ val deploySubscriptions: Task[SubscriptionId => Subscription[Task]] =
     Tagging.const[SubscriptionId](EventTag("Subscription"))
   )
 ```
+
+# Projections
+
+```
+val journalQuery = runtime.journal
+```

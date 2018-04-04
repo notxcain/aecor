@@ -19,6 +19,7 @@ lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
+lazy val monocleVersion = "1.5.0-cats"
 
 lazy val monixVersion = "3.0.0-M3"
 lazy val scalaCheckVersion = "1.13.4"
@@ -41,11 +42,9 @@ lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
-  addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
-                                                                      .filter(_ != "-Xfatal-warnings"),
-  sources in (Compile, doc) := Nil
+                                                                      .filter(_ != "-Xfatal-warnings")
 ) ++ warnUnusedImport
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
@@ -150,6 +149,7 @@ lazy val coreSettings = Seq(
 )
 
 lazy val boopickleWireProtocolSettings = Seq(
+  addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   sources in (Compile, doc) := Nil,
   scalacOptions in (Compile, console) := Seq(),
   libraryDependencies ++= Seq(
@@ -159,6 +159,8 @@ lazy val boopickleWireProtocolSettings = Seq(
 )
 
 lazy val scheduleSettings = commonProtobufSettings ++ Seq(
+  sources in (Compile, doc) := Nil,
+  addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   libraryDependencies ++= Seq(
     "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
     "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
@@ -190,6 +192,7 @@ lazy val akkaGenericSettings = Seq(
 
 lazy val exampleSettings = {
   Seq(
+    addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
     resolvers += Resolver.sonatypeRepo("releases"),
     libraryDependencies ++=
       Seq(
@@ -209,11 +212,14 @@ lazy val exampleSettings = {
 
 lazy val testKitSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-mtl-core" % "0.2.1"
+    "org.typelevel" %% "cats-mtl-core" % "0.2.3",
+    "com.github.julien-truffaut" %%  "monocle-core"  % monocleVersion,
+    "com.github.julien-truffaut" %%  "monocle-macro" % monocleVersion
   )
 )
 
 lazy val testingSettings = Seq(
+  addCompilerPlugin("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch),
   libraryDependencies ++= Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,

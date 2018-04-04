@@ -63,7 +63,7 @@ object App {
       runtime
         .deploy(
           "Transaction",
-          EventsourcedTransactionAggregate.behavior.enrich(metaProvider),
+          EventsourcedTransactionAggregate.behavior.liftEnrich(metaProvider),
           tagging
         )
 
@@ -71,7 +71,7 @@ object App {
       runtime
         .deploy(
           "Account",
-          EventsourcedAccount.behavior.enrich(metaProvider),
+          EventsourcedAccount.behavior.liftEnrich(metaProvider),
           Tagging.const[AccountId](EventTag("Account"))
         )
 

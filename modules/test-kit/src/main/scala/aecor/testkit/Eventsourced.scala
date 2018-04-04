@@ -9,11 +9,9 @@ import cats.{ MonadError, ~> }
 import io.aecor.liberator.syntax._
 import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
-import scala.collection.immutable.Set
-
 object Eventsourced {
   type EntityId = String
-  final case class InternalState[S](entityState: S, version: Long) {}
+  final case class InternalState[S](entityState: S, version: Long)
 
   sealed abstract class BehaviorFailure extends Exception
   object BehaviorFailure {
@@ -21,41 +19,25 @@ object Eventsourced {
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
-  final case class EventEnvelope[I, E](entityEvent: EntityEvent[I, E], tags: Set[EventTag])
-
-  def apply[M[_[_]]: FunctorK, F[_]: MonadError[?[_], BehaviorFailure], S, E, I](
+  def apply[M[_[_]]: FunctorK, F[_]: MonadError[?[_], BehaviorFailure], S, E, K](
     entityBehavior: EventsourcedBehaviorT[M, F, S, E],
-    tagging: Tagging[I],
-    journal: EventJournal[F, I, EventEnvelope[I, E]],
+    journal: EventJournal[F, K, E],
     snapshotEach: Option[Long],
-    snapshotStore: KeyValueStore[F, I, InternalState[S]]
-  )(implicit M: ReifiedInvocations[M]): I => Behavior[M, F] = { entityId =>
+    snapshotStore: KeyValueStore[F, K, InternalState[S]]
+  )(implicit M: ReifiedInvocations[M]): K => Behavior[M, F] = { entityId =>
     val internalize =
-      new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], EventEnvelope[I, E], ?]) {
-        override def apply[A](
-          fa: ActionT[F, S, E, A]
-        ): ActionT[F, InternalState[S], EventEnvelope[I, E], A] =
-          ActionT { rs =>
-            fa.run(rs.entityState).map {
-              case (es, a) =>
-                val envelopes = es.foldLeft(Vector.empty[EventEnvelope[I, E]]) { (acc, e) =>
-                  acc :+ EventEnvelope(
-                    EntityEvent(entityId, rs.version + acc.size + 1, e),
-                    tagging.tag(entityId)
-                  )
-                }
-                (envelopes.toList, a)
-            }
-          }
+      new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], E, ?]) {
+        override def apply[A](fa: ActionT[F, S, E, A]): ActionT[F, InternalState[S], E, A] =
+          fa.mapState(_.entityState)
       }
 
-    val effectiveBehavior = EventsourcedBehaviorT[M, F, InternalState[S], EventEnvelope[I, E]](
+    val effectiveBehavior = EventsourcedBehaviorT[M, F, InternalState[S], E](
       initialState = InternalState(entityBehavior.initialState, 0),
       actions = entityBehavior.actions
         .mapK(internalize),
       applyEvent = (s, e) =>
         entityBehavior
-          .applyEvent(s.entityState, e.entityEvent.payload)
+          .applyEvent(s.entityState, e)
           .map(InternalState(_, s.version + 1))
     )
 
@@ -80,7 +62,7 @@ object Eventsourced {
       snapshotEach
         .exists(x => state.version % x == 0)
 
-    def updateState(state: InternalState[S], events: List[EventEnvelope[I, E]]) =
+    def updateState(state: InternalState[S], events: List[E]) =
       if (events.isEmpty) {
         state.pure[F]
       } else {
@@ -94,7 +76,7 @@ object Eventsourced {
         folded match {
           case Next((snapshotNeeded, nextState)) =>
             val appendEvents = journal
-              .append(entityId, NonEmptyVector.of(events.head, events.tail: _*))
+              .append(entityId, state.version, NonEmptyVector.of(events.head, events.tail: _*))
             val snapshotIfNeeded = if (snapshotNeeded) {
               snapshotStore.setValue(entityId, nextState)
             } else {
@@ -110,11 +92,9 @@ object Eventsourced {
     Behavior.roll {
       loadState.map { initialState =>
         val x = effectiveBehavior.actions.mapK {
-          new (ActionT[F, InternalState[S], EventEnvelope[I, E], ?] ~> StateT[F,
-                                                                              InternalState[S],
-                                                                              ?]) {
+          new (ActionT[F, InternalState[S], E, ?] ~> StateT[F, InternalState[S], ?]) {
             override def apply[A](
-              action: ActionT[F, InternalState[S], EventEnvelope[I, E], A]
+              action: ActionT[F, InternalState[S], E, A]
             ): StateT[F, InternalState[S], A] =
               StateT { state =>
                 for {
@@ -123,7 +103,6 @@ object Eventsourced {
                   nextState <- updateState(state, events)
                 } yield (nextState, reply)
               }
-
           }
         }
         Behavior.fromState(initialState, x)

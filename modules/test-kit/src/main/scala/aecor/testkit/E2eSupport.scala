@@ -2,107 +2,101 @@ package aecor.testkit
 
 import io.aecor.liberator.Invocation
 import aecor.data._
-import aecor.testkit.Eventsourced.{ BehaviorFailure, EventEnvelope, InternalState }
+import aecor.testkit.Eventsourced.{ BehaviorFailure, InternalState }
 import aecor.util.NoopKeyValueStore
 import cats.data.StateT
 import cats.implicits._
-import cats.{ Monad, MonadError, ~> }
+import cats.mtl.MonadState
+import cats.{ FlatMap, Monad, MonadError, ~> }
 import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
-
+import monocle.Lens
 import scala.collection.immutable._
 
-trait E2eSupport {
-  final type SpecF[A] = Either[BehaviorFailure, A]
-  type SpecState
-  final def mkJournal[I, E](
-    extract: SpecState => StateEventJournal.State[I, E],
-    update: (SpecState, StateEventJournal.State[I, E]) => SpecState
-  ): StateEventJournal[SpecF, I, SpecState, E] =
-    StateEventJournal[SpecF, I, SpecState, E](extract, update)
+object E2eSupport {
 
-  final def deploy[M[_[_]], F[_], S, E, I](
+  final def behavior[M[_[_]]: FunctorK, F[_], S, E, I](
     behavior: EventsourcedBehaviorT[M, F, S, E],
-    tagging: Tagging[I],
-    journal: EventJournal[F, I, EventEnvelope[I, E]]
-  )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): I => M[F] = { id =>
-    val routeTo: I => Behavior[M, F] =
-      Eventsourced[M, F, S, E, I](
-        behavior,
-        tagging,
-        journal,
-        Option.empty,
-        NoopKeyValueStore[F, I, InternalState[S]]
-      )
+    journal: EventJournal[F, I, E]
+  )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): I => Behavior[M, F] =
+    Eventsourced[M, F, S, E, I](
+      behavior,
+      journal,
+      Option.empty,
+      NoopKeyValueStore[F, I, InternalState[S]]
+    )
 
-    M.mapInvocations {
-      new (Invocation[M, ?] ~> F) {
-        private val actions = routeTo(id).actions
-        final override def apply[A](operation: Invocation[M, A]): F[A] =
-          operation.invoke[PairT[F, Behavior[M, F], ?]](actions).map(_._2)
+  class Runtime[F[_]] {
+    final def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations](
+      f: K => Behavior[M, F]
+    )(implicit F: FlatMap[F]): K => M[F] = { key =>
+      val actions = f(key).actions
+      ReifiedInvocations[M].mapInvocations {
+        new (Invocation[M, ?] ~> F) {
+          final override def apply[A](invocation: Invocation[M, A]): F[A] =
+            invocation.invoke[PairT[F, Behavior[M, F], ?]](actions).map(_._2)
+        }
       }
     }
   }
 
-  final def wireProcess[F[_], S, In](process: In => F[Unit],
-                                     sources: Processable[F, In]*): WiredProcess[F] = {
-    val process0 = process
-    val sources0 = sources
-    type In0 = In
-    new WiredProcess[F] {
-      type In = In0
-      override val process: (In) => F[Unit] = process0
-      override val sources: Vector[Processable[F, In]] =
-        sources0.toVector
-    }
+  abstract class Processes[F[_]](items: Vector[F[Unit]]) {
+    protected type S
+    protected implicit def F: MonadState[F, S]
+
+    final private implicit def monad = F.monad
+
+    final def runProcesses: F[Unit] =
+      for {
+        stateBefore <- F.get
+        _ <- items.sequence
+        stateAfter <- F.get
+        _ <- if (stateAfter == stateBefore) {
+              ().pure[F]
+            } else {
+              runProcesses
+            }
+      } yield ()
+
+    final def wiredK[I, M[_[_]]](behavior: I => M[F])(implicit M: FunctorK[M]): I => M[F] =
+      i =>
+        M.mapK(behavior(i), new (F ~> F) {
+          override def apply[A](fa: F[A]): F[A] =
+            fa <* runProcesses
+        })
+
+    final def wired[A, B](f: A => F[B]): A => F[B] =
+      f.andThen(_ <* runProcesses)
   }
 
-  sealed abstract class WiredProcess[F[_]] {
-    protected type In
-    protected val process: In => F[Unit]
-    protected val sources: Vector[Processable[F, In]]
-    final def run(implicit F: Monad[F]): F[Unit] =
-      sources
-        .fold(Processable.empty[F, In])(_ merge _)
-        .process(process)
-        .void
-
+  object Processes {
+    def apply[F[_], S0](items: F[Unit]*)(implicit F0: MonadState[F, S0]): Processes[F] =
+      new Processes[F](items.toVector) {
+        final override type S = S0
+        override implicit def F: MonadState[F, S] = F0
+      }
   }
+}
 
-  def processes: Vector[WiredProcess[StateT[SpecF, SpecState, ?]]]
+trait E2eSupport {
+  import cats.mtl.instances.state._
 
-  def otherStuff: Vector[StateT[SpecF, SpecState, Unit]] = Vector.empty
+  type SpecState
 
-  private def runProcesses: StateT[SpecF, SpecState, Unit] =
-    for {
-      stateBefore <- StateT.get[SpecF, SpecState]
-      _ <- (processes.map(_.run) ++ otherStuff).sequence
-      stateAfter <- StateT.get[SpecF, SpecState]
-      _ <- if (stateAfter == stateBefore) {
-            ().pure[StateT[SpecF, SpecState, ?]]
-          } else {
-            runProcesses
-          }
-    } yield ()
+  type F[A] = StateT[Either[BehaviorFailure, ?], SpecState, A]
 
-  final def wiredK[I, M[_[_]]](
-    behavior: I => M[StateT[SpecF, SpecState, ?]]
-  )(implicit M: FunctorK[M]): I => M[StateT[SpecF, SpecState, ?]] =
-    i =>
-      M.mapK(behavior(i), new (StateT[SpecF, SpecState, ?] ~> StateT[SpecF, SpecState, ?]) {
-        override def apply[A](fa: StateT[SpecF, SpecState, A]): StateT[SpecF, SpecState, A] =
-          for {
-            x <- fa
-            _ <- runProcesses
-          } yield x
-      })
+  final def mkJournal[I, E](
+    lens: Lens[SpecState, StateEventJournal.State[I, E]],
+    tagging: Tagging[I]
+  ): EventJournal[F, I, E] with CurrentEventsByTagQuery[F, I, E] =
+    StateEventJournal[F, I, SpecState, E](lens, tagging)
 
-  final def wired[A, B](f: A => StateT[SpecF, SpecState, B]): A => StateT[SpecF, SpecState, B] =
-    new (A => StateT[SpecF, SpecState, B]) {
-      override def apply(a: A): StateT[SpecF, SpecState, B] =
-        for {
-          x <- f(a)
-          _ <- runProcesses
-        } yield x
-    }
+  final def wireProcess[In](process: In => F[Unit],
+                            source: Processable[F, In],
+                            sources: Processable[F, In]*)(implicit F: Monad[F]): F[Unit] =
+    sources
+      .fold(source)(_ merge _)
+      .process(process)
+      .void
 
+  val runtime = new E2eSupport.Runtime[F]
 }

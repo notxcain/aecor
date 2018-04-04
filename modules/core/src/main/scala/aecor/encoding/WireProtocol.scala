@@ -36,6 +36,7 @@ object WireProtocol {
     final case class DecodingFailure(message: String, underlyingException: Option[Throwable] = None)
         extends RuntimeException(message, underlyingException.orNull)
     type DecodingResult[A] = Either[DecodingFailure, A]
+    type DecodingResultT[F[_], A] = F[DecodingResult[A]]
     object DecodingResult {
       def fromTry[A](a: Try[A]): DecodingResult[A] =
         a match {
@@ -50,6 +51,5 @@ object WireProtocol {
           case Success(value)     => Right(value)
         }
     }
-
   }
 }

@@ -10,7 +10,7 @@ object notification {
 
   @boopickleWireProtocol
   trait Notification[F[_]] {
-    def createNotification(counterId: CounterId): F[Unit]
+    def create(counterId: CounterId): F[Unit]
     def markAsSent: F[Unit]
   }
 
@@ -29,9 +29,7 @@ object notification {
   }
 
   def notificationActions = new Notification[Action[NotificationState, NotificationEvent, ?]] {
-    override def createNotification(
-      counterId: CounterId
-    ): Action[NotificationState, NotificationEvent, Unit] =
+    override def create(counterId: CounterId): Action[NotificationState, NotificationEvent, Unit] =
       Action { _ =>
         List(NotificationCreated(counterId)) -> (())
       }

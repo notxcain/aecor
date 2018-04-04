@@ -1,25 +1,22 @@
 package aecor.data
 
-import cats.{ Applicative, Functor, ~> }
-
 import cats.implicits._
-final case class Action[S, E, A](run: S => (List[E], A)) {
-  def liftF[F[_]: Applicative]: ActionT[F, S, E, A] = ActionT.lift(this)
-}
+import cats.{ Applicative, FlatMap, ~> }
 
-object Action {
-  def read[S, E, A](f: S => A): Action[S, E, A] = Action(s => (List.empty[E], f(s)))
-}
-
-final case class ActionT[F[_], State, Event, Result](run: State => F[(List[Event], Result)])
-    extends AnyVal {
-  def mapState[State1](f: State1 => State): ActionT[F, State1, Event, Result] =
+final case class ActionT[F[_], S, E, A](run: S => F[(List[E], A)]) extends AnyVal {
+  def mapState[S1](f: S1 => S): ActionT[F, S1, E, A] =
     ActionT(run.compose(f))
+  def mapK[G[_]](f: F ~> G): ActionT[G, S, E, A] = ActionT { s =>
+    f(run(s))
+  }
 }
 
 object ActionT {
-  def lift[F[_]: Applicative, S, E, A](action: Action[S, E, A]): ActionT[F, S, E, A] =
-    liftK[F, S, E].apply(action)
+
+  def mapK[F[_], G[_], S, E](f: F ~> G): ActionT[F, S, E, ?] ~> ActionT[G, S, E, ?] =
+    new (ActionT[F, S, E, ?] ~> ActionT[G, S, E, ?]) {
+      override def apply[A](fa: ActionT[F, S, E, A]): ActionT[G, S, E, A] = fa.mapK(f)
+    }
 
   def liftK[F[_]: Applicative, S, E]: Action[S, E, ?] ~> ActionT[F, S, E, ?] =
     new (Action[S, E, ?] ~> ActionT[F, S, E, ?]) {
@@ -29,15 +26,15 @@ object ActionT {
         }
     }
 
-  def enrich[F[_]: Functor, S, E, M](
-    meta: F[M]
-  ): Action[S, E, ?] ~> ActionT[F, S, Enriched[M, E], ?] =
-    new (Action[S, E, ?] ~> ActionT[F, S, Enriched[M, E], ?]) {
-      override def apply[A](action: Action[S, E, A]): ActionT[F, S, Enriched[M, E], A] =
+  def mapEventsF[F[_]: FlatMap, S, E, E1](
+    f: List[E] => F[List[E1]]
+  ): ActionT[F, S, E, ?] ~> ActionT[F, S, E1, ?] =
+    new (ActionT[F, S, E, ?] ~> ActionT[F, S, E1, ?]) {
+      override def apply[A](action: ActionT[F, S, E, A]): ActionT[F, S, E1, A] =
         ActionT { s =>
-          val (es, a) = action.run(s)
-          meta.map { m =>
-            (es.map(Enriched(m, _)), a)
+          action.run(s).flatMap {
+            case (es, a) =>
+              f(es).map((_, a))
           }
         }
     }
