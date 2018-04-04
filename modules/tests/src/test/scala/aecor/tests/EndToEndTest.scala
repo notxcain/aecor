@@ -31,7 +31,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     offsetStoreState: Map[TagConsumer, LocalDateTime]
   )
 
-  val clock = StateClock[F, SpecState](ZoneOffset.UTC, GenLens[SpecState](_.time),)
+  val clock = StateClock[F, SpecState](ZoneOffset.UTC, GenLens[SpecState](_.time))
 
   def counterEventJournal =
     mkJournal[CounterId, CounterEvent](
