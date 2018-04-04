@@ -2,7 +2,6 @@ package aecor.tests
 
 import java.nio.ByteBuffer
 
-import aecor.ReifiedInvocations
 import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.macros.boopickleWireProtocol
@@ -10,7 +9,6 @@ import cats.{ Id, ~>, Applicative, Functor }
 import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
-import io.aecor.liberator.FunctorK
 import java.util.UUID
 import GadtTest._
 
@@ -31,10 +29,9 @@ class GadtTest extends FunSuite with Matchers {
 
   val protocol = Foo.aecorWireProtocol
 
-  def server[M[_[_]], F[_]: Applicative](actions: M[F])(
-    implicit M: WireProtocol[M],
-    MI: ReifiedInvocations[M]
-  ): ByteBuffer => F[DecodingResult[ByteBuffer]] = { in =>
+  def server[M[_[_]], F[_]: Applicative](
+    actions: M[F]
+  )(implicit M: WireProtocol[M]): ByteBuffer => F[DecodingResult[ByteBuffer]] = { in =>
     M.decoder
       .decode(in) match {
       case Right(p) =>
@@ -50,8 +47,8 @@ class GadtTest extends FunSuite with Matchers {
 
   def client[M[_[_]], F[_]: Functor](
     server: ByteBuffer => F[DecodingResult[ByteBuffer]]
-  )(implicit protocol: WireProtocol[M], FK: FunctorK[M]): M[DecodingResultT[F, ?]] =
-    protocol.encoder
+  )(implicit M: WireProtocol[M]): M[DecodingResultT[F, ?]] =
+    M.encoder
       .mapK[DecodingResultT[F, ?]](new (WireProtocol.Encoded ~> DecodingResultT[F, ?]) {
         override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[DecodingResult[A]] =
           server(fa._1).map(_.right.flatMap(fa._2.decode))
@@ -69,8 +66,8 @@ class GadtTest extends FunSuite with Matchers {
 
     val fooClient = client[Foo, Id](fooServer)
 
-    client.include(1) shouldBe Right(())
-    client.scdsc("1234") shouldBe Right(4)
-    client.id shouldBe Right(FooId(uuid))
+    fooClient.include(1) shouldBe Right(())
+    fooClient.scdsc("1234") shouldBe Right(4)
+    fooClient.id shouldBe Right(FooId(uuid))
   }
 }

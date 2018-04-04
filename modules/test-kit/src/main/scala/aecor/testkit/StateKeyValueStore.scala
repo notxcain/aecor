@@ -5,8 +5,11 @@ import cats.mtl.MonadState
 import monocle.Lens
 
 object StateKeyValueStore {
-  def apply[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K, A]]): KeyValueStore[F, K, A] =
-    new StateKeyValueStore(lens)
+  final class Builder[F[_]] {
+    def apply[S: MonadState[F, ?], K, A](lens: Lens[S, Map[K, A]]): KeyValueStore[F, K, A] =
+      new StateKeyValueStore(lens)
+  }
+  def apply[F[_]]: Builder[F] = new Builder[F]
 }
 
 class StateKeyValueStore[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K, A]])

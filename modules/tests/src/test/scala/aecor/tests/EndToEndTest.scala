@@ -12,10 +12,8 @@ import aecor.testkit.E2eSupport._
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
 import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
-import aecor.testkit.Lens
 import shapeless.Coproduct
 import scala.concurrent.duration._
-import monocle.Lens
 import monocle.macros.GenLens
 
 class EndToEndTest extends FunSuite with Matchers with E2eSupport {
@@ -75,9 +73,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   }
 
   val offsetStore =
-    StateKeyValueStore[F, SpecState, TagConsumer, LocalDateTime](
-      Lens(_.offsetStoreState, (s, os) => s.copy(offsetStoreState = os))
-    )
+    StateKeyValueStore[F](GenLens[SpecState](_.offsetStoreState))
 
   val scheduleProcess = ScheduleProcess[F](
     journal = wrappedEventJournal,
@@ -97,11 +93,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   val processes = Processes[F, SpecState](
     wireProcess(
-      CounterViewProcess(
-        TestCounterViewRepository[F, SpecState](
-          Lens(_.counterViewState, (x, a) => x.copy(counterViewState = a))
-        )
-      ),
+      CounterViewProcess(TestCounterViewRepository[F](GenLens[SpecState](_.counterViewState))),
       counterEventJournal
         .currentEventsByTag(CounterEvent.tag, counterViewProcessConsumerId)
     ),
