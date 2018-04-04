@@ -6,7 +6,7 @@
         </encoder>
     </appender>
 
-    <root level="OFF">
+    <root level="DEBUG">
         <appender-ref ref="STDOUT" />
     </root>
     <logger name="org.apache.kafka.clients.consumer.KafkaConsumer" level="WARN" />
