@@ -5,6 +5,7 @@ import aecor.testkit.StateEventJournal.State
 import cats.data.{ NonEmptyVector }
 import cats.implicits._
 import cats.mtl.MonadState
+import monocle.Lens
 
 object StateEventJournal {
   case class State[I, E](eventsById: Map[I, Vector[E]],

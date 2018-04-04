@@ -5,6 +5,7 @@ import java.time.{ Instant, ZoneId }
 
 import aecor.util.ClockT
 import cats.mtl.MonadState
+import monocle.Lens
 
 class StateClock[F[_]: MonadState[?[_], S], S](zoneId: ZoneId, S: Lens[S, Instant])
     extends ClockT[F] {

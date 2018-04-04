@@ -9,6 +9,7 @@ final case class TransactionId(value: String) extends AnyVal
 
 final case class From[A](value: A) extends AnyVal
 final case class To[A](value: A) extends AnyVal
+
 @boopickleWireProtocol
 trait TransactionAggregate[F[_]] {
   def create(fromAccountId: From[AccountId], toAccountId: To[AccountId], amount: Amount): F[Unit]

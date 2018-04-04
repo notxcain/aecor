@@ -9,7 +9,7 @@ import cats.implicits._
 import cats.mtl.MonadState
 import cats.{ FlatMap, Monad, MonadError, ~> }
 import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
-
+import monocle.Lens
 import scala.collection.immutable._
 
 object E2eSupport {

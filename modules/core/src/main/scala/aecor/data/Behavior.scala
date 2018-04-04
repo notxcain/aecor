@@ -25,7 +25,7 @@ final case class Behavior[M[_[_]], F[_]](actions: M[PairT[F, Behavior[M, F], ?]]
 
 object Behavior {
 
-  def roll[F[_]: FlatMap, M[_[_]]: FunctorK: ReifiedInvocations](
+  def roll[F[_]: FlatMap, M[_[_]]](
     f: F[Behavior[M, F]]
   )(implicit M: ReifiedInvocations[M]): Behavior[M, F] =
     Behavior[M, F] {

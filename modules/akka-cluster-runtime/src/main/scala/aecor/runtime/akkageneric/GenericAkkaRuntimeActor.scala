@@ -34,7 +34,7 @@ private[aecor] object GenericAkkaRuntimeActor {
 private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]: Effect](
   createBehavior: I => Behavior[M, F],
   idleTimeout: FiniteDuration
-)(implicit WP: WireProtocol[M])
+)(implicit M: WireProtocol[M])
     extends Actor
     with Stash
     with ActorLogging {
@@ -60,7 +60,7 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
 
   private def withBehavior(behavior: Behavior[M, F]): Receive = {
     case PerformOp(opBytes) =>
-      WP.decoder
+      M.decoder
         .decode(opBytes) match {
         case Right(pair) =>
           performInvocation(behavior.actions, pair.left, pair.right)

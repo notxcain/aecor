@@ -15,6 +15,8 @@ import org.scalatest.{ FunSuite, Matchers }
 import aecor.testkit.Lens
 import shapeless.Coproduct
 import scala.concurrent.duration._
+import monocle.Lens
+import monocle.macros.GenLens
 
 class EndToEndTest extends FunSuite with Matchers with E2eSupport {
   import cats.mtl.instances.all._
@@ -29,11 +31,11 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     offsetStoreState: Map[TagConsumer, LocalDateTime]
   )
 
-  val clock = StateClock[F, SpecState](ZoneOffset.UTC, Lens(_.time, (s, t) => s.copy(time = t)))
+  val clock = StateClock[F, SpecState](ZoneOffset.UTC, GenLens[SpecState](_.time),)
 
   def counterEventJournal =
     mkJournal[CounterId, CounterEvent](
-      Lens(_.counterJournalState, (x, a) => x.copy(counterJournalState = a)),
+      GenLens[SpecState](_.counterJournalState),
       Tagging.const(CounterEvent.tag)
     )
 
@@ -42,7 +44,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   def notificationEventJournal =
     mkJournal[NotificationId, NotificationEvent](
-      Lens(_.notificationJournalState, (x, a) => x.copy(notificationJournalState = a)),
+      GenLens[SpecState](_.notificationJournalState),
       Tagging.const(NotificationEvent.tag)
     )
 
@@ -51,7 +53,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   def schduleEventJournal =
     mkJournal[ScheduleBucketId, ScheduleEvent](
-      Lens(_.scheduleJournalState, (x, a) => x.copy(scheduleJournalState = a)),
+      GenLens[SpecState](_.scheduleJournalState),
       Tagging.const(EventTag("Schedule"))
     )
 
@@ -59,9 +61,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     behavior(DefaultScheduleBucket.behavior(clock.zonedDateTime), schduleEventJournal)
   )
 
-  val scheduleEntryRepository = TestScheduleEntryRepository[F, SpecState](
-    Lens(_.scheduleEntries, (x, a) => x.copy(scheduleEntries = a))
-  )
+  val scheduleEntryRepository =
+    TestScheduleEntryRepository[F, SpecState](GenLens[SpecState](_.scheduleEntries))
 
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
   val wrappedEventJournal = new ScheduleEventJournal[F] {

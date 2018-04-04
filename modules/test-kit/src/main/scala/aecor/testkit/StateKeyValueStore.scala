@@ -2,6 +2,7 @@ package aecor.testkit
 
 import aecor.util.KeyValueStore
 import cats.mtl.MonadState
+import monocle.Lens
 
 object StateKeyValueStore {
   def apply[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K, A]]): KeyValueStore[F, K, A] =
