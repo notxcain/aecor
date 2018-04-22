@@ -1,13 +1,25 @@
 package aecor.runtime.akkapersistence.readside
 
+import aecor.Has
 import aecor.data.{ EntityEvent, EventTag, TagConsumer }
-import aecor.util.KeyValueStore
+import aecor.runtime.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect
 
 final case class JournalEntry[O, I, A](offset: O, event: EntityEvent[I, A]) {
   def map[B](f: A => B): JournalEntry[O, I, B] = copy(event = event.map(f))
+}
+
+object JournalEntry {
+  implicit def aecorHasInstanceForEvent[X, O, I, A](
+    implicit A: Has[X, EntityEvent[I, A]]
+  ): Has[X, JournalEntry[O, I, A]] =
+    Has.instance[JournalEntry[O, I, A]](x => A.get(x.event))
+  implicit def aecorHasInstanceForOffset[X, O, I, A](
+    implicit A: Has[X, O]
+  ): Has[X, JournalEntry[O, I, A]] =
+    Has.instance[JournalEntry[O, I, A]](x => A.get(x.offset))
 }
 
 trait JournalQuery[Offset, I, E] {

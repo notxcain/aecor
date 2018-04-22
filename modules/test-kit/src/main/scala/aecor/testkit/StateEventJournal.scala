@@ -1,8 +1,9 @@
 package aecor.testkit
 
 import aecor.data._
+import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
-import cats.data.{ NonEmptyVector }
+import cats.data.NonEmptyVector
 import cats.implicits._
 import cats.mtl.MonadState
 import monocle.Lens
@@ -50,25 +51,23 @@ object StateEventJournal {
 
 final class StateEventJournal[F[_], K, S, E](lens: Lens[S, State[K, E]], tagging: Tagging[K])(
   implicit MS: MonadState[F, S]
-) extends EventJournal[F, K, E]
-    with CurrentEventsByTagQuery[F, K, E] {
+) extends EventJournal[F, K, E] {
   private final implicit val monad = MS.monad
   private final val F = lens.transformMonadState(MonadState[F, S])
 
-  override def append(id: K, offset: Long, events: NonEmptyVector[E]): F[Unit] =
-    F.modify(_.appendEvents(id, offset, events.map(e => TaggedEvent(e, tagging.tag(id)))))
+  override def append(id: K, sequenceNr: Long, events: NonEmptyVector[E]): F[Unit] =
+    F.modify(_.appendEvents(id, sequenceNr, events.map(e => TaggedEvent(e, tagging.tag(id)))))
 
-  override def foldById[A](id: K, offset: Long, zero: A)(f: (A, E) => Folded[A]): F[Folded[A]] =
+  override def foldById[A](id: K, sequenceNr: Long, zero: A)(f: (A, E) => Folded[A]): F[Folded[A]] =
     F.inspect(
         _.eventsById
           .get(id)
-          .map(_.drop(offset.toInt))
+          .map(_.drop(sequenceNr.toInt))
           .getOrElse(Vector.empty)
       )
       .map(_.foldM(zero)(f))
 
-  override def currentEventsByTag(tag: EventTag,
-                                  consumerId: ConsumerId): Processable[F, EntityEvent[K, E]] =
+  def currentEventsByTag(tag: EventTag, consumerId: ConsumerId): Processable[F, EntityEvent[K, E]] =
     new Processable[F, EntityEvent[K, E]] {
       override def process(f: EntityEvent[K, E] => F[Unit]): F[Unit] =
         for {

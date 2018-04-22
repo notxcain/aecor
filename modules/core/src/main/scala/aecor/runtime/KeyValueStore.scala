@@ -1,4 +1,5 @@
-package aecor.util
+package aecor.runtime
+
 import cats.{ Functor, ~> }
 
 trait KeyValueStore[F[_], K, A] { self =>

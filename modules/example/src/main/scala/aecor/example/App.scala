@@ -57,7 +57,7 @@ object App {
 
     val offsetStore = CassandraOffsetStore[Task](cassandraSession, offsetStoreConfig)
 
-    val metaProvider = taskClock.instant.map(EventMeta(_))
+    val metaProvider = taskClock.instant.map(Timestamp(_))
 
     val deployTransactions: Task[TransactionId => TransactionAggregate[Task]] =
       runtime
@@ -80,10 +80,10 @@ object App {
       transactions: TransactionId => TransactionAggregate[Task]
     ): Task[DistributedProcessing.KillSwitch[Task]] = {
       val failure = TransactionProcessFailure.withMonadError[Task]
-      val processStep: (Input) => Task[Unit] =
+      val processor =
         TransactionProcess(transactions, accounts, failure)
       val journal = runtime
-        .journal[TransactionId, Enriched[EventMeta, TransactionEvent]]
+        .journal[TransactionId, (Timestamp, TransactionEvent)]
         .committable(offsetStore)
       val consumerId = ConsumerId("processing")
       val processes =
@@ -91,9 +91,8 @@ object App {
           AkkaStreamProcess[Task](
             journal
               .eventsByTag(tag, consumerId)
-              .map(_.map(_.map(_.event).event))
               .mapAsync(30) {
-                _.traverse(processStep).runAsync
+                _.traverse(processor.process(_)).runAsync
               }
               .mapAsync(1)(_.commit.runAsync),
             Flow[Unit]

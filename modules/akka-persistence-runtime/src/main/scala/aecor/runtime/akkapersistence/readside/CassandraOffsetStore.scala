@@ -3,13 +3,14 @@ package aecor.runtime.akkapersistence.readside
 import java.util.UUID
 
 import aecor.data.TagConsumer
-import aecor.util.KeyValueStore
+import aecor.runtime.KeyValueStore
 import aecor.util.effect._
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.effect.Effect
 import com.datastax.driver.core.Session
 import cats.implicits._
+
 import scala.concurrent.{ ExecutionContext, Future }
 
 object CassandraOffsetStore {

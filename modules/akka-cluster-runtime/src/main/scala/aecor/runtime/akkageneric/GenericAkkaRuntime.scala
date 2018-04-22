@@ -19,17 +19,17 @@ import cats.implicits._
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
-  def apply[F[_]: Effect](system: ActorSystem): GenericAkkaRuntime[F] =
+  def apply(system: ActorSystem): GenericAkkaRuntime =
     new GenericAkkaRuntime(system)
   private final case class Command(entityId: String, bytes: ByteBuffer)
 }
 
-final class GenericAkkaRuntime[F[_]] private (system: ActorSystem)(implicit F: Effect[F]) {
-  def deploy[K: KeyEncoder: KeyDecoder, M[_[_]]](
+final class GenericAkkaRuntime private (system: ActorSystem) {
+  def deploy[K: KeyEncoder: KeyDecoder, M[_[_]], F[_]](
     typeName: String,
     createBehavior: K => Behavior[M, F],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
       val numberOfShards = settings.numberOfShards
 

@@ -1,7 +1,7 @@
 package aecor.runtime.akkapersistence.readside
 
 import aecor.data.{ Committable, ConsumerId, EventTag, TagConsumer }
-import aecor.util.KeyValueStore
+import aecor.runtime.KeyValueStore
 import aecor.util.effect._
 import akka.NotUsed
 import akka.stream.scaladsl.Source

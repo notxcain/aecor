@@ -4,6 +4,7 @@ import java.time.{ Clock => _, _ }
 import java.util.UUID
 
 import aecor.data._
+import aecor.runtime.KeyValueStore
 import aecor.runtime.akkapersistence._
 import aecor.runtime.akkapersistence.readside.JournalEntry
 import aecor.schedule.process.{
@@ -11,7 +12,7 @@ import aecor.schedule.process.{
   PeriodicProcessRuntime,
   ScheduleProcess
 }
-import aecor.util.{ ClockT, KeyValueStore }
+import aecor.util.ClockT
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
