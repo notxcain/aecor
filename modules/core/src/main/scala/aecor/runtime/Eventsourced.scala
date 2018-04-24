@@ -11,6 +11,8 @@ import io.aecor.liberator.syntax._
 import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
 object Eventsourced {
+  final case class Snapshotting[F[_], K, S](snapshotEach: Long,
+                                            store: KeyValueStore[F, K, InternalState[S]])
   type EntityId = String
   final case class InternalState[S](entityState: S, version: Long)
 
@@ -38,7 +40,7 @@ object Eventsourced {
   def apply[M[_[_]]: FunctorK, F[_]: Monad, S, E, K](
     entityBehavior: EventsourcedBehaviorT[M, F, S, E],
     journal: EventJournal[F, K, E],
-    snapshotting: Option[(Long, KeyValueStore[F, K, InternalState[S]])] = Option.empty
+    snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
   )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => Behavior[M, F] = { entityId =>
     val internalize =
       new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], E, ?]) {
@@ -57,7 +59,7 @@ object Eventsourced {
     )
 
     val needsSnapshot = snapshotting match {
-      case Some((x, _)) =>
+      case Some(Snapshotting(x, _)) =>
         (state: InternalState[S]) =>
           state.version % x == 0
       case None =>
@@ -66,7 +68,7 @@ object Eventsourced {
     }
 
     val snapshotStore =
-      snapshotting.map(_._2).getOrElse(NoopKeyValueStore[F, K, InternalState[S]])
+      snapshotting.map(_.store).getOrElse(NoopKeyValueStore[F, K, InternalState[S]])
 
     def loadState: F[InternalState[S]] =
       for {
