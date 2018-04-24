@@ -7,8 +7,8 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect
 
-final case class JournalEntry[O, I, A](offset: O, event: EntityEvent[I, A]) {
-  def map[B](f: A => B): JournalEntry[O, I, B] = copy(event = event.map(f))
+final case class JournalEntry[O, K, A](offset: O, event: EntityEvent[K, A]) {
+  def map[B](f: A => B): JournalEntry[O, K, B] = copy(event = event.map(f))
 }
 
 object JournalEntry {
