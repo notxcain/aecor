@@ -6,7 +6,9 @@ import io.aecor.liberator.Invocation
 import aecor.data.Behavior
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.encoding.WireProtocol
-import aecor.runtime.akkageneric.GenericAkkaRuntime.Command
+import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
+import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
+import aecor.runtime.akkageneric.serialization.Message
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
@@ -21,7 +23,7 @@ import scala.concurrent.Future
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =
     new GenericAkkaRuntime(system)
-  private final case class Command(entityId: String, bytes: ByteBuffer)
+  private[akkageneric] final case class KeyedCommand(key: String, bytes: ByteBuffer) extends Message
 }
 
 final class GenericAkkaRuntime private (system: ActorSystem) {
@@ -34,13 +36,13 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
       val numberOfShards = settings.numberOfShards
 
       val extractEntityId: ShardRegion.ExtractEntityId = {
-        case Command(entityId, c) =>
-          (entityId, GenericAkkaRuntimeActor.PerformOp(c))
+        case KeyedCommand(entityId, c) =>
+          (entityId, GenericAkkaRuntimeActor.Command(c))
       }
 
       val extractShardId: ShardRegion.ExtractShardId = {
-        case Command(correlationId, _) =>
-          String.valueOf(scala.math.abs(correlationId.hashCode) % numberOfShards)
+        case KeyedCommand(key, _) =>
+          String.valueOf(scala.math.abs(key.hashCode) % numberOfShards)
         case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
       }
 
@@ -65,9 +67,10 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
               val (bytes, decoder) = fa.invoke(M.encoder)
               Effect[F]
                 .fromFuture {
-                  (shardRegionRef ? Command(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                    .asInstanceOf[Future[ByteBuffer]]
+                  (shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
+                    .asInstanceOf[Future[CommandResult]]
                 }
+                .map(_.bytes)
                 .map(decoder.decode)
                 .flatMap(F.fromEither)
             }
