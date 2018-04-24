@@ -1,7 +1,5 @@
 package aecor.testkit
 
-import java.util.UUID
-
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
