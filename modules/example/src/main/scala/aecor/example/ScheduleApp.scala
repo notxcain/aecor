@@ -8,14 +8,13 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.util.JavaTimeClock
-import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.{
   CassandraSessionInitSerialization,
   DefaultJournalCassandraSession
 }
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{ Flow, Sink, Source }
+import akka.stream.scaladsl.{ Sink, Source }
 import cats.effect.{ Effect, Sync }
 import cats.implicits._
 import monix.eval.Task
@@ -96,16 +95,12 @@ object ScheduleApp extends App {
 
   val processes = (0 to 10).map { x =>
     AkkaStreamProcess[Task](
-      Source.tick(0.seconds, 2.seconds, x).mapMaterializedValue(_ => NotUsed),
-      Flow[Int].map { x =>
-        system.log.info(s"Worker $x")
-        ()
-      }
+      Source.tick(0.seconds, 2.seconds, x).map(x => system.log.info(s"Worker $x"))
     )
   }
 
   val distributed = DistributedProcessing(system)
-    .start[Task]("TestProcesses", processes)
+    .start[Task]("TestProcesses", processes.toList)
 
   val app2: Task[Unit] = for {
     killswtich <- distributed

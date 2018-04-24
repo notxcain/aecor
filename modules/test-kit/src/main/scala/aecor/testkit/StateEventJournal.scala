@@ -1,5 +1,7 @@
 package aecor.testkit
 
+import java.util.UUID
+
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
@@ -9,28 +11,38 @@ import cats.mtl.MonadState
 import monocle.Lens
 
 object StateEventJournal {
-  case class State[I, E](eventsById: Map[I, Vector[E]],
-                         eventsByTag: Map[EventTag, Vector[EntityEvent[I, E]]],
+  case class State[K, E](eventsByKey: Map[K, Vector[E]],
+                         eventsByTag: Map[EventTag, Vector[EntityEvent[K, E]]],
                          consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
     def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
 
-    def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[I, E] =
+    def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[K, E] =
       copy(consumerOffsets = consumerOffsets.updated(tag -> consumerId, offset))
 
-    def appendEvents(id: I, offset: Long, events: NonEmptyVector[TaggedEvent[E]]): State[I, E] = {
-      val updatedEventsById = eventsById
-        .updated(id, eventsById.getOrElse(id, Vector.empty) ++ events.map(_.event).toVector)
+    def getEventsByTag(tag: EventTag, offset: Int): Vector[(Int, EntityEvent[K, E])] =
+      Stream
+        .from(1)
+        .zip(
+          eventsByTag
+            .getOrElse(tag, Vector.empty)
+        )
+        .drop(offset - 1)
+        .toVector
 
-      val newEventsByTag: Map[EventTag, Vector[EntityEvent[I, E]]] = events.toVector.zipWithIndex
+    def appendEvents(key: K, offset: Long, events: NonEmptyVector[TaggedEvent[E]]): State[K, E] = {
+      val updatedEventsById = eventsByKey
+        .updated(key, eventsByKey.getOrElse(key, Vector.empty) ++ events.map(_.event).toVector)
+
+      val newEventsByTag: Map[EventTag, Vector[EntityEvent[K, E]]] = events.toVector.zipWithIndex
         .flatMap {
           case (e, idx) =>
-            e.tags.toVector.map(t => t -> EntityEvent(id, idx + offset, e.event))
+            e.tags.toVector.map(t => t -> EntityEvent(key, idx + offset, e.event))
         }
         .groupBy(_._1)
         .mapValues(_.map(_._2))
       copy(
-        eventsById = updatedEventsById,
+        eventsByKey = updatedEventsById,
         eventsByTag =
           eventsByTag |+| newEventsByTag
       )
@@ -55,14 +67,14 @@ final class StateEventJournal[F[_], K, S, E](lens: Lens[S, State[K, E]], tagging
   private final implicit val monad = MS.monad
   private final val F = lens.transformMonadState(MonadState[F, S])
 
-  override def append(id: K, sequenceNr: Long, events: NonEmptyVector[E]): F[Unit] =
-    F.modify(_.appendEvents(id, sequenceNr, events.map(e => TaggedEvent(e, tagging.tag(id)))))
+  override def append(key: K, sequenceNr: Long, events: NonEmptyVector[E]): F[Unit] =
+    F.modify(_.appendEvents(key, sequenceNr, events.map(e => TaggedEvent(e, tagging.tag(key)))))
 
   override def foldById[A](id: K, sequenceNr: Long, zero: A)(f: (A, E) => Folded[A]): F[Folded[A]] =
     F.inspect(
-        _.eventsById
+        _.eventsByKey
           .get(id)
-          .map(_.drop(sequenceNr.toInt))
+          .map(_.drop(sequenceNr.toInt - 1))
           .getOrElse(Vector.empty)
       )
       .map(_.foldM(zero)(f))
@@ -71,18 +83,14 @@ final class StateEventJournal[F[_], K, S, E](lens: Lens[S, State[K, E]], tagging
     new Processable[F, EntityEvent[K, E]] {
       override def process(f: EntityEvent[K, E] => F[Unit]): F[Unit] =
         for {
-          offset0 <- F.inspect(_.getConsumerOffset(tag, consumerId))
-          result <- F.inspect(
-                     _.eventsByTag
-                       .getOrElse(tag, Vector.empty)
-                       .zipWithIndex
-                       .drop(offset0)
-                   )
+          state <- F.get
+          committedOffset = state.getConsumerOffset(tag, consumerId)
+          result = state.getEventsByTag(tag, committedOffset + 1)
           _ <- result.traverse {
-                case (i, offset) =>
+                case (offset, e) =>
                   for {
-                    _ <- f(i)
-                    _ <- F.modify(_.setConsumerOffset(tag, consumerId, offset + 1))
+                    _ <- f(e)
+                    _ <- F.modify(_.setConsumerOffset(tag, consumerId, offset))
                   } yield ()
               }
         } yield ()

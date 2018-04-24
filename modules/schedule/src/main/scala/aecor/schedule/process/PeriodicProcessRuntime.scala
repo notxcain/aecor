@@ -32,6 +32,6 @@ class PeriodicProcessRuntime[F[_]: Effect](
 
   def run(system: ActorSystem): F[DistributedProcessing.KillSwitch[F]] =
     DistributedProcessing(system)
-      .start[F](s"$name-Process", Seq(AkkaStreamProcess[F](source)))
+      .start[F](s"$name-Process", List(AkkaStreamProcess[F](source)))
 
 }

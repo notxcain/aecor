@@ -13,13 +13,14 @@ final case class JournalEntry[O, K, A](offset: O, event: EntityEvent[K, A]) {
 
 object JournalEntry {
   implicit def aecorHasInstanceForEvent[X, O, I, A](
-    implicit A: Has[X, EntityEvent[I, A]]
-  ): Has[X, JournalEntry[O, I, A]] =
-    Has.instance[JournalEntry[O, I, A]](x => A.get(x.event))
+    implicit A: Has[EntityEvent[I, A], X]
+  ): Has[JournalEntry[O, I, A], X] =
+    A.contramap(_.event)
+
   implicit def aecorHasInstanceForOffset[X, O, I, A](
-    implicit A: Has[X, O]
-  ): Has[X, JournalEntry[O, I, A]] =
-    Has.instance[JournalEntry[O, I, A]](x => A.get(x.offset))
+    implicit A: Has[O, X]
+  ): Has[JournalEntry[O, I, A], X] = A.contramap(_.offset)
+
 }
 
 trait JournalQuery[Offset, I, E] {

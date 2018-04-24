@@ -17,7 +17,7 @@ import cats.{ Monad, MonadError }
 class TransactionProcess[F[_]: Monad](transactions: TransactionId => TransactionAggregate[F],
                                       accounts: AccountId => Account[F],
                                       failure: TransactionProcessFailure[F]) {
-  def process[A: Has[TransactionId, ?]: Has[TransactionEvent, ?]](a: A): F[Unit] = {
+  def process[A: Has[?, TransactionId]: Has[?, TransactionEvent]](a: A): F[Unit] = {
     val transactionId = a.get[TransactionId]
     a.get[TransactionEvent] match {
       case TransactionEvent.TransactionCreated(From(from), _, amount) =>

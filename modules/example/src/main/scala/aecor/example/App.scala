@@ -4,7 +4,7 @@ import java.time.Clock
 
 import aecor.data._
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.example.domain.TransactionProcess.{ Input, TransactionProcessFailure }
+import aecor.example.domain.TransactionProcess.TransactionProcessFailure
 import aecor.example.domain._
 import aecor.example.domain.account.{ Account, AccountId, EventsourcedAccount }
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.tagging
@@ -24,7 +24,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives.{ complete, get, path, _ }
 import akka.http.scaladsl.server.Route
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.scaladsl.Flow
 import akka.stream.{ ActorMaterializer, Materializer }
 import com.typesafe.config.ConfigFactory
 import monix.eval.Task
@@ -83,7 +82,7 @@ object App {
       val processor =
         TransactionProcess(transactions, accounts, failure)
       val journal = runtime
-        .journal[TransactionId, (Timestamp, TransactionEvent)]
+        .journal[TransactionId, Enriched[Timestamp, TransactionEvent]]
         .committable(offsetStore)
       val consumerId = ConsumerId("processing")
       val processes =
@@ -94,8 +93,7 @@ object App {
               .mapAsync(30) {
                 _.traverse(processor.process(_)).runAsync
               }
-              .mapAsync(1)(_.commit.runAsync),
-            Flow[Unit]
+              .mapAsync(1)(_.commit.runAsync)
           )
         }
       distributedProcessing.start[Task]("TransactionProcessing", processes)
