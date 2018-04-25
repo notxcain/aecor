@@ -101,10 +101,6 @@ object Eventsourced {
           }
         folded match {
           case Next((snapshotNeeded, nextState)) =>
-            println(s"****$entityId****")
-            println(state)
-            println(nextState)
-            println("****\n")
             val appendEvents = journal
               .append(entityId, state.version + 1, NonEmptyVector.of(events.head, events.tail: _*))
             val snapshotIfNeeded = if (snapshotNeeded) {
