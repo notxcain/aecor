@@ -60,9 +60,8 @@ object Schedule {
 
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(
-        uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
-        value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli)
-      )
+        uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId)
+      )(value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli))
 
     def deployBuckets =
       runtime
