@@ -51,13 +51,13 @@ class MessageSerializer(val system: ExtendedActorSystem)
   private def entityCommandToBinary(a: KeyedCommand): Array[Byte] =
     msg.KeyedCommand(a.key, ByteString.copyFrom(a.bytes)).toByteArray
 
-  private def commandFromBinary(bytes: Array[Byte]): KeyedCommand =
+  private def keyedCommandFromBinary(bytes: Array[Byte]): KeyedCommand =
     msg.KeyedCommand.parseFrom(bytes) match {
       case msg.KeyedCommand(key, commandBytes) =>
         KeyedCommand(key, commandBytes.asReadOnlyByteBuffer)
     }
 
-  private def keyedCommandFromBinary(bytes: Array[Byte]): Command =
+  private def commandFromBinary(bytes: Array[Byte]): Command =
     Command(ByteBuffer.wrap(bytes))
 
   private def commandResultFromBinary(bytes: Array[Byte]): CommandResult =
