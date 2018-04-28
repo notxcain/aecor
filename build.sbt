@@ -10,7 +10,7 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.9"
+lazy val akkaVersion = "2.5.11"
 lazy val akkaPersistenceCassandraVersion = "0.59"
 lazy val akkaPersistenceJdbcVersion = "3.2.0"
 lazy val catsVersion = "1.1.0"
@@ -31,8 +31,8 @@ lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.9.0"
-lazy val akkaHttpVersion = "10.0.11"
+lazy val circeVersion = "0.9.2"
+lazy val akkaHttpVersion = "10.1.0"
 lazy val akkaHttpJsonVersion = "1.19.0"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
