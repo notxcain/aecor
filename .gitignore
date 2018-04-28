@@ -68,6 +68,9 @@ project/boot/
 .lib/
 dist/*
 project/plugins/project/
+project/.boot/
+project/.ivy/
+project/.sbtboot/
 
 # Scala-IDE specific
 .scala_dependencies
