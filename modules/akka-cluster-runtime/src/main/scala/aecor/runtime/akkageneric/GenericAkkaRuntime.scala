@@ -65,14 +65,13 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
           new (Invocation[M, ?] ~> F) {
             override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
               val (bytes, decoder) = fa.invoke(M.encoder)
-              Effect[F]
-                .fromFuture {
+              F.fromFuture {
                   (shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
                     .asInstanceOf[Future[CommandResult]]
                 }
-                .map(_.bytes)
-                .map(decoder.decode)
-                .flatMap(F.fromEither)
+                .flatMap { result =>
+                  F.fromEither(decoder.decode(result.bytes))
+                }
             }
           }
         }

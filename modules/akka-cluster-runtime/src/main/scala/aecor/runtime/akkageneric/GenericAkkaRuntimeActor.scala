@@ -67,8 +67,7 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
         case Right(pair) =>
           performInvocation(behavior.actions, pair.left, pair.right)
         case Left(decodingError) =>
-          val error = s"Failed to decode invocation, because of $decodingError"
-          log.error(error)
+          log.error(decodingError, "Failed to decode invocation")
           sender() ! Status.Failure(decodingError)
       }
 
