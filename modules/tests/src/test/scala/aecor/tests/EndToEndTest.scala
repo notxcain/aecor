@@ -111,7 +111,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   import processes._
 
-  def tickSeconds(seconds: Long) = wired(clock.tick)(java.time.Duration.ofSeconds(seconds))
+  def sleepSeconds(seconds: Long) = wired(clock.tick)(java.time.Duration.ofSeconds(seconds))
 
   test("Process should react to events") {
 
@@ -141,9 +141,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
         )
       )
 
+    println(state.counterJournalState)
     state.counterViewState.values shouldBe Map(first -> 1L, second -> 2L)
 
-    state.notificationJournalState.eventsById
+    state.notificationJournalState.eventsByKey
       .getOrElse("1-2", Vector.empty) should have size (2)
   }
 
@@ -158,8 +159,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
         bucket = buckets(bucketId)
         _ <- bucket.addScheduleEntry("e1", "cid", now.plusSeconds(3))
         _ <- bucket.addScheduleEntry("e2", "cid", now.plusSeconds(5))
-        _ <- tickSeconds(3)
-        _ <- tickSeconds(2)
+        _ <- sleepSeconds(3)
+        _ <- sleepSeconds(2)
         _ <- if (n == 0) {
               ().pure[F]
             } else {

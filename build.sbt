@@ -183,7 +183,7 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
   )
 )
 
-lazy val akkaGenericSettings = Seq(
+lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion
   )

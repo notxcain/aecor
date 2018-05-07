@@ -1,7 +1,7 @@
 package aecor.example.domain.transaction
 
 import aecor.data.Enriched
-import aecor.example.domain.{ Amount, EventMeta }
+import aecor.example.domain.{ Amount, Timestamp }
 import aecor.example.domain.account.AccountId
 import aecor.example.persistentEncoderUtil
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
@@ -21,8 +21,8 @@ object TransactionEvent {
   case class TransactionFailed(reason: String) extends TransactionEvent
   case object TransactionSucceeded extends TransactionEvent
 
-  implicit val encoder: PersistentEncoder[Enriched[EventMeta, TransactionEvent]] =
-    persistentEncoderUtil.circePersistentEncoder[Enriched[EventMeta, TransactionEvent]]
-  implicit val decoder: PersistentDecoder[Enriched[EventMeta, TransactionEvent]] =
-    persistentEncoderUtil.circePersistentDecoder[Enriched[EventMeta, TransactionEvent]]
+  implicit val encoder: PersistentEncoder[Enriched[Timestamp, TransactionEvent]] =
+    persistentEncoderUtil.circePersistentEncoder[Enriched[Timestamp, TransactionEvent]]
+  implicit val decoder: PersistentDecoder[Enriched[Timestamp, TransactionEvent]] =
+    persistentEncoderUtil.circePersistentDecoder[Enriched[Timestamp, TransactionEvent]]
 }

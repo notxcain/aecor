@@ -4,9 +4,9 @@ import java.time.temporal.ChronoUnit
 import java.time.{ Clock => _, _ }
 
 import aecor.data._
+import aecor.runtime.KeyValueStore
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ ScheduleBucket, ScheduleBucketId, ScheduleEntryRepository }
-import aecor.util.KeyValueStore
 import cats.Monad
 import cats.implicits._
 

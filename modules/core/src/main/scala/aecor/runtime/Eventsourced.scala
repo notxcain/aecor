@@ -1,15 +1,18 @@
-package aecor.testkit
+package aecor.runtime
 
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
-import aecor.util.KeyValueStore
 import cats.data.{ NonEmptyVector, StateT }
 import cats.implicits._
-import cats.{ MonadError, ~> }
+import cats.~>
+import cats.{ Monad, MonadError }
+import cats.effect.Sync
 import io.aecor.liberator.syntax._
 import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
 
 object Eventsourced {
+  final case class Snapshotting[F[_], K, S](snapshotEach: Long,
+                                            store: KeyValueStore[F, K, InternalState[S]])
   type EntityId = String
   final case class InternalState[S](entityState: S, version: Long)
 
@@ -19,12 +22,26 @@ object Eventsourced {
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
-  def apply[M[_[_]]: FunctorK, F[_]: MonadError[?[_], BehaviorFailure], S, E, K](
+  trait FailureHandler[F[_]] {
+    def fail[A](e: BehaviorFailure): F[A]
+  }
+
+  object FailureHandler {
+    implicit def syncFailure[F[_]](implicit F: Sync[F]): FailureHandler[F] = new FailureHandler[F] {
+      override def fail[A](e: BehaviorFailure): F[A] = F.raiseError(e)
+    }
+    implicit def monadErrorFailure[F[_]](
+      implicit F: MonadError[F, BehaviorFailure]
+    ): FailureHandler[F] = new FailureHandler[F] {
+      override def fail[A](e: BehaviorFailure): F[A] = F.raiseError(e)
+    }
+  }
+
+  def apply[M[_[_]]: FunctorK, F[_]: Monad, S, E, K](
     entityBehavior: EventsourcedBehaviorT[M, F, S, E],
     journal: EventJournal[F, K, E],
-    snapshotEach: Option[Long],
-    snapshotStore: KeyValueStore[F, K, InternalState[S]]
-  )(implicit M: ReifiedInvocations[M]): K => Behavior[M, F] = { entityId =>
+    snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
+  )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => Behavior[M, F] = { entityId =>
     val internalize =
       new (ActionT[F, S, E, ?] ~> ActionT[F, InternalState[S], E, ?]) {
         override def apply[A](fa: ActionT[F, S, E, A]): ActionT[F, InternalState[S], E, A] =
@@ -41,26 +58,35 @@ object Eventsourced {
           .map(InternalState(_, s.version + 1))
     )
 
+    val needsSnapshot = snapshotting match {
+      case Some(Snapshotting(x, _)) =>
+        (state: InternalState[S]) =>
+          state.version % x == 0
+      case None =>
+        (_: InternalState[S]) =>
+          false
+    }
+
+    val snapshotStore =
+      snapshotting.map(_.store).getOrElse(NoopKeyValueStore[F, K, InternalState[S]])
+
     def loadState: F[InternalState[S]] =
       for {
         snapshot <- snapshotStore.getValue(entityId)
         effectiveInitialState = snapshot.getOrElse(effectiveBehavior.initialState)
         out <- journal
-                .foldById(entityId, effectiveInitialState.version, effectiveInitialState)(
+                .foldById(entityId, effectiveInitialState.version + 1, effectiveInitialState)(
                   effectiveBehavior.applyEvent
                 )
                 .flatMap {
                   case Next(x) => x.pure[F]
                   case Impossible =>
-                    BehaviorFailure
-                      .illegalFold(entityId.toString)
-                      .raiseError[F, InternalState[S]]
+                    F.fail[InternalState[S]](
+                      BehaviorFailure
+                        .illegalFold(entityId.toString)
+                    )
                 }
       } yield out
-
-    def needsSnapshot(state: InternalState[S]): Boolean =
-      snapshotEach
-        .exists(x => state.version % x == 0)
 
     def updateState(state: InternalState[S], events: List[E]) =
       if (events.isEmpty) {
@@ -76,7 +102,7 @@ object Eventsourced {
         folded match {
           case Next((snapshotNeeded, nextState)) =>
             val appendEvents = journal
-              .append(entityId, state.version, NonEmptyVector.of(events.head, events.tail: _*))
+              .append(entityId, state.version + 1, NonEmptyVector.of(events.head, events.tail: _*))
             val snapshotIfNeeded = if (snapshotNeeded) {
               snapshotStore.setValue(entityId, nextState)
             } else {
@@ -84,9 +110,10 @@ object Eventsourced {
             }
             (appendEvents, snapshotIfNeeded).mapN((_, _) => nextState)
           case Impossible =>
-            BehaviorFailure
-              .illegalFold(entityId.toString)
-              .raiseError[F, InternalState[S]]
+            F.fail[InternalState[S]](
+              BehaviorFailure
+                .illegalFold(entityId.toString)
+            )
         }
       }
     Behavior.roll {

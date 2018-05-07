@@ -4,6 +4,7 @@ import java.time.{ Clock => _, _ }
 import java.util.UUID
 
 import aecor.data._
+import aecor.runtime.KeyValueStore
 import aecor.runtime.akkapersistence._
 import aecor.runtime.akkapersistence.readside.JournalEntry
 import aecor.schedule.process.{
@@ -11,7 +12,7 @@ import aecor.schedule.process.{
   PeriodicProcessRuntime,
   ScheduleProcess
 }
-import aecor.util.{ ClockT, KeyValueStore }
+import aecor.util.ClockT
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
@@ -59,9 +60,8 @@ object Schedule {
 
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
       offsetStore.imap(
-        uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId),
-        value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli)
-      )
+        uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId)
+      )(value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli))
 
     def deployBuckets =
       runtime

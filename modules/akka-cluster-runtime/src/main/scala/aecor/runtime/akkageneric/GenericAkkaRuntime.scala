@@ -6,7 +6,9 @@ import io.aecor.liberator.Invocation
 import aecor.data.Behavior
 import aecor.encoding.{ KeyDecoder, KeyEncoder }
 import aecor.encoding.WireProtocol
-import aecor.runtime.akkageneric.GenericAkkaRuntime.Command
+import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
+import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
+import aecor.runtime.akkageneric.serialization.Message
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
@@ -19,28 +21,28 @@ import cats.implicits._
 import scala.concurrent.Future
 
 object GenericAkkaRuntime {
-  def apply[F[_]: Effect](system: ActorSystem): GenericAkkaRuntime[F] =
+  def apply(system: ActorSystem): GenericAkkaRuntime =
     new GenericAkkaRuntime(system)
-  private final case class Command(entityId: String, bytes: ByteBuffer)
+  private[akkageneric] final case class KeyedCommand(key: String, bytes: ByteBuffer) extends Message
 }
 
-final class GenericAkkaRuntime[F[_]] private (system: ActorSystem)(implicit F: Effect[F]) {
-  def deploy[K: KeyEncoder: KeyDecoder, M[_[_]]](
+final class GenericAkkaRuntime private (system: ActorSystem) {
+  def deploy[K: KeyEncoder: KeyDecoder, M[_[_]], F[_]](
     typeName: String,
     createBehavior: K => Behavior[M, F],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
       val numberOfShards = settings.numberOfShards
 
       val extractEntityId: ShardRegion.ExtractEntityId = {
-        case Command(entityId, c) =>
-          (entityId, GenericAkkaRuntimeActor.PerformOp(c))
+        case KeyedCommand(entityId, c) =>
+          (entityId, GenericAkkaRuntimeActor.Command(c))
       }
 
       val extractShardId: ShardRegion.ExtractShardId = {
-        case Command(correlationId, _) =>
-          String.valueOf(scala.math.abs(correlationId.hashCode) % numberOfShards)
+        case KeyedCommand(key, _) =>
+          String.valueOf(scala.math.abs(key.hashCode) % numberOfShards)
         case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
       }
 
@@ -63,13 +65,13 @@ final class GenericAkkaRuntime[F[_]] private (system: ActorSystem)(implicit F: E
           new (Invocation[M, ?] ~> F) {
             override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
               val (bytes, decoder) = fa.invoke(M.encoder)
-              Effect[F]
-                .fromFuture {
-                  (shardRegionRef ? Command(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                    .asInstanceOf[Future[ByteBuffer]]
+              F.fromFuture {
+                  (shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
+                    .asInstanceOf[Future[CommandResult]]
                 }
-                .map(decoder.decode)
-                .flatMap(F.fromEither)
+                .flatMap { result =>
+                  F.fromEither(decoder.decode(result.bytes))
+                }
             }
           }
         }

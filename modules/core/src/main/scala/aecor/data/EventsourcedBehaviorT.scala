@@ -1,6 +1,6 @@
 package aecor.data
 
-import aecor.IsK
+import aecor.{ Has, IsK }
 import cats.{ Applicative, FlatMap, Id, Monad, ~> }
 import io.aecor.liberator.FunctorK
 import cats.syntax.functor._
@@ -41,3 +41,9 @@ final case class EventsourcedBehaviorT[M[_[_]], F[_], S, E](actions: M[ActionT[F
 }
 
 final case class Enriched[M, E](metadata: M, event: E)
+object Enriched {
+  implicit def hasMetadata[M, E, X](implicit M: Has[M, X]): Has[Enriched[M, E], X] =
+    M.contramap(_.metadata)
+  implicit def hasEvent[M, E, X](implicit E: Has[E, X]): Has[Enriched[M, E], X] =
+    E.contramap(_.event)
+}

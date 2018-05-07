@@ -9,7 +9,8 @@ import io.aecor.liberator.Invocation
 import aecor.data.{ Behavior, PairT }
 import aecor.encoding.KeyDecoder
 import aecor.encoding.WireProtocol
-import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.PerformOp
+import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
+import aecor.runtime.akkageneric.serialization.Message
 import aecor.util.effect._
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
@@ -27,7 +28,8 @@ private[aecor] object GenericAkkaRuntimeActor {
   ): Props =
     Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
 
-  private[akkageneric] final case class PerformOp(op: ByteBuffer)
+  private[akkageneric] final case class Command(bytes: ByteBuffer) extends Message
+  private[akkageneric] final case class CommandResult(bytes: ByteBuffer) extends Message
   private[akkageneric] case object Stop
 }
 
@@ -59,14 +61,13 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
   override def receive: Receive = withBehavior(createBehavior(id))
 
   private def withBehavior(behavior: Behavior[M, F]): Receive = {
-    case PerformOp(opBytes) =>
+    case Command(opBytes) =>
       M.decoder
         .decode(opBytes) match {
         case Right(pair) =>
           performInvocation(behavior.actions, pair.left, pair.right)
         case Left(decodingError) =>
-          val error = s"Failed to decode invocation, because of $decodingError"
-          log.error(error)
+          log.error(decodingError, "Failed to decode invocation")
           sender() ! Status.Failure(decodingError)
       }
 
@@ -102,7 +103,7 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
       case Result(`opId`, value) =>
         value match {
           case Success((newBehavior, reply)) =>
-            sender() ! reply
+            sender() ! CommandResult(reply)
             become(withBehavior(newBehavior))
           case Failure(cause) =>
             sender() ! Status.Failure(cause)

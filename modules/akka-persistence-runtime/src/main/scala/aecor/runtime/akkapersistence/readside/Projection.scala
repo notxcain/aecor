@@ -1,9 +1,9 @@
 package aecor.runtime.akkapersistence.readside
 
 import aecor.data.{ EntityEvent, Folded }
+import aecor.runtime.KeyValueStore
 import cats.Monad
 import cats.implicits._
-import aecor.util.KeyValueStore
 
 object Projection {
   final case class Versioned[A](version: Long, a: A)
