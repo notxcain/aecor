@@ -7,7 +7,7 @@ sealed abstract class Tagging[-A] {
 object Tagging {
   final case class Partitioned[-A](numberOfPartitions: Int, tag: EventTag) extends Tagging[A] {
     private def tagForPartition(partition: Int) = EventTag(s"${tag.value}$partition")
-    def tags: List[EventTag] = (0 to numberOfPartitions).map(tagForPartition).toList
+    def tags: List[EventTag] = (0 until numberOfPartitions).map(tagForPartition).toList
     override def tag(a: A): Set[EventTag] =
       Set(tags(scala.math.abs(a.hashCode % numberOfPartitions)))
   }
