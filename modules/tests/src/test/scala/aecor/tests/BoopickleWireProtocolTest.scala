@@ -10,15 +10,15 @@ import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
 import java.util.UUID
-import GadtTest._
-
-object GadtTest {
+import BoopickleWireProtocolTest._
+import boopickle.Default._
+object BoopickleWireProtocolTest {
 
   final case class FooId(value: UUID) extends AnyVal
 
 }
 
-class GadtTest extends FunSuite with Matchers {
+class BoopickleWireProtocolTest extends FunSuite with Matchers {
 
   @boopickleWireProtocol
   trait Foo[F[_]] {

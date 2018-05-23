@@ -7,6 +7,7 @@ import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, Persiste
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import io.circe.generic.auto._
+import boopickle.Default._
 
 @boopickleWireProtocol
 trait Counter[F[_]] {

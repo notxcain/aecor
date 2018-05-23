@@ -3,6 +3,7 @@ package aecor.tests.e2e
 import aecor.data.Folded.syntax._
 import aecor.data._
 import aecor.macros.boopickleWireProtocol
+import boopickle.Default._
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
 
 object notification {

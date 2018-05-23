@@ -39,6 +39,7 @@ Then define what actions we're able to perform on `Subscription`
 
 ```scala
 import aecor.macros.boopickleWireProtocol
+import boopickle.Default._
 
 @boopickleWireProtocol
 trait Subscription[F[_]] {
