@@ -22,7 +22,7 @@ To start using Aecor Akka Persistence Runtime add the following to your `build.s
 scalaVersion := "2.12.4"
 scalacOptions += "-Ypartial-unification"
 addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M10" cross CrossVersion.full)
-libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.16.0"
+libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.17.1"
 ```
 
 ### Entity Behavior Definition
