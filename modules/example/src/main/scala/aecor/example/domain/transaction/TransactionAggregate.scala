@@ -5,6 +5,7 @@ import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
 import aecor.macros.boopickleWireProtocol
+import boopickle.Default._
 
 final case class TransactionId(value: String) extends AnyVal
 object TransactionId {
