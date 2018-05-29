@@ -23,15 +23,15 @@ object JournalEntry {
 
 }
 
-trait JournalQuery[Offset, K, E] {
+trait JournalQuery[O, K, E] {
   def eventsByTag(tag: EventTag,
-                  offset: Option[Offset]): Source[JournalEntry[Offset, K, E], NotUsed]
+                  offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed]
 
   def currentEventsByTag(tag: EventTag,
-                         offset: Option[Offset]): Source[JournalEntry[Offset, K, E], NotUsed]
+                         offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed]
 
   def committable[F[_]: Effect](
-    offsetStore: KeyValueStore[F, TagConsumer, Offset]
-  ): CommittableEventJournalQuery[F, Offset, K, E] =
+    offsetStore: KeyValueStore[F, TagConsumer, O]
+  ): CommittableEventJournalQuery[F, O, K, E] =
     new CommittableEventJournalQuery(this, offsetStore)
 }
