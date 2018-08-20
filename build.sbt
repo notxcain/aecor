@@ -10,28 +10,28 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.9"
+lazy val akkaVersion = "2.5.14"
 lazy val akkaPersistenceCassandraVersion = "0.59"
-lazy val akkaPersistenceJdbcVersion = "3.2.0"
-lazy val catsVersion = "1.1.0"
-lazy val catsEffectVersion = "0.10"
+
+lazy val catsVersion = "1.2.0"
+lazy val catsEffectVersion = "1.0.0-RC2"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.0-cats"
 
-lazy val monixVersion = "3.0.0-M3"
+lazy val monixVersion = "3.0.0-RC1"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.3"
-lazy val kindProjectorVersion = "0.9.4"
+lazy val kindProjectorVersion = "0.9.7"
 lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.9.0"
+lazy val circeVersion = "0.9.3"
 lazy val akkaHttpVersion = "10.0.11"
 lazy val akkaHttpJsonVersion = "1.19.0"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
@@ -94,7 +94,7 @@ lazy val akkaPersistence = aecorModule("akka-persistence-runtime",
 lazy val akkaGeneric = aecorModule("akka-cluster-runtime", "Aecor Runtime based on Akka Cluster Sharding")
                        .dependsOn(core)
                        .settings(aecorSettings)
-                       .settings(akkaPersistenceSettings)
+                       .settings(akkaGenericSettings)
 
 lazy val distributedProcessing =
   aecorModule("distributed-processing", "Aecor Distributed Processing")
@@ -178,8 +178,7 @@ lazy val akkaPersistenceSettings = commonProtobufSettings  ++ Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion,
-    "com.github.dnvriend" %% "akka-persistence-jdbc" % akkaPersistenceJdbcVersion
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion
   )
 )
 
