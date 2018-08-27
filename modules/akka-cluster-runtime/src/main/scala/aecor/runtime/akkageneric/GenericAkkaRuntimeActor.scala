@@ -11,7 +11,7 @@ import aecor.encoding.KeyDecoder
 import aecor.encoding.WireProtocol
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
 import aecor.runtime.akkageneric.serialization.Message
-import aecor.util.effect._
+import cats.effect.syntax.effect._
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe

@@ -10,11 +10,11 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.14"
-lazy val akkaPersistenceCassandraVersion = "0.59"
+lazy val akkaVersion = "2.5.15"
+lazy val akkaPersistenceCassandraVersion = "0.61"
 
 lazy val catsVersion = "1.2.0"
-lazy val catsEffectVersion = "1.0.0-RC2"
+lazy val catsEffectVersion = "1.0.0-RC3"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -32,7 +32,7 @@ lazy val scalametaVersion = "1.8.0"
 // Example dependencies
 
 lazy val circeVersion = "0.9.3"
-lazy val akkaHttpVersion = "10.0.11"
+lazy val akkaHttpVersion = "10.1.4"
 lazy val akkaHttpJsonVersion = "1.19.0"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
@@ -195,7 +195,6 @@ lazy val exampleSettings = {
     resolvers += Resolver.sonatypeRepo("releases"),
     libraryDependencies ++=
       Seq(
-        "io.aecor" %% "liberator" % liberatorVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "io.monix" %% "monix-reactive" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,

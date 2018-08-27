@@ -1,22 +1,20 @@
 package aecor.util
 
-import cats.effect.{ Effect, IO, LiftIO }
+import cats.effect.{Effect, IO, LiftIO}
 
-import scala.concurrent.Future
+import scala.concurrent.{Future, Promise}
 
 object effect {
-  implicit final class AecorIOOps(val self: IO.type) extends AnyVal {
-    final def fromEffect[F[_]: Effect, A](fa: F[A]): IO[A] =
-      IO.async { cb =>
-        Effect[F].runAsync(fa)(x => IO(cb(x))).unsafeRunAsync(_ => ())
-      }
-  }
-
   implicit final class AecorEffectOps[F[_], A](val self: F[A]) extends AnyVal {
-    @inline final def unsafeToFuture()(implicit F: Effect[F]): Future[A] =
-      toIO.unsafeToFuture()
-    @inline final def toIO(implicit F: Effect[F]): IO[A] =
-      IO.fromEffect(self)
+    @inline final def unsafeToFuture()(implicit F: Effect[F]): Future[A] = {
+      val p = Promise[A]
+      F.runAsync(self) {
+        case Right(a) => IO { p.success(a); () }
+        case Left(e) => IO { p.failure(e); () }
+      }.unsafeRunSync()
+      p.future
+    }
+
   }
 
   implicit final class AecorAsyncTCOps[F[_]](val self: LiftIO[F]) extends AnyVal {
