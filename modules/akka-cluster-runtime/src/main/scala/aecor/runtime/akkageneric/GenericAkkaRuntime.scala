@@ -2,23 +2,19 @@ package aecor.runtime.akkageneric
 
 import java.nio.ByteBuffer
 
-import io.aecor.liberator.Invocation
-import aecor.data.Behavior
-import aecor.encoding.{ KeyDecoder, KeyEncoder }
-import aecor.encoding.WireProtocol
+import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
 import aecor.runtime.akkageneric.serialization.Message
+import aecor.util.effect._
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
+import akka.cluster.sharding.{ClusterSharding, ShardRegion}
 import akka.pattern._
 import akka.util.Timeout
 import cats.effect.Effect
-import cats.~>
-import aecor.util.effect._
 import cats.implicits._
-
-import scala.concurrent.Future
+import cats.~>
+import io.aecor.liberator.Invocation
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =
@@ -27,9 +23,9 @@ object GenericAkkaRuntime {
 }
 
 final class GenericAkkaRuntime private (system: ActorSystem) {
-  def deploy[K: KeyEncoder: KeyDecoder, M[_[_]], F[_]](
+  def runBehavior[K: KeyEncoder: KeyDecoder, M[_[_]], F[_]](
     typeName: String,
-    createBehavior: K => Behavior[M, F],
+    createBehavior: K => F[M[F]],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
   )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
@@ -46,7 +42,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
         case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
       }
 
-      val props = GenericAkkaRuntimeActor.props(createBehavior, settings.idleTimeout)
+      val props = GenericAkkaRuntimeActor.props[K, M, F](createBehavior, settings.idleTimeout)
 
       val shardRegionRef = ClusterSharding(system).start(
         typeName = typeName,
@@ -66,11 +62,13 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
             override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
               val (bytes, decoder) = fa.invoke(M.encoder)
               F.fromFuture {
-                  (shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                    .asInstanceOf[Future[CommandResult]]
+                  shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
                 }
-                .flatMap { result =>
-                  F.fromEither(decoder.decode(result.bytes))
+                .flatMap {
+                  case result: CommandResult =>
+                    F.fromEither(decoder.decode(result.bytes))
+                  case other =>
+                    F.raiseError(new IllegalArgumentException(s"Unexpected response [$other] from shard region"))
                 }
             }
           }

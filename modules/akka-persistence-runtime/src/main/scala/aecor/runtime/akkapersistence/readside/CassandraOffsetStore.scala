@@ -7,14 +7,12 @@ import aecor.runtime.KeyValueStore
 import aecor.util.effect._
 import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
+import cats.Functor
 import cats.effect.Effect
-import com.datastax.driver.core.Session
 import cats.implicits._
 
-import scala.concurrent.{ ExecutionContext, Future }
-
 object CassandraOffsetStore {
-  final case class Config(keyspace: String, tableName: String = "consumer_offset") {
+  final case class Queries(keyspace: String, tableName: String = "consumer_offset") {
     def createTableQuery: String =
       s"CREATE TABLE IF NOT EXISTS $keyspace.$tableName (consumer_id text, tag text, offset uuid, PRIMARY KEY ((consumer_id, tag)))"
     def updateOffsetQuery: String =
@@ -23,19 +21,23 @@ object CassandraOffsetStore {
       s"SELECT offset FROM $keyspace.$tableName WHERE consumer_id = ? AND tag = ?"
   }
 
-  def createTable(config: Config)(
-    implicit executionContext: ExecutionContext
-  ): Session => Future[Unit] = _.executeAsync(config.createTableQuery).asScala.map(_ => ())
+  def apply[F[_]]: Builder[F] = builderInstance.asInstanceOf[Builder[F]]
 
-  def apply[F[_]: Effect](session: CassandraSession,
-                          config: CassandraOffsetStore.Config): CassandraOffsetStore[F] =
-    new CassandraOffsetStore(session, config)
+  private val builderInstance = new Builder[Any]()
+
+  final class Builder[F[_]] private[CassandraOffsetStore] () {
+    def createTable(config: Queries)(implicit F: Functor[F]): Session[F] => F[Unit] = _.execute(config.createTableQuery).void
+
+    def apply(session: CassandraSession,
+                            config: CassandraOffsetStore.Queries)(implicit F: Effect[F]): CassandraOffsetStore[F] =
+      new CassandraOffsetStore(session, config)
+  }
 
 }
 
 class CassandraOffsetStore[F[_]] private[akkapersistence] (
   session: CassandraSession,
-  config: CassandraOffsetStore.Config
+  config: CassandraOffsetStore.Queries
 )(implicit F: Effect[F])
     extends KeyValueStore[F, TagConsumer, UUID] {
 

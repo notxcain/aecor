@@ -1,43 +1,24 @@
 package akka.persistence.cassandra
 
 import akka.Done
-import akka.actor.{ ActorSystem, ExtendedActorSystem }
+import akka.actor.{ActorSystem, ExtendedActorSystem}
 import akka.event.Logging
 import akka.persistence.cassandra.session.CassandraSessionSettings
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
-import com.datastax.driver.core.Session
+import cats.Monad
+import cats.effect.Effect
+import cats.implicits._
 
-import scala.concurrent.{ ExecutionContext, Future }
-
-/**
-  * DISCLAIMER:
-  *
-  * This object exposes private API from akka-persistence-cassandra.
-  *
-  * It could be broken at any next version.
-  */
 object CassandraSessionInitSerialization {
 
   /**
     * Exposes private CassandraSession#serializedExecution to run all schema mutation calls on single thread one by one
     * to avoid "Column family ID mismatch" exception in Cassandra.
     */
-  def serialize(
-    inits: (Session => Future[Unit])*
-  )(implicit executionContext: ExecutionContext): Session => Future[Unit] = {
-    def executeCreate: Session => Future[Unit] = { session =>
-      def create(): Future[Unit] =
-        inits.foldLeft(Future.successful(())) {
-          case (x, init) => x.flatMap(_ => init(session))
-        }
-      CassandraSession
-        .serializedExecution(
-          recur = () => executeCreate(session).map(_ => Done),
-          exec = () => create().map(_ => Done)
-        )
-        .map(_ => ())
+  def serialize[F[_]: Monad](inits: (Session[F] => F[Unit])*): Session[F] => F[Unit] = { session =>
+    inits.foldLeft(().pure[F]) { (acc, init) =>
+       acc >> init(session)
     }
-    executeCreate
   }
 }
 
@@ -47,9 +28,7 @@ object DefaultJournalCassandraSession {
     * Creates CassandraSession using settings of default cassandra journal.
     *
     */
-  def apply(system: ActorSystem, metricsCategory: String, init: Session => Future[Unit])(
-    implicit executionContext: ExecutionContext
-  ): CassandraSession = {
+  def apply[F[_]](system: ActorSystem, metricsCategory: String, init: Session[F] => F[Unit])(implicit F: Effect[F]): F[CassandraSession] = F.delay {
     val log = Logging(system, classOf[CassandraSession])
     val provider = SessionProvider(
       system.asInstanceOf[ExtendedActorSystem],
@@ -60,10 +39,10 @@ object DefaultJournalCassandraSession {
       system,
       provider,
       settings,
-      executionContext,
+      system.dispatcher,
       log,
       metricsCategory,
-      init.andThen(_.map(_ => Done))
+      {x => F.toIO(init(Session[F](x)).as(Done)).unsafeToFuture()}
     )
   }
 }

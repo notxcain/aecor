@@ -4,15 +4,14 @@ import aecor.data.Tagging
 import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import com.typesafe.config.{ Config, ConfigFactory }
-import monix.eval.Task
+import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ FunSuiteLike, Matchers }
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
+import org.scalatest.{FunSuiteLike, Matchers}
+import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
-import monix.execution.Scheduler
-
+import cats.effect.IO
+import cats.implicits._
 import scala.concurrent.duration._
 
 object AkkaPersistenceRuntimeSpec {
@@ -39,7 +38,7 @@ class AkkaPersistenceRuntimeSpec
 
   override implicit val patienceConfig = PatienceConfig(15.seconds, 150.millis)
 
-  implicit val scheduler = Scheduler(system.dispatcher)
+  val timer = IO.timer(system.dispatcher)
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
@@ -49,10 +48,10 @@ class AkkaPersistenceRuntimeSpec
   val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
   test("Runtime should work") {
-    val deployCounters: Task[CounterId => Counter[Task]] =
+    val deployCounters: IO[CounterId => Counter[IO]] =
       runtime.deploy(
         "Counter",
-        CounterBehavior.instance.lift[Task],
+        CounterBehavior.instance.lift[IO],
         Tagging.const[CounterId](CounterEvent.tag)
       )
     val program = for {
@@ -64,10 +63,10 @@ class AkkaPersistenceRuntimeSpec
       _2 <- second.value
       _ <- first.decrement
       _1 <- first.value
-      afterPassivation <- second.value.delayExecution(2.seconds)
+      afterPassivation <- timer.sleep(2.seconds) >> second.value
     } yield (_1, _2, afterPassivation)
 
-    program.runAsync.futureValue shouldEqual ((0L, 1L, 1L))
+    program.unsafeRunSync() shouldEqual ((0L, 1L, 1L))
   }
   test("Journal should work") {
     implicit val materializer = ActorMaterializer()

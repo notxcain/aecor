@@ -9,9 +9,6 @@ package object data {
     */
   type PairT[F[_], A, B] = F[(A, B)]
 
-  @deprecated("Use Action", "0.16.0")
-  type Handler[S, E, A] = Action[S, E, A]
-
   type Action[S, E, A] = ActionT[Id, S, E, A]
   object Action {
     def apply[S, E, A](run: S => (List[E], A)): Action[S, E, A] = ActionT[Id, S, E, A](run)

@@ -2,32 +2,33 @@ package aecor.example
 
 import java.util.UUID
 
-import aecor.example.MonixSupport._
+import aecor.example.CirceSupport._
+import aecor.example.EffectSupport._
 import aecor.example.TransactionEndpoint.TransactionEndpointRequest.CreateTransactionRequest
 import aecor.example.TransactionEndpoint._
 import aecor.example.domain._
-import aecor.example.domain.account.{ AccountId, EventsourcedAccount }
+import aecor.example.domain.account.{AccountId, EventsourcedAccount}
 import aecor.example.domain.transaction._
 import akka.event.LoggingAdapter
 import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route
-import CirceSupport._
-import monix.eval.Task
+import cats.effect.{Concurrent, Effect, Timer}
+import cats.implicits._
 import io.circe.Decoder
 import io.circe.generic.decoding.DerivedDecoder
 import shapeless.Lazy
 
 import scala.concurrent.duration._
 
-class TransactionEndpoint(transactions: TransactionId => TransactionAggregate[Task],
-                          log: LoggingAdapter) {
+class TransactionEndpoint[F[_]](transactions: TransactionId => TransactionAggregate[F],
+                          log: LoggingAdapter)(implicit F: Concurrent[F], timer: Timer[F]) {
 
   import TransactionEndpointRequest._
 
   def authorizePayment(transactionId: TransactionId,
-                       request: CreateTransactionRequest): Task[TransactionEndpoint.ApiResult] =
+                       request: CreateTransactionRequest): F[TransactionEndpoint.ApiResult] =
     request match {
       case CreateTransactionRequest(fromAccountId, toAccountId, amount) =>
         log.debug("Processing request [{}]", request)
@@ -35,15 +36,16 @@ class TransactionEndpoint(transactions: TransactionId => TransactionAggregate[Ta
         transactions(transactionId)
           .create(fromAccountId, toAccountId, amount)
           .flatMap { _ =>
-            transactions(transactionId).getInfo
+            val getTransaction = transactions(transactionId).getInfo
               .flatMap {
-                case Some(t) => Task.pure(t)
-                case None    => Task.raiseError(new IllegalStateException("Something went bad"))
+                case Some(t) => t.pure[F]
+                case None    => F.raiseError[TransactionAggregate.TransactionInfo](new IllegalStateException("Something went bad"))
               }
-              .delayExecution(5.millis)
-              .restartUntil(_.succeeded.isDefined)
-              .timeout(30.seconds)
-              .map(_.succeeded.get)
+            def loop: F[Boolean] = getTransaction.flatMap {
+              case TransactionAggregate.TransactionInfo(_, _, _, Some(value)) => value.pure[F]
+              case _ => timer.sleep(5.millis) >> loop
+            }
+            Concurrent.timeout(loop, 30.seconds)
           }
           .map { succeeded =>
             if (succeeded) {
@@ -88,7 +90,7 @@ object TransactionEndpoint {
     implicit A: Lazy[DerivedDecoder[A]]
   ): Decoder[A] = A.value
 
-  def route(api: TransactionEndpoint): Route =
+  def route[F[_]: Effect](api: TransactionEndpoint[F]): Route =
     (put & pathPrefix("transactions" / Segment.map(TransactionId(_)))) { transactionId =>
       entity(as[CreateTransactionRequest]) { request =>
         complete {

@@ -20,6 +20,7 @@ object AccountEvent {
 
   implicit val encoder: PersistentEncoder[Enriched[Timestamp, AccountEvent]] =
     persistentEncoderUtil.circePersistentEncoder(io.circe.generic.semiauto.deriveEncoder)
+
   implicit val decoder: PersistentDecoder[Enriched[Timestamp, AccountEvent]] =
     persistentEncoderUtil.circePersistentDecoder(io.circe.generic.semiauto.deriveDecoder)
 }

@@ -9,9 +9,9 @@ import io.circe.{ Decoder, Encoder }
 
 @boopickleWireProtocol
 trait Account[F[_]] {
-  def open(checkBalance: Boolean): F[Either[Rejection, Unit]]
-  def credit(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]
-  def debit(transactionId: AccountTransactionId, amount: Amount): F[Either[Rejection, Unit]]
+  def open(checkBalance: Boolean): F[Unit]
+  def credit(transactionId: AccountTransactionId, amount: Amount): F[Unit]
+  def debit(transactionId: AccountTransactionId, amount: Amount): F[Unit]
 }
 
 object Account {
@@ -24,7 +24,7 @@ object Account {
       .addConcreteType[AccountExists.type]
       .addConcreteType[HoldNotFound.type]
 
-  sealed trait Rejection extends Product with Serializable
+  sealed abstract class Rejection extends Product with Serializable
   case object AccountDoesNotExist extends Rejection
   case object InsufficientFunds extends Rejection
   case object AccountExists extends Rejection
@@ -39,7 +39,7 @@ object AccountTransactionId extends AnyValCirceEncoding {
   implicit def encoder: Encoder[AccountTransactionId] = io.circe.generic.semiauto.deriveEncoder
 }
 
-sealed abstract class AccountTransactionKind
+sealed abstract class AccountTransactionKind extends Product with Serializable
 object AccountTransactionKind {
   case object Normal extends AccountTransactionKind
   case object Revert extends AccountTransactionKind

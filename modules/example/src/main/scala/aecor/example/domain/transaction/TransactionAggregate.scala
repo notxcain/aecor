@@ -19,10 +19,10 @@ final case class To[A](value: A) extends AnyVal
 @boopickleWireProtocol
 trait TransactionAggregate[F[_]] {
   def create(fromAccountId: From[AccountId], toAccountId: To[AccountId], amount: Amount): F[Unit]
-  def authorize: F[Either[String, Unit]]
-  def fail(reason: String): F[Either[String, Unit]]
-  def succeed: F[Either[String, Unit]]
-  def getInfo: F[Option[TransactionInfo]]
+  def authorize: F[Unit]
+  def fail(reason: String): F[Unit]
+  def succeed: F[Unit]
+  def getInfo: F[TransactionInfo]
 }
 
 object TransactionAggregate {

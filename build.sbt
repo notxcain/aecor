@@ -13,8 +13,8 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.15"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
-lazy val catsVersion = "1.2.0"
-lazy val catsEffectVersion = "1.0.0-RC3"
+lazy val catsVersion = "1.3.1"
+lazy val catsEffectVersion = "1.0.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -43,8 +43,7 @@ lazy val commonSettings = Seq(
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
   parallelExecution in Test := false,
-  scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
-                                                                      .filter(_ != "-Xfatal-warnings")
+  scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value.filter(_ != "-Xfatal-warnings")
 ) ++ warnUnusedImport
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
@@ -195,8 +194,8 @@ lazy val exampleSettings = {
     resolvers += Resolver.sonatypeRepo("releases"),
     libraryDependencies ++=
       Seq(
+        "org.typelevel" %% "cats-mtl-core" % "0.3.0",
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-        "io.monix" %% "monix-reactive" % monixVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
         "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
         "io.circe" %% "circe-core" % circeVersion,
@@ -256,9 +255,7 @@ lazy val commonScalacOptions = Seq(
   "-Xsource:2.13"
 )
 
-lazy val warnUnusedImport = Seq(scalacOptions in (Compile, console) ~= {
-  _.filterNot(Set("-Ywarn-unused-import", "-Ywarn-value-discard"))
-}, scalacOptions in (Test, console) := (scalacOptions in (Compile, console)).value)
+lazy val warnUnusedImport = Seq(scalacOptions in (Compile, console) --= Seq("-Ywarn-unused:imports", "-Xfatal-warnings"))
 
 lazy val noPublishSettings = Seq(publish := (()), publishLocal := (()), publishArtifact := false)
 

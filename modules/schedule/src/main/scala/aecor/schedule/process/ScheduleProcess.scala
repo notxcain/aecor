@@ -1,13 +1,14 @@
 package aecor.schedule.process
 
 import java.time.temporal.ChronoUnit
-import java.time.{ Clock => _, _ }
+import java.time.{Clock => _, _}
 
 import aecor.data._
 import aecor.runtime.KeyValueStore
-import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
-import aecor.schedule.{ ScheduleBucket, ScheduleBucketId, ScheduleEntryRepository }
+import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
+import aecor.schedule.{ScheduleBucket, ScheduleBucketId, ScheduleEntryRepository}
 import cats.Monad
+import cats.data.EitherT
 import cats.implicits._
 
 import scala.concurrent.duration.FiniteDuration
@@ -19,7 +20,7 @@ object ScheduleProcess {
                          offsetStore: KeyValueStore[F, TagConsumer, LocalDateTime],
                          eventualConsistencyDelay: FiniteDuration,
                          repository: ScheduleEntryRepository[F],
-                         buckets: ScheduleBucketId => ScheduleBucket[F],
+                         buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]],
                          clock: F[LocalDateTime],
                          parallelism: Int): F[Unit] = {
     val scheduleEntriesTag = EventTag("io.aecor.ScheduleDueEntries")
@@ -37,11 +38,11 @@ object ScheduleProcess {
     def fireEntries(from: LocalDateTime,
                     to: LocalDateTime): F[Option[ScheduleEntryRepository.ScheduleEntry]] =
       repository.processEntries(from, to, parallelism) {
-        case (entry) =>
+        entry =>
           if (entry.fired)
             ().pure[F]
           else
-            buckets(entry.bucketId).fireEntry(entry.entryId)
+            buckets(entry.bucketId).fireEntry(entry.entryId).value.void
       }
 
     val loadOffset: F[LocalDateTime] =

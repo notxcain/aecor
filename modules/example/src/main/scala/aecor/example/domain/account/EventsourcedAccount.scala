@@ -1,64 +1,67 @@
 package aecor.example.domain.account
 
+import aecor.data.Folded
 import aecor.data.Folded.syntax._
-import aecor.data._
+import aecor.data.next.{EventsourcedBehavior, MonadAction}
 import aecor.example.domain.Amount
-import aecor.example.domain.account.Account.{ AccountDoesNotExist, InsufficientFunds }
+import aecor.example.domain.account.Account.{AccountDoesNotExist, InsufficientFunds}
 import aecor.example.domain.account.AccountEvent._
 import aecor.example.domain.account.EventsourcedAccount.AccountState
+import cats.Monad
 import cats.implicits._
-import scala.collection.immutable._
 
-class EventsourcedAccount extends Account[Action[Option[AccountState], AccountEvent, ?]] {
+final class EventsourcedAccount[F[_]](implicit F: MonadAction[F, Option[AccountState], AccountEvent, Account.Rejection]) extends Account[F] {
+
+  import F._
 
   override def open(
     checkBalance: Boolean
-  ): Action[Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
-    Action {
+  ): F[Unit] =
+    read.flatMap {
       case None =>
-        List(AccountOpened(checkBalance)) -> ().asRight
+        append(AccountOpened(checkBalance))
       case Some(_) =>
-        List.empty -> Account.AccountExists.asLeft
+        reject(Account.AccountExists)
     }
 
   override def credit(
     transactionId: AccountTransactionId,
     amount: Amount
-  ): Action[Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
-    Action {
+  ): F[Unit] =
+    read.flatMap {
       case Some(account) =>
         if (account.processedTransactions.contains(transactionId)) {
-          List.empty -> ().asRight
+          ().pure[F]
         } else {
-          List(AccountCredited(transactionId, amount)) -> ().asRight
+          append(AccountCredited(transactionId, amount))
         }
       case None =>
-        List.empty -> Account.AccountDoesNotExist.asLeft
+        reject(Account.AccountDoesNotExist)
     }
 
   override def debit(
     transactionId: AccountTransactionId,
     amount: Amount
-  ): Action[Option[AccountState], AccountEvent, Either[Account.Rejection, Unit]] =
-    Action {
+  ): F[Unit] =
+    read.flatMap {
       case Some(account) =>
         if (account.processedTransactions.contains(transactionId)) {
-          List.empty -> ().asRight
+          ().pure[F]
         } else {
           if (account.hasFunds(amount)) {
-            List(AccountDebited(transactionId, amount)) -> ().asRight
+            append(AccountDebited(transactionId, amount))
           } else {
-            List.empty -> InsufficientFunds.asLeft
+            reject(InsufficientFunds)
           }
         }
       case None =>
-        List.empty -> AccountDoesNotExist.asLeft
+        reject(AccountDoesNotExist)
     }
 }
 
 object EventsourcedAccount {
 
-  def behavior: EventsourcedBehavior[Account, Option[AccountState], AccountEvent] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[Account, F, Option[AccountState], AccountEvent, Account.Rejection] =
     EventsourcedBehavior
       .optional(new EventsourcedAccount, AccountState.fromEvent, _.applyEvent(_))
 

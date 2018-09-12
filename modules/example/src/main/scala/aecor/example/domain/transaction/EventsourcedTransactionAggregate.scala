@@ -1,102 +1,91 @@
 package aecor.example.domain.transaction
 
 import aecor.data.Folded.syntax._
-import aecor.data._
+import aecor.data.Tagging
+import aecor.data.next.{ActionT, EventsourcedBehavior, MonadAction}
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction
-import aecor.example.domain.transaction.EventsourcedTransactionAggregate.TransactionStatus.{
-  Authorized,
-  Failed,
-  Requested,
-  Succeeded
-}
+import aecor.example.domain.transaction.EventsourcedTransactionAggregate.TransactionStatus.{Authorized, Failed, Requested, Succeeded}
 import aecor.example.domain.transaction.TransactionAggregate._
-import aecor.example.domain.transaction.TransactionEvent.{
-  TransactionAuthorized,
-  TransactionCreated,
-  TransactionFailed,
-  TransactionSucceeded
-}
-
+import aecor.example.domain.transaction.TransactionEvent.{TransactionAuthorized, TransactionCreated, TransactionFailed, TransactionSucceeded}
+import cats.Monad
 import cats.implicits._
 
 import scala.collection.immutable._
 
-class EventsourcedTransactionAggregate
-    extends TransactionAggregate[Action[Option[Transaction], TransactionEvent, ?]] {
-
+class EventsourcedTransactionAggregate[F[_]](
+  implicit F: MonadAction[F, Option[Transaction], TransactionEvent, String]
+) extends TransactionAggregate[F] {
+  import F._
   override def create(fromAccountId: From[AccountId],
                       toAccountId: To[AccountId],
-                      amount: Amount): Action[Option[Transaction], TransactionEvent, Unit] =
-    Action {
+                      amount: Amount): F[Unit] =
+    read.flatMap {
       case None =>
-        List(
-          TransactionEvent
-            .TransactionCreated(fromAccountId, toAccountId, amount)
-        ) -> (())
-
-      case Some(_) => List.empty -> (())
+        append(TransactionEvent.TransactionCreated(fromAccountId, toAccountId, amount))
+      case Some(_) =>
+        ().pure[F]
     }
 
-  override def authorize: Action[Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    Action {
+  override def authorize: F[Unit] =
+    read.flatMap {
       case Some(transaction) =>
         if (transaction.status == Requested) {
-          List(TransactionAuthorized) -> ().asRight
+          append(TransactionAuthorized)
         } else if (transaction.status == Authorized) {
-          List.empty -> ().asRight
+          ().pure[F]
         } else {
-          List.empty -> "Illegal transition".asLeft
+          reject("Illegal transition")
         }
       case None =>
-        List.empty -> "Transaction not found".asLeft
+        reject("Transaction not found")
     }
 
-  override def fail(
-    reason: String
-  ): Action[Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    Action {
+  override def fail(reason: String): F[Unit] =
+    read.flatMap {
       case Some(transaction) =>
         if (transaction.status == Failed) {
-          List.empty -> ().asRight
+          ().pure[F]
         } else {
-          List(TransactionFailed(reason)) -> ().asRight
+          append(TransactionFailed(reason))
         }
       case None =>
-        List.empty -> "Transaction not found".asLeft
+        reject("Transaction not found")
     }
 
-  override def succeed: Action[Option[Transaction], TransactionEvent, Either[String, Unit]] =
-    Action {
+  override def succeed: F[Unit] =
+    read.flatMap {
       case Some(transaction) =>
         if (transaction.status == Succeeded) {
-          List.empty -> ().asRight
+          ().pure[F]
         } else if (transaction.status == Authorized) {
-          List(TransactionSucceeded) -> ().asRight
+          append(TransactionSucceeded)
         } else {
-          List.empty -> "Illegal transition".asLeft
+          reject("Illegal transition")
         }
       case None =>
-        List.empty -> "Transaction not found".asLeft
+        reject("Transaction not found")
     }
 
-  override def getInfo: Action[Option[Transaction], TransactionEvent, Option[TransactionInfo]] =
-    Action.read(_.map {
-      case Transaction(status, from, to, amount) =>
+  override def getInfo: F[TransactionInfo] =
+    read.flatMap {
+      case Some(Transaction(status, from, to, amount)) =>
         TransactionInfo(from, to, amount, Some(status).collect {
           case Succeeded => true
           case Failed    => false
-        })
-    })
+        }).pure[F]
+      case None =>
+        reject("Transaction not found")
+    }
 }
 
 object EventsourcedTransactionAggregate {
 
-  val actions: TransactionAggregate[Action[Option[Transaction], TransactionEvent, ?]] =
+  def actions[F[_]: Monad]: TransactionAggregate[ActionT[F, Option[Transaction], TransactionEvent, String, ?]] =
     new EventsourcedTransactionAggregate()
 
-  def behavior: EventsourcedBehavior[TransactionAggregate, Option[Transaction], TransactionEvent] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[TransactionAggregate, F, Option[Transaction], TransactionEvent, String] =
     EventsourcedBehavior
       .optional(actions, Transaction.fromEvent, _.applyEvent(_))
 

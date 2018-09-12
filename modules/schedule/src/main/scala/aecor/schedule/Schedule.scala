@@ -1,22 +1,19 @@
 package aecor.schedule
 
-import java.time.{ Clock => _, _ }
+import java.time.{Clock => _, _}
 import java.util.UUID
 
 import aecor.data._
 import aecor.runtime.KeyValueStore
 import aecor.runtime.akkapersistence._
 import aecor.runtime.akkapersistence.readside.JournalEntry
-import aecor.schedule.process.{
-  DefaultScheduleEventJournal,
-  PeriodicProcessRuntime,
-  ScheduleProcess
-}
+import aecor.schedule.process.{DefaultScheduleEventJournal, PeriodicProcessRuntime, ScheduleProcess}
 import aecor.util.ClockT
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
+import cats.data.EitherT
 import cats.effect.Effect
 import cats.implicits._
 import com.datastax.driver.core.utils.UUIDs
@@ -65,13 +62,13 @@ object Schedule {
 
     def deployBuckets =
       runtime
-        .deploy(
+        .deploy[ScheduleBucket, F, ScheduleState, ScheduleEvent, ScheduleBucketId, Void](
           entityName,
           DefaultScheduleBucket.behavior(clock.zonedDateTime),
           Tagging.const[ScheduleBucketId](eventTag)
         )
 
-    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
+    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]]) = clock.zone.map { zone =>
       val journal =
         DefaultScheduleEventJournal[F](
           settings.consumerId,
@@ -94,7 +91,7 @@ object Schedule {
       PeriodicProcessRuntime(entityName, settings.refreshInterval, process).run(system)
     }
 
-    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[F]): Schedule[F] =
+    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]]): Schedule[F] =
       new DefaultSchedule(
         clock,
         buckets,

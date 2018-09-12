@@ -12,3 +12,4 @@ object EntityEvent {
   implicit def aecorHasInstanceForValue[X, I, A](implicit A: Has[A, X]): Has[EntityEvent[I, A], X] =
     Has.instance[EntityEvent[I, A]](x => A.get(x.payload))
 }
+

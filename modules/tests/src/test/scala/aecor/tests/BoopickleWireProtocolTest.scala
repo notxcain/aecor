@@ -35,8 +35,8 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
     M.decoder
       .decode(in) match {
       case Right(p) =>
-        val r: F[p.A] = p.left.invoke(actions)
-        r.map(a => Right(p.right.encode(a)))
+        val r: F[p.A] = p.first.invoke(actions)
+        r.map(a => Right(p.second.encode(a)))
       case Left(e) =>
         (Left(e): DecodingResult[ByteBuffer]).pure[F]
     }

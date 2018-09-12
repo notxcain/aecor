@@ -2,62 +2,60 @@ package aecor.schedule
 
 import java.time.{ Instant, LocalDateTime, ZonedDateTime }
 
+import aecor.data.Folded
 import aecor.data.Folded.syntax._
-import aecor.data._
+import aecor.data.next._
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.ScheduleState._
 import aecor.schedule.protobuf.ScheduleEventCodec
-import cats.Functor
+import cats.{ Functor, Monad }
 import cats.implicits._
 
 object DefaultScheduleBucket {
 
-  def apply[F[_]: Functor](
-    clock: F[ZonedDateTime]
-  ): ScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?]] =
+  def apply[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
+    implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent, Void]
+  ): ScheduleBucket[F] =
     new DefaultScheduleBucket(clock)
 
-  def behavior[F[_]: Functor](
+  def behavior[F[_]: Monad](
     clock: F[ZonedDateTime]
-  ): EventsourcedBehaviorT[ScheduleBucket, F, ScheduleState, ScheduleEvent] =
-    EventsourcedBehaviorT(DefaultScheduleBucket(clock), ScheduleState.initial, _.update(_))
+  ): EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent, Void] =
+    EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent, Void](DefaultScheduleBucket(clock), ScheduleState.initial, _.update(_))
 }
 
-class DefaultScheduleBucket[F[_]: Functor](clock: F[ZonedDateTime])
-    extends ScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?]] {
+class DefaultScheduleBucket[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
+  implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent, Void]
+) extends ScheduleBucket[F] {
 
-  override def addScheduleEntry(
-    entryId: String,
-    correlationId: String,
-    dueDate: LocalDateTime
-  ): ActionT[F, ScheduleState, ScheduleEvent, Unit] =
-    ActionT { state =>
-      clock.map { zdt =>
+  import F._
+
+  override def addScheduleEntry(entryId: String,
+                                correlationId: String,
+                                dueDate: LocalDateTime): F[Unit] =
+    read.flatMap { state =>
+      liftF(clock).flatMap { zdt =>
         val timestamp = zdt.toInstant
         val now = zdt.toLocalDateTime
-        if (state.unfired.get(entryId).isDefined || state.fired.contains(entryId)) {
-          List.empty -> (())
+        if (state.unfired.contains(entryId) || state.fired.contains(entryId)) {
+          ().pure[F]
         } else {
-          val scheduleEntryAdded = ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp)
-          val firedEvent = if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
-            List(ScheduleEntryFired(entryId, correlationId, timestamp))
-          } else {
-            List.empty
-          }
-          (scheduleEntryAdded :: firedEvent, ())
+          append(ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp)) >>
+            whenA(dueDate.isEqual(now) || dueDate.isBefore(now)) {
+              append(ScheduleEntryFired(entryId, correlationId, timestamp))
+            }
         }
       }
 
     }
 
-  override def fireEntry(entryId: String): ActionT[F, ScheduleState, ScheduleEvent, Unit] =
-    ActionT { state =>
-      clock.map(_.toInstant).map { timestamp =>
+  override def fireEntry(entryId: String): F[Unit] =
+    read.flatMap { state =>
+      liftF(clock).map(_.toInstant).flatMap { timestamp =>
         state
           .findEntry(entryId)
-          .map(entry => ScheduleEntryFired(entry.id, entry.correlationId, timestamp))
-          .toList -> (())
+          .traverse_(entry => append(ScheduleEntryFired(entry.id, entry.correlationId, timestamp)))
       }
     }
 }

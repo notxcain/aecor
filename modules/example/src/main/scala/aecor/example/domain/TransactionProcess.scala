@@ -2,28 +2,24 @@ package aecor.example.domain
 
 import aecor.Has
 import aecor.Has.syntax._
-import aecor.example.domain.TransactionProcess.TransactionProcessFailure
-import aecor.example.domain.account.{
-  Account,
-  AccountId,
-  AccountTransactionId,
-  AccountTransactionKind
-}
+import aecor.example.domain.TransactionProcess.RaiseError
+import aecor.example.domain.account.{Account, AccountId, AccountTransactionId, AccountTransactionKind}
 import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
 import aecor.example.domain.transaction._
+import cats.data.EitherT
 import cats.implicits._
-import cats.{ Monad, MonadError }
+import cats.{Monad, MonadError}
 
-class TransactionProcess[F[_]: Monad](transactions: TransactionId => TransactionAggregate[F],
-                                      accounts: AccountId => Account[F],
-                                      failure: TransactionProcessFailure[F]) {
+class TransactionProcess[F[_]: Monad](transactions: TransactionId => TransactionAggregate[EitherT[F, String, ?]],
+                                      accounts: AccountId => Account[EitherT[F, Account.Rejection, ?]],
+                                      failure: RaiseError[F]) {
   def process[A: Has[?, TransactionId]: Has[?, TransactionEvent]](a: A): F[Unit] = {
     val transactionId = a.get[TransactionId]
     a.get[TransactionEvent] match {
       case TransactionEvent.TransactionCreated(From(from), _, amount) =>
         for {
           out <- accounts(from)
-                  .debit(AccountTransactionId(transactionId, AccountTransactionKind.Normal), amount)
+                  .debit(AccountTransactionId(transactionId, AccountTransactionKind.Normal), amount).value
           _ <- out match {
                 case Left(rejection) =>
                   transactions(transactionId).fail(rejection.toString)
@@ -33,11 +29,7 @@ class TransactionProcess[F[_]: Monad](transactions: TransactionId => Transaction
         } yield ()
       case TransactionEvent.TransactionAuthorized =>
         for {
-          txn <- transactions(transactionId).getInfo.flatMap {
-                  case Some(x) => x.pure[F]
-                  case None =>
-                    failure.failProcess[TransactionInfo](s"Transaction [$transactionId] not found")
-                }
+          txn <- transactions(transactionId).getInfo.leftSemiflatMap(failure.raiseError[Unit])
           creditResult <- accounts(txn.toAccountId.value).credit(
                            AccountTransactionId(transactionId, AccountTransactionKind.Normal),
                            txn.amount
@@ -47,9 +39,9 @@ class TransactionProcess[F[_]: Monad](transactions: TransactionId => Transaction
                   accounts(txn.fromAccountId.value).debit(
                     AccountTransactionId(transactionId, AccountTransactionKind.Revert),
                     txn.amount
-                  ) >> transactions(transactionId).fail(rejection.toString)
+                  ).value >> transactions(transactionId).fail(rejection.toString).value
                 case Right(_) =>
-                  transactions(transactionId).succeed
+                  transactions(transactionId).succeed.value
               }
         } yield ()
       case other =>
@@ -60,20 +52,20 @@ class TransactionProcess[F[_]: Monad](transactions: TransactionId => Transaction
 
 object TransactionProcess {
 
-  trait TransactionProcessFailure[F[_]] {
-    def failProcess[A](reason: String): F[A]
+  trait RaiseError[F[_]] {
+    def raiseError[A](reason: String): F[A]
   }
 
-  object TransactionProcessFailure {
-    def withMonadError[F[_]](implicit F: MonadError[F, Throwable]): TransactionProcessFailure[F] =
-      new TransactionProcessFailure[F] {
-        override def failProcess[A](reason: String): F[A] =
+  object RaiseError {
+    def withMonadError[F[_]](implicit F: MonadError[F, Throwable]): RaiseError[F] =
+      new RaiseError[F] {
+        override def raiseError[A](reason: String): F[A] =
           F.raiseError(new RuntimeException(reason))
       }
   }
 
   def apply[F[_]: Monad](transactions: TransactionId => TransactionAggregate[F],
                          accounts: AccountId => Account[F],
-                         failure: TransactionProcessFailure[F]): TransactionProcess[F] =
+                         failure: RaiseError[F]): TransactionProcess[F] =
     new TransactionProcess(transactions, accounts, failure)
 }

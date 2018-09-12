@@ -4,19 +4,20 @@ import java.time.LocalDateTime
 import java.util.UUID
 
 import aecor.data._
-import aecor.runtime.akkapersistence.readside.{ CommittableEventJournalQuery, JournalEntry }
+import aecor.runtime.akkapersistence.readside.{CommittableEventJournalQuery, JournalEntry}
 import aecor.util.ClockT
 import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect
 import cats.implicits._
 import aecor.util.effect._
+import cats.data.EitherT
 
 import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule[F[_]: Effect](
   clock: ClockT[F],
-  buckets: ScheduleBucketId => ScheduleBucket[F],
+  buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]],
   bucketLength: FiniteDuration,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],
   eventTag: EventTag
@@ -29,7 +30,7 @@ private[schedule] class DefaultSchedule[F[_]: Effect](
       zone <- clock.zone
       scheduleBucket = dueDate.atZone(zone).toEpochSecond / bucketLength.toSeconds
       _ <- buckets(ScheduleBucketId(scheduleName, scheduleBucket.toString))
-            .addScheduleEntry(entryId, correlationId, dueDate)
+            .addScheduleEntry(entryId, correlationId, dueDate).value
     } yield ()
 
   override def committableScheduleEvents(

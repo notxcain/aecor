@@ -1,7 +1,7 @@
 package aecor.testkit
 
 import io.aecor.liberator.Invocation
-import aecor.data.EventsourcedBehaviorT
+import aecor.data.next.EventsourcedBehavior
 import aecor.data.Folded.{ Impossible, Next }
 import cats.data._
 import cats.{ Functor, MonadError, ~> }
@@ -15,8 +15,8 @@ object StateRuntime {
     *  Construct runtime for single instance of aggregate
     *
     */
-  def single[M[_[_]], F[_], S, E](
-    behavior: EventsourcedBehaviorT[M, F, S, E]
+  def single[M[_[_]], F[_], S, E, R](
+    behavior: EventsourcedBehavior[M, F, S, E, R]
   )(implicit F: MonadError[F, Throwable], M: ReifiedInvocations[M]): M[StateT[F, Vector[E], ?]] =
     M.mapInvocations {
       new (Invocation[M, ?] ~> StateT[F, Vector[E], ?]) {
@@ -26,7 +26,7 @@ object StateRuntime {
             foldedState = events.foldM(behavior.initialState)(behavior.applyEvent)
             result <- foldedState match {
                        case Next(state) =>
-                         StateT.liftF(op.invoke(behavior.actions).run(state)).flatMap {
+                         StateT.liftF(op.invoke(behavior.actions).run(state, behavior.applyEvent)).flatMap {
                            case (es, r) =>
                              StateT
                                .modify[F, Vector[E]](_ ++ es)

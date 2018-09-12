@@ -7,7 +7,6 @@ import aecor.data.PairE
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.encoding.WireProtocol.{ Decoder, Encoder }
 import io.aecor.liberator.ReifiedInvocations
-
 import scala.util.{ Failure, Success, Try }
 
 trait WireProtocol[M[_[_]]] extends ReifiedInvocations[M] {
@@ -25,6 +24,9 @@ object WireProtocol {
   object Encoder {
     def instance[A](f: A => ByteBuffer): Encoder[A] = new Encoder[A] {
       override def encode(a: A): ByteBuffer = f(a)
+    }
+    implicit val voidEncoder: Encoder[Void] = new Encoder[Void] {
+      override def encode(a: Void): ByteBuffer = a.asInstanceOf[ByteBuffer]
     }
   }
 
@@ -49,6 +51,11 @@ object WireProtocol {
           case Failure(exception) => Left(DecodingFailure(exception.getMessage, Some(exception)))
           case Success(value)     => Right(value)
         }
+    }
+    implicit val nothingDecoder: Decoder[Void] = new Decoder[Void] {
+      override def decode(
+        bytes: ByteBuffer
+      ): DecodingResult[Void] = decode(bytes)
     }
   }
 }

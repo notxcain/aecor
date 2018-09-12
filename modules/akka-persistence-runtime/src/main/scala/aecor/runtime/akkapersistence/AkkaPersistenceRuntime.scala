@@ -2,24 +2,24 @@ package aecor.runtime.akkapersistence
 
 import java.nio.ByteBuffer
 
-import aecor.data._
-import aecor.encoding.{ KeyDecoder, KeyEncoder }
+import aecor.data.Tagging
+import aecor.data.next.EventsourcedBehavior
+import aecor.encoding.{KeyDecoder, KeyEncoder}
 import aecor.encoding.WireProtocol
-import aecor.encoding.WireProtocol.Encoded
+import aecor.encoding.WireProtocol.{Decoder, Encoded, Encoder}
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.CommandResult
-import aecor.runtime.akkapersistence.readside.{ AkkaPersistenceEventJournalQuery, JournalQuery }
-import aecor.runtime.akkapersistence.serialization.{ Message, PersistentDecoder, PersistentEncoder }
+import aecor.runtime.akkapersistence.readside.{AkkaPersistenceEventJournalQuery, JournalQuery}
+import aecor.runtime.akkapersistence.serialization.{Message, PersistentDecoder, PersistentEncoder}
 import aecor.util.effect._
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
+import akka.cluster.sharding.{ClusterSharding, ShardRegion}
 import akka.pattern.ask
 import akka.util.Timeout
+import cats.data.EitherT
 import cats.effect.Effect
 import cats.~>
 import io.aecor.liberator.syntax._
-
-import scala.concurrent.Future
 import cats.implicits._
 
 object AkkaPersistenceRuntime {
@@ -33,13 +33,13 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]], F[_], State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]], F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder, Rejection](
     typeName: String,
-    behavior: EventsourcedBehaviorT[M, F, State, Event],
-    tagging: Tagging[K],
+    behavior: EventsourcedBehavior[M, F, State, Event, Rejection],
+    tagging: Tagging[Key],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], F: Effect[F], rejectionDecoder: Decoder[Rejection], rejectionEncoder: Encoder[Rejection]): F[Key => M[EitherT[F, Rejection, ?]]] =
     F.delay {
       val props =
         AkkaPersistenceRuntimeActor.props(
@@ -77,18 +77,24 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
 
       implicit val askTimeout = Timeout(settings.askTimeout)
 
-      val keyEncoder = KeyEncoder[K]
+      val keyEncoder = KeyEncoder[Key]
 
       key =>
-        M.encoder.mapK(new (Encoded ~> F) {
-          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] = F.suspend {
+        M.encoder.mapK(new (Encoded ~> EitherT[F, Rejection, ?]) {
+          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): EitherT[F, Rejection, A] = EitherT {
             val (bytes, responseDecoder) = fa
             Effect[F]
               .fromFuture {
-                (regionRef ? EntityCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                  .asInstanceOf[Future[CommandResult]]
+                regionRef ? EntityCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
               }
-              .map(result => responseDecoder.decode(result.bytes))
+              .map {
+                case result: CommandResult =>
+                  if (result.isRejection) {
+                    rejectionDecoder.decode(result.rejectionBytes).map(Left(_))
+                  } else {
+                    responseDecoder.decode(result.resultBytes).map(Right(_))
+                  }
+              }
               .flatMap(F.fromEither(_))
           }
         })

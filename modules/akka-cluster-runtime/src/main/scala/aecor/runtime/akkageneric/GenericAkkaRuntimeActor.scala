@@ -6,7 +6,6 @@ import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 import io.aecor.liberator.Invocation
-import aecor.data.{ Behavior, PairT }
 import aecor.encoding.KeyDecoder
 import aecor.encoding.WireProtocol
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
@@ -22,8 +21,8 @@ import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
 
 private[aecor] object GenericAkkaRuntimeActor {
-  def props[I: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
-    createBehavior: I => Behavior[M, F],
+  def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
+    createBehavior: K => F[M[F]],
     idleTimeout: FiniteDuration
   ): Props =
     Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
@@ -33,8 +32,8 @@ private[aecor] object GenericAkkaRuntimeActor {
   private[akkageneric] case object Stop
 }
 
-private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]: Effect](
-  createBehavior: I => Behavior[M, F],
+private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]: Effect](
+  createBehavior: K => F[M[F]],
   idleTimeout: FiniteDuration
 )(implicit M: WireProtocol[M])
     extends Actor
@@ -43,29 +42,37 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
 
   import context._
 
-  private val idString: String =
+  private val keyString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
 
-  private val id: I = KeyDecoder[I]
-    .decode(idString)
+  private val key: K = KeyDecoder[K]
+    .decode(keyString)
     .getOrElse {
-      val error = s"Failed to decode entity id from [$idString]"
+      val error = s"Failed to decode entity id from [$keyString]"
       log.error(error)
       throw new IllegalArgumentException(error)
     }
 
-  private case class Result(id: UUID, value: Try[(Behavior[M, F], ByteBuffer)])
+  private case class Result(id: UUID, value: Try[ByteBuffer])
+  private case class Actions(value: M[F])
 
   setIdleTimeout()
 
-  override def receive: Receive = withBehavior(createBehavior(id))
+  createBehavior(key).toIO.map(Actions).unsafeToFuture() pipeTo self
 
-  private def withBehavior(behavior: Behavior[M, F]): Receive = {
+  override def receive: Receive = {
+    case Actions(actions) =>
+      unstashAll()
+      become(withActions(actions))
+    case _ => stash()
+  }
+
+  private def withActions(actions: M[F]): Receive = {
     case Command(opBytes) =>
       M.decoder
         .decode(opBytes) match {
         case Right(pair) =>
-          performInvocation(behavior.actions, pair.left, pair.right)
+          performInvocation(actions, pair.first, pair.second)
         case Left(decodingError) =>
           log.error(decodingError, "Failed to decode invocation")
           sender() ! Status.Failure(decodingError)
@@ -81,17 +88,14 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
       )
   }
 
-  def performInvocation[A](actions: M[PairT[F, Behavior[M, F], ?]],
+  def performInvocation[A](actions: M[F],
                            invocation: Invocation[M, A],
                            resultEncoder: WireProtocol.Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
-    val invocationResult: F[(Behavior[M, F], A)] = // Stupid type hint to make IDEA happy
-      invocation.invoke[PairT[F, Behavior[M, F], ?]](actions) // Stupid type hint to make scalac happy
-
-    invocationResult.toIO
+    invocation.invoke(actions).toIO.map(resultEncoder.encode)
       .map {
-        case (nextBehavior, response) =>
-          Result(opId, Success((nextBehavior, resultEncoder.encode(response))))
+        responseBytes =>
+          Result(opId, Success(responseBytes))
       }
       .unsafeToFuture()
       .recover {
@@ -102,9 +106,9 @@ private[aecor] final class GenericAkkaRuntimeActor[I: KeyDecoder, M[_[_]], F[_]:
     become {
       case Result(`opId`, value) =>
         value match {
-          case Success((newBehavior, reply)) =>
+          case Success(reply) =>
             sender() ! CommandResult(reply)
-            become(withBehavior(newBehavior))
+            become(withActions(actions))
           case Failure(cause) =>
             sender() ! Status.Failure(cause)
             throw cause
