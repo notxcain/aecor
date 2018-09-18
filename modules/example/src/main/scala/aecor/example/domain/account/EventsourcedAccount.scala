@@ -2,7 +2,7 @@ package aecor.example.domain.account
 
 import aecor.data.Folded
 import aecor.data.Folded.syntax._
-import aecor.data.next.{EventsourcedBehavior, MonadAction}
+import aecor.data.next.{EventsourcedBehavior, MonadActionReject}
 import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.{AccountDoesNotExist, InsufficientFunds}
 import aecor.example.domain.account.AccountEvent._
@@ -10,7 +10,7 @@ import aecor.example.domain.account.EventsourcedAccount.AccountState
 import cats.Monad
 import cats.implicits._
 
-final class EventsourcedAccount[F[_]](implicit F: MonadAction[F, Option[AccountState], AccountEvent, Account.Rejection]) extends Account[F] {
+final class EventsourcedAccount[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Account.Rejection]) extends Account[F] {
 
   import F._
 

@@ -30,8 +30,15 @@ object ScheduleProcess {
     val updateRepository: F[Unit] =
       journal.processNewEvents {
         case EntityEvent(id, _, ScheduleEntryAdded(entryId, _, dueDate, _)) =>
-          repository
-            .insertScheduleEntry(id, entryId, dueDate)
+          for {
+            _ <- repository.insertScheduleEntry(id, entryId, dueDate)
+            now <- clock
+            _ <- if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
+                buckets(id).fireEntry(entryId).value.void
+              } else {
+                ().pure[F]
+              }
+          } yield ()
         case EntityEvent(id, _, ScheduleEntryFired(entryId, _, _)) =>
           repository.markScheduleEntryAsFired(id, entryId)
       }

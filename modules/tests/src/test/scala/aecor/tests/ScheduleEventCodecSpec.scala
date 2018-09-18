@@ -1,17 +1,16 @@
 package aecor.tests
 
-import java.time.{ Instant, LocalDateTime }
+import java.time.{Instant, LocalDateTime}
 
+import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
 import aecor.schedule.ScheduleEvent
-import aecor.schedule.protobuf.ScheduleEventCodec
 import org.scalacheck.Shapeless._
-import org.scalacheck.{ Arbitrary, Gen }
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.prop.PropertyChecks
 
-import scala.util.Success
-
 class ScheduleEventCodecSpec extends AkkaSpec with PropertyChecks {
-  val codec = ScheduleEventCodec
+  val encoder = PersistentEncoder[ScheduleEvent]
+  val decoder = PersistentDecoder[ScheduleEvent]
 
   implicit val arbitraryLocalDateTime = Arbitrary(Gen.lzy(Gen.const(LocalDateTime.now())))
   implicit val arbitraryInstant = Arbitrary(Gen.lzy(Gen.const(Instant.now())))
@@ -19,11 +18,9 @@ class ScheduleEventCodecSpec extends AkkaSpec with PropertyChecks {
   "ScheduleEventCodec" must {
     "be able to encode and decode ScheduleEvent" in {
       forAll { e: ScheduleEvent =>
-        val manifest = codec.manifest(e)
-        val bytes = codec.encode(e)
-        val decoded = codec.decode(bytes, manifest)
-
-        decoded shouldEqual Success(e)
+        val repr = encoder.encode(e)
+        val decoded = decoder.decode(repr)
+        decoded shouldEqual Right(e)
       }
     }
   }

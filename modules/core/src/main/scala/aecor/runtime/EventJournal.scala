@@ -14,5 +14,5 @@ import cats.data.NonEmptyChain
   */
 trait EventJournal[F[_], K, E] {
   def append(entityKey: K, sequenceNr: Long, events: NonEmptyChain[E]): F[Unit]
-  def foldById[S](entityKey: K, sequenceNr: Long, zero: S)(f: (S, E) => Folded[S]): F[Folded[S]]
+  def foldById[S](entityKey: K, sequenceNr: Long, initial: S)(f: (S, E) => Folded[S]): F[Folded[S]]
 }

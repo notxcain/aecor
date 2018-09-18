@@ -10,7 +10,7 @@ trait EffectSupport {
     new ToResponseMarshallable {
       override implicit def marshaller: ToResponseMarshaller[F[A]] =
         Marshaller { implicit ec => fa =>
-        F.toIO(fa).unsafeToFuture().flatMap(A(_))
+          F.toIO(fa).unsafeToFuture().flatMap(A(_))
         }
 
       override def value: F[A] = fa

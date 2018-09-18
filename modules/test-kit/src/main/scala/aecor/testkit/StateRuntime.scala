@@ -23,10 +23,10 @@ object StateRuntime {
         override def apply[A](op: Invocation[M, A]): StateT[F, Vector[E], A] =
           for {
             events <- StateT.get[F, Vector[E]]
-            foldedState = events.foldM(behavior.initialState)(behavior.applyEvent)
+            foldedState = events.foldM(behavior.initial)(behavior.update)
             result <- foldedState match {
                        case Next(state) =>
-                         StateT.liftF(op.invoke(behavior.actions).run(state, behavior.applyEvent)).flatMap {
+                         StateT.liftF(op.invoke(behavior.actions).run(state, behavior.update)).flatMap {
                            case (es, r) =>
                              StateT
                                .modify[F, Vector[E]](_ ++ es)

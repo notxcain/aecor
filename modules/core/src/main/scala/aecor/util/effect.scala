@@ -17,7 +17,7 @@ object effect {
 
   }
 
-  implicit final class AecorAsyncTCOps[F[_]](val self: LiftIO[F]) extends AnyVal {
+  implicit final class AecorLiftIOOps[F[_]](val self: LiftIO[F]) extends AnyVal {
     def fromFuture[A](future: => Future[A]): F[A] =
       IO.fromFuture(IO(future)).to(self)
   }

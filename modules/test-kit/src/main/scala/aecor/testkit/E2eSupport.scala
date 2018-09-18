@@ -2,34 +2,35 @@ package aecor.testkit
 
 import io.aecor.liberator.Invocation
 import aecor.data._
-import aecor.runtime.{ EventJournal, Eventsourced }
+import aecor.data.next.EventsourcedBehavior
+import aecor.runtime.{EventJournal, Eventsourced}
 import aecor.runtime.Eventsourced._
-import cats.data.StateT
+import cats.data.{EitherT, StateT}
+import cats.effect.{IO, Sync}
 import cats.implicits._
 import cats.mtl.MonadState
-import cats.{ FlatMap, Monad, MonadError, ~> }
-import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
+import cats.{FlatMap, Monad, MonadError, ~>}
+import io.aecor.liberator.{FunctorK, ReifiedInvocations}
 import monocle.Lens
 
 import scala.collection.immutable._
 
 object E2eSupport {
 
-  final def behavior[M[_[_]]: FunctorK, F[_], S, E, I](
-    behavior: EventsourcedBehaviorT[M, F, S, E],
-    journal: EventJournal[F, I, E]
-  )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): I => Behavior[M, F] =
-    Eventsourced[M, F, S, E, I](behavior, journal)
+  final def behavior[M[_[_]]: FunctorK, F[_]: Sync, S, E, R, K](
+    behavior: EventsourcedBehavior[M, F, S, E, R],
+    journal: EventJournal[F, K, E]
+  )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): K => F[EitherK[M, F, R]] =
+    Eventsourced[M, F, S, E, R, K](behavior, journal)
 
-  class Runtime[F[_]] {
-    final def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations](
-      f: K => Behavior[M, F]
-    )(implicit F: FlatMap[F]): K => M[F] = { key =>
-      val actions = f(key).actions
+  final class Runtime[F[_]] {
+    def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations, R](
+      f:   K => F[EitherK[M, F, R]]
+    )(implicit F: FlatMap[F]): K => M[EitherT[F, R, ?]] = { key =>
       ReifiedInvocations[M].mapInvocations {
-        new (Invocation[M, ?] ~> F) {
-          final override def apply[A](invocation: Invocation[M, A]): F[A] =
-            invocation.invoke[PairT[F, Behavior[M, F], ?]](actions).map(_._2)
+        new (Invocation[M, ?] ~> EitherT[F, R, ?]) {
+          final override def apply[A](invocation: Invocation[M, A]): EitherT[F, R, A] =
+            EitherT(f(key).map(_.value).flatMap(me => invocation.invoke(me).value))
         }
       }
     }
@@ -39,7 +40,7 @@ object E2eSupport {
     protected type S
     protected implicit def F: MonadState[F, S]
 
-    final private implicit def monad = F.monad
+    final private implicit val monad = F.monad
 
     final def runProcesses: F[Unit] =
       for {
@@ -78,7 +79,7 @@ trait E2eSupport {
 
   type SpecState
 
-  type F[A] = StateT[Either[BehaviorFailure, ?], SpecState, A]
+  type F[A] = StateT[EitherT[IO, BehaviorFailure, ?], SpecState, A]
 
   final def mkJournal[I, E](lens: Lens[SpecState, StateEventJournal.State[I, E]],
                             tagging: Tagging[I]): StateEventJournal[F, I, SpecState, E] =

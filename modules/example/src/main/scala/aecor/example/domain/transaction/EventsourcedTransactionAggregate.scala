@@ -2,7 +2,7 @@ package aecor.example.domain.transaction
 
 import aecor.data.Folded.syntax._
 import aecor.data.Tagging
-import aecor.data.next.{ActionT, EventsourcedBehavior, MonadAction}
+import aecor.data.next.{ActionT, EventsourcedBehavior, MonadActionReject}
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction
@@ -12,10 +12,8 @@ import aecor.example.domain.transaction.TransactionEvent.{TransactionAuthorized,
 import cats.Monad
 import cats.implicits._
 
-import scala.collection.immutable._
-
 class EventsourcedTransactionAggregate[F[_]](
-  implicit F: MonadAction[F, Option[Transaction], TransactionEvent, String]
+  implicit F: MonadActionReject[F, Option[Transaction], TransactionEvent, String]
 ) extends TransactionAggregate[F] {
   import F._
   override def create(fromAccountId: From[AccountId],

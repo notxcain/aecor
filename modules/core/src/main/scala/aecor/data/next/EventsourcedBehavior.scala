@@ -1,10 +1,17 @@
 package aecor.data.next
 import aecor.Has
 import aecor.data.Folded
+import cats.Monad
+import io.aecor.liberator.FunctorK
 
-final case class EventsourcedBehavior[M[_[_]], F[_], S, E, R](actions: M[ActionT[F, S, E, R, ?]],
-                                                            initialState: S,
-                                                            applyEvent: (S, E) => Folded[S])
+final case class EventsourcedBehavior[M[_[_]], F[_], S, E, R](actions: M[ActionT[F, S, E, R, ?]], initial: S, update: (S, E) => Folded[S]) {
+  def enrich[Env](f: F[Env])(implicit M: FunctorK[M], F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E], R] =
+    EventsourcedBehavior(
+      actions = M.mapK(actions, ActionT.sample[F, S, E, R, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
+      initial = initial,
+      update = (s, e) => update(s, e.event)
+    )
+}
 
 object EventsourcedBehavior {
   def optional[M[_[_]], F[_], State, Event, Rejection](

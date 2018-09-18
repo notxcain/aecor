@@ -1,111 +1,37 @@
 package aecor.runtime
 
-import java.nio.ByteBuffer
-
-import aecor.data.{ Folded, PairE }
+import aecor.data.{ EitherK, Folded }
 import aecor.data.Folded.{ Impossible, Next }
-import aecor.data.next.MonadActionRun.ActionFailure
+import aecor.data.next.ActionT.ActionFailure
 import aecor.data.next._
-import aecor.encoding.WireProtocol
-import aecor.encoding.WireProtocol.Decoder.DecodingResult
-import aecor.encoding.WireProtocol.{ Decoder, Encoded, Encoder }
-import cats.data.{ Chain, EitherT, NonEmptyChain }
+import cats.data.{ EitherT, NonEmptyChain }
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.{ MonadError, ~> }
-import io.aecor.liberator.syntax._
-import io.aecor.liberator.{ Invocation, ReifiedInvocations }
-
-final class Rejectable[M[_[_]], F[_], R] private (val value: M[EitherT[F, R, ?]]) extends AnyVal
-
-object Rejectable {
-  def apply[M[_[_]], F[_], R](m: M[EitherT[F, R, ?]]): Rejectable[M, F, R] = new Rejectable(m)
-
-  implicit def wireProtocol[M[_[_]], R, F[_]](
-    implicit M: WireProtocol[M],
-    rdec: Decoder[R],
-    renc: Encoder[R]
-  ): WireProtocol[Rejectable[M, ?[_], R]] =
-    new WireProtocol[Rejectable[M, ?[_], R]] {
-
-      override def mapK[G[_], H[_]](mf: Rejectable[M, G, R], fg: ~>[G, H]): Rejectable[M, H, R] =
-        Rejectable(mf.value.mapK(Lambda[EitherT[G, R, ?] ~> EitherT[H, R, ?]](_.mapK(fg))))
-
-      override def invocations: Rejectable[M, Invocation[Rejectable[M, ?[_], R], ?], R] =
-        Rejectable {
-          M.mapInvocations(
-            new (Invocation[M, ?] ~> EitherT[Invocation[Rejectable[M, ?[_], R], ?], R, ?]) {
-              override def apply[A](
-                fa: Invocation[M, A]
-              ): EitherT[Invocation[Rejectable[M, ?[_], R], ?], R, A] =
-                EitherT {
-                  new Invocation[Rejectable[M, ?[_], R], Either[R, A]] {
-                    override def invoke[G[_]](target: Rejectable[M, G, R]): G[Either[R, A]] =
-                      fa.invoke(target.value).value
-                  }
-                }
-            }
-          )
-        }
-
-      override def encoder: Rejectable[M, Encoded, R] =
-        Rejectable[M, Encoded, R] {
-          M.mapInvocations(new (Invocation[M, ?] ~> EitherT[Encoded, R, ?]) {
-            override def apply[A](ma: Invocation[M, A]): EitherT[Encoded, R, A] =
-              EitherT[Encoded, R, A] {
-                val (bytes, decM) = ma.invoke(M.encoder)
-                val dec = new Decoder[Either[R, A]] {
-                  override def decode(bytes: ByteBuffer): DecodingResult[Either[R, A]] = {
-                    val success = bytes.get() == 1
-                    if (success) {
-                      decM.decode(bytes.slice()).map(_.asRight[R])
-                    } else {
-                      rdec.decode(bytes.slice()).map(_.asLeft[A])
-                    }
-                  }
-                }
-                (bytes, dec)
-              }
-          })
-        }
-      override def decoder
-        : Decoder[PairE[Invocation[Rejectable[M, ?[_], R], ?], WireProtocol.Encoder]] =
-        new Decoder[PairE[Invocation[Rejectable[M, ?[_], R], ?], WireProtocol.Encoder]] {
-          override def decode(
-            bytes: ByteBuffer
-          ): DecodingResult[PairE[Invocation[Rejectable[M, ?[_], R], ?], WireProtocol.Encoder]] =
-            M.decoder.decode(bytes).map { p =>
-              val (invocation, encoder) = (p.first, p.second)
-
-              val invocationR =
-                new Invocation[Rejectable[M, ?[_], R], Either[R, p.A]] {
-                  override def invoke[G[_]](target: Rejectable[M, G, R]): G[Either[R, p.A]] =
-                    invocation.invoke(target.value).value
-                }
-
-              val encoderR = Encoder.instance[Either[R, p.A]] {
-                case Right(a) =>
-                  val bytes = encoder.encode(a)
-                  val out = ByteBuffer.allocate(1 + bytes.limit())
-                  out.put(1: Byte)
-                  out.put(bytes)
-                  out
-                case Left(r) =>
-                  val bytes = renc.encode(r)
-                  val out = ByteBuffer.allocate(1 + bytes.limit())
-                  out.put(0: Byte)
-                  out.put(bytes)
-                  out
-              }
-
-              PairE(invocationR, encoderR)
-            }
-        }
-    }
-}
+import io.aecor.liberator.{ FunctorK, Invocation, ReifiedInvocations }
 
 object Eventsourced {
+  sealed abstract class Entity[K, M[_[_]], F[_], R] {
+    def apply(k: K): M[λ[x => F[Either[R, x]]]]
+  }
+
+  object Entity {
+    private final class EntityImpl[K, M[_[_]], F[_], R](mfr: K => M[EitherT[F, R, ?]])(
+      implicit M: FunctorK[M]
+    ) extends Entity[K, M, F, R] {
+      def apply(k: K): M[λ[x => F[Either[R, x]]]] =
+        M.mapK[EitherT[F, R, ?], λ[x => F[Either[R, x]]]](mfr(k), new (EitherT[F, R, ?] ~> λ[x => F[Either[R, x]]]) {
+          override def apply[A](fa: EitherT[F, R, A]): F[Either[R, A]] = fa.value
+        })
+    }
+
+    def apply[K, M[_[_]]: FunctorK, F[_], R](
+      mfr: K => M[EitherT[F, R, ?]]
+    ): Entity[K, M, F, R] =
+      new EntityImpl(mfr)
+  }
+
   final case class Snapshotting[F[_], K, S](snapshotEach: Long,
                                             store: KeyValueStore[F, K, InternalState[S]])
   type EntityId = String
@@ -132,21 +58,21 @@ object Eventsourced {
     entityBehavior: EventsourcedBehavior[M, F, S, E, R],
     journal: EventJournal[F, K, E],
     snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
-  )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => F[Rejectable[M, R, F]] = { key =>
-    val initialState = InternalState(entityBehavior.initialState, 0)
+  )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => F[EitherK[M, F, R]] = { key =>
+    val effectiveActions = M.mapK(entityBehavior.actions, ActionT.xmapState[F, S, InternalState[S], E, R]((is: InternalState[S], s: S) => is.copy(entityState = s))(_.entityState))
+
+    val initialState = InternalState(entityBehavior.initial, 0)
 
     val effectiveUpdate = (s: InternalState[S], e: E) =>
       entityBehavior
-        .applyEvent(s.entityState, e)
+        .update(s.entityState, e)
         .map(InternalState(_, s.version + 1))
 
-    val needsSnapshot = snapshotting match {
+    val needsSnapshot: Long => Boolean = snapshotting match {
       case Some(Snapshotting(x, _)) =>
-        (state: InternalState[S]) =>
-          state.version % x == 0
+        version => version % x == 0
       case None =>
-        (_: InternalState[S]) =>
-          false
+        _ => false
     }
 
     val snapshotStore =
@@ -170,52 +96,58 @@ object Eventsourced {
                 }
       } yield out
 
-    def updateState(state: InternalState[S], events: Chain[E]) =
-      if (events.isEmpty) {
-        state.pure[F]
-      } else {
-        val folded: Folded[(Boolean, InternalState[S])] =
-          events.foldM((false, state)) {
-            case ((snapshotPending, s), e) =>
-              effectiveUpdate(s, e).map { next =>
-                (snapshotPending || needsSnapshot(next), next)
-              }
-          }
-        folded match {
-          case Next((snapshotNeeded, nextState)) =>
-            val appendEvents = journal
-              .append(key, state.version + 1, NonEmptyChain.fromChainUnsafe(events))
-            val snapshotIfNeeded = if (snapshotNeeded) {
-              snapshotStore.setValue(key, nextState)
-            } else {
-              ().pure[F]
+    def appendEvents(currentVersion: Long, events: NonEmptyChain[E]): F[Boolean] = {
+      for {
+        _ <- journal.append(key, currentVersion + 1, events)
+      } yield (currentVersion to (currentVersion + events.size)).exists(needsSnapshot)
+    }
+
+    def updateState(state: InternalState[S], events: NonEmptyChain[E]) = {
+      val folded: Folded[(Boolean, InternalState[S])] =
+        events.foldM((false, state)) {
+          case ((snapshotPending, s), e) =>
+            effectiveUpdate(s, e).map { next =>
+              (snapshotPending || needsSnapshot(next.version), next)
             }
-            (appendEvents, snapshotIfNeeded).mapN((_, _) => nextState)
-          case Impossible =>
-            F.fail[InternalState[S]](
-              BehaviorFailure
-                .illegalFold(key.toString)
-            )
         }
+      folded match {
+        case Next((snapshotNeeded, nextState)) =>
+          val appendEvents = journal
+            .append(key, state.version + 1, events)
+          val snapshotIfNeeded = if (snapshotNeeded) {
+            snapshotStore.setValue(key, nextState)
+          } else {
+            ().pure[F]
+          }
+          (appendEvents, snapshotIfNeeded).mapN((_, _) => nextState)
+        case Impossible =>
+          F.fail[InternalState[S]](
+            BehaviorFailure
+              .illegalFold(key.toString)
+          )
       }
+    }
 
     for {
       initialState <- loadState
       ref <- Ref[F].of(initialState)
     } yield
-      Rejectable(M.mapInvocations(new (Invocation[M, ?] ~> EitherT[F, R, ?]) {
+      EitherK(M.mapInvocations(new (Invocation[M, ?] ~> EitherT[F, R, ?]) {
         override def apply[A](fa: Invocation[M, A]): EitherT[F, R, A] = EitherT {
           for {
             current <- ref.get
-            action = fa.invoke(entityBehavior.actions)
-            result <- action.run(current.entityState, entityBehavior.applyEvent)
+            action = fa.invoke(effectiveActions)
+            result <- action.flatMap(a => ActionT.read[F, InternalState[S], E, R].map(s => (s, a))).run(current, effectiveUpdate)
             _ <- result match {
                   case Left(ActionFailure.ImpossibleFold) =>
                     F.fail(BehaviorFailure.illegalFold(key.toString))
                   case Left(ActionFailure.Rejection(r)) =>
                     r.asLeft[A].pure[F]
-                  case Right((es, a)) =>
-                    updateState(current, es).flatMap(ref.set).as(a.asRight[R])
+                  case Right((es, (next, a))) =>
+                    NonEmptyChain
+                      .fromChain(es)
+                      .traverse(updateState(current, _).flatMap(ref.set))
+                      .as(a.asRight[R])
                 }
           } yield null
         }

@@ -2,24 +2,24 @@ package aecor.example.domain
 
 import aecor.Has
 import aecor.Has.syntax._
-import aecor.example.domain.TransactionProcess.RaiseError
 import aecor.example.domain.account.{Account, AccountId, AccountTransactionId, AccountTransactionKind}
 import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
 import aecor.example.domain.transaction._
 import cats.data.EitherT
 import cats.implicits._
-import cats.{Monad, MonadError}
+import cats.{MonadError, ~>}
+import io.aecor.liberator.FunctorK
 
-class TransactionProcess[F[_]: Monad](transactions: TransactionId => TransactionAggregate[EitherT[F, String, ?]],
-                                      accounts: AccountId => Account[EitherT[F, Account.Rejection, ?]],
-                                      failure: RaiseError[F]) {
+
+class TransactionProcess[F[_]](transactions: Entity[TransactionId, TransactionAggregate, F, String],
+                                      accounts: Entity[AccountId, Account, F, Account.Rejection])(implicit F: MonadError[F, Throwable]) {
   def process[A: Has[?, TransactionId]: Has[?, TransactionEvent]](a: A): F[Unit] = {
     val transactionId = a.get[TransactionId]
     a.get[TransactionEvent] match {
       case TransactionEvent.TransactionCreated(From(from), _, amount) =>
         for {
           out <- accounts(from)
-                  .debit(AccountTransactionId(transactionId, AccountTransactionKind.Normal), amount).value
+                  .debit(AccountTransactionId(transactionId, AccountTransactionKind.Normal), amount)
           _ <- out match {
                 case Left(rejection) =>
                   transactions(transactionId).fail(rejection.toString)
@@ -29,7 +29,10 @@ class TransactionProcess[F[_]: Monad](transactions: TransactionId => Transaction
         } yield ()
       case TransactionEvent.TransactionAuthorized =>
         for {
-          txn <- transactions(transactionId).getInfo.leftSemiflatMap(failure.raiseError[Unit])
+          txn <- transactions(transactionId).getInfo.flatMap {
+            case Right(x) => x.pure[F]
+            case Left(r) => F.raiseError[TransactionInfo](TransactionProcess.Failure(r))
+          }
           creditResult <- accounts(txn.toAccountId.value).credit(
                            AccountTransactionId(transactionId, AccountTransactionKind.Normal),
                            txn.amount
@@ -52,20 +55,9 @@ class TransactionProcess[F[_]: Monad](transactions: TransactionId => Transaction
 
 object TransactionProcess {
 
-  trait RaiseError[F[_]] {
-    def raiseError[A](reason: String): F[A]
-  }
+  final case class Failure(description: String) extends RuntimeException(description)
 
-  object RaiseError {
-    def withMonadError[F[_]](implicit F: MonadError[F, Throwable]): RaiseError[F] =
-      new RaiseError[F] {
-        override def raiseError[A](reason: String): F[A] =
-          F.raiseError(new RuntimeException(reason))
-      }
-  }
-
-  def apply[F[_]: Monad](transactions: TransactionId => TransactionAggregate[F],
-                         accounts: AccountId => Account[F],
-                         failure: RaiseError[F]): TransactionProcess[F] =
+  def apply[F[_]: MonadError[?[_], Throwable]](transactions: TransactionId => TransactionAggregate[F],
+                         accounts: AccountId => Account[F]): TransactionProcess[F] =
     new TransactionProcess(transactions, accounts, failure)
 }

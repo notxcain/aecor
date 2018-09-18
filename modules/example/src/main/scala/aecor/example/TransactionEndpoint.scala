@@ -36,10 +36,10 @@ class TransactionEndpoint[F[_]](transactions: TransactionId => TransactionAggreg
         transactions(transactionId)
           .create(fromAccountId, toAccountId, amount)
           .flatMap { _ =>
-            val getTransaction = transactions(transactionId).getInfo
+            val getTransaction = transactions(transactionId).getInfo.value
               .flatMap {
-                case Some(t) => t.pure[F]
-                case None    => F.raiseError[TransactionAggregate.TransactionInfo](new IllegalStateException("Something went bad"))
+                case Right(t) => t.pure[F]
+                case _    => F.raiseError[TransactionAggregate.TransactionInfo](new IllegalStateException("Something went bad"))
               }
             def loop: F[Boolean] = getTransaction.flatMap {
               case TransactionAggregate.TransactionInfo(_, _, _, Some(value)) => value.pure[F]

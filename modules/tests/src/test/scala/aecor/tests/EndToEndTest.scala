@@ -3,16 +3,20 @@ package aecor.tests
 import java.time._
 
 import aecor.data._
+import aecor.runtime.Eventsourced
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
-import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
-import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueStore }
-import aecor.tests.e2e._
+import aecor.schedule.process.{ScheduleEventJournal, ScheduleProcess}
+import aecor.testkit.{E2eSupport, StateClock, StateEventJournal, StateKeyValueStore}
+import aecor.tests.e2e.{notification, _}
 import aecor.testkit.E2eSupport._
-import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
+import aecor.tests.e2e.notification.{NotificationEvent, NotificationId}
+import cats.data.{EitherT, IndexedStateT, StateT}
+import cats.effect.IO
 import cats.implicits._
-import org.scalatest.{ FunSuite, Matchers }
+import org.scalatest.{FunSuite, Matchers}
 import shapeless.Coproduct
+
 import scala.concurrent.duration._
 import monocle.macros.GenLens
 
@@ -37,8 +41,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       Tagging.const(CounterEvent.tag)
     )
 
-  def counters =
-    runtime.deploy(behavior(CounterBehavior.instance.lift[F], counterEventJournal))
+  def counters
+    : CounterId => EitherK[Counter, F, Void] =
+    runtime.deploy(behavior(CounterBehavior.instance[F], counterEventJournal)).andThen(x => EitherK(x))
 
   def notificationEventJournal =
     mkJournal[NotificationId, NotificationEvent](
@@ -46,8 +51,8 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       Tagging.const(NotificationEvent.tag)
     )
 
-  def notifications =
-    runtime.deploy(behavior(notification.behavior.lift[F], notificationEventJournal))
+  def notifications: NotificationId => notification.Notification[EitherT[F, Void, ?]] =
+    runtime.deploy(behavior(notification.behavior[F], notificationEventJournal))
 
   def schduleEventJournal =
     mkJournal[ScheduleBucketId, ScheduleEvent](
@@ -115,20 +120,22 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
 
   test("Process should react to events") {
 
-    val counter = wiredK(counters)
+    val cs = wiredK[CounterId, EitherK[Counter, ?[_], Void]](counters).andThen(_.value)
 
-    val first = CounterId("1")
-    val second = CounterId("2")
+    val firstCounterId = CounterId("1")
+    val secondCounterId = CounterId("2")
+    val first = cs(firstCounterId)
+    val second = cs(secondCounterId)
 
     val program = for {
-      _ <- counter(first).increment
-      _ <- counter(first).increment
-      _ <- counter(first).decrement
-      _ <- counter(second).increment
-      _ <- counter(second).increment
+      _ <- first.increment
+      _ <- first.increment
+      _ <- first.decrement
+      _ <- second.increment
+      _ <- second.increment
     } yield ()
 
-    val Right((state, _)) = program
+    val Right((state, _)) = program.value
       .run(
         SpecState(
           StateEventJournal.State.init,
@@ -139,10 +146,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Vector.empty,
           Map.empty
         )
-      )
+      ).value.unsafeRunSync()
 
     println(state.counterJournalState)
-    state.counterViewState.values shouldBe Map(first -> 1L, second -> 2L)
+    state.counterViewState.values shouldBe Map(firstCounterId -> 1L, secondCounterId -> 2L)
 
     state.notificationJournalState.eventsByKey
       .getOrElse("1-2", Vector.empty) should have size (2)

@@ -3,7 +3,7 @@ package aecor.tests.e2e
 import aecor.data.{EventTag, Folded}
 import aecor.data.Folded.syntax._
 import aecor.data.next._
-import aecor.data.next.MonadAction
+import aecor.data.next.MonadActionReject
 import aecor.macros.boopickleWireProtocol
 import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
 import aecor.tests.PersistentEncoderCirce
@@ -43,11 +43,11 @@ case class CounterState(value: Long) {
 }
 
 object CounterBehavior {
-  def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent, Nothing] =
-    EventsourcedBehavior(CounterActions[ActionT[F, CounterState, CounterEvent, Nothing, ?]], CounterState(0), _.applyEvent(_))
+  def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent, Void] =
+    EventsourcedBehavior(CounterActions[ActionT[F, CounterState, CounterEvent, Void, ?]], CounterState(0), _.applyEvent(_))
 }
 
-final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent, Nothing]) extends Counter[F] {
+final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]) extends Counter[F] {
 
   import F._
 
@@ -60,5 +60,5 @@ final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, Counte
 }
 
 object CounterActions {
-  def apply[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent, Nothing]): Counter[F] = new CounterActions[F]
+  def apply[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]): Counter[F] = new CounterActions[F]
 }

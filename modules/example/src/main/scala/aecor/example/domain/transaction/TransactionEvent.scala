@@ -1,10 +1,10 @@
 package aecor.example.domain.transaction
 
-import aecor.data.Enriched
-import aecor.example.domain.{ Amount, Timestamp }
+import aecor.data.next.Enriched
+import aecor.example.domain.{Amount, Timestamp}
 import aecor.example.domain.account.AccountId
 import aecor.example.persistentEncoderUtil
-import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
+import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
 import io.circe.java8.time._
 import io.circe.generic.auto._
 

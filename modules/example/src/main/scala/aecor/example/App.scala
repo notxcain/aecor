@@ -83,9 +83,9 @@ object App extends IOApp {
       transactions: TransactionId => TransactionAggregate[IO]
     ): IO[DistributedProcessing.KillSwitch[IO]] =
       createOffsetStore.flatMap { offsetStore =>
-        val failure = RaiseError.withMonadError[IO]
+
         val processor =
-          TransactionProcess(transactions, accounts, failure)
+          TransactionProcess(transactions, accounts)
         val journal = runtime
           .journal[TransactionId, Enriched[Timestamp, TransactionEvent]]
           .committable(offsetStore)

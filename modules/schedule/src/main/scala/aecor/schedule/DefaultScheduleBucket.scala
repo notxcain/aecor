@@ -1,21 +1,24 @@
 package aecor.schedule
 
-import java.time.{ Instant, LocalDateTime, ZonedDateTime }
+import java.time.{Instant, LocalDateTime, ZoneOffset, ZonedDateTime}
 
 import aecor.data.Folded
 import aecor.data.Folded.syntax._
 import aecor.data.next._
-import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
-import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
+import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
+import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder, PersistentRepr}
+import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import aecor.schedule.ScheduleState._
-import aecor.schedule.protobuf.ScheduleEventCodec
-import cats.{ Functor, Monad }
+import aecor.schedule.serialization.protobuf.msg
 import cats.implicits._
+import cats.{Functor, Monad}
+
+import scala.util.{Failure, Try}
 
 object DefaultScheduleBucket {
 
   def apply[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
-    implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent, Void]
+    implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent]
   ): ScheduleBucket[F] =
     new DefaultScheduleBucket(clock)
 
@@ -26,7 +29,7 @@ object DefaultScheduleBucket {
 }
 
 class DefaultScheduleBucket[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
-  implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent, Void]
+  implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent]
 ) extends ScheduleBucket[F] {
 
   import F._
@@ -77,10 +80,55 @@ object ScheduleEvent extends ScheduleEventInstances {
 }
 
 trait ScheduleEventInstances {
-  implicit val persistentEncoder: PersistentEncoder[ScheduleEvent] =
-    PersistentEncoder.fromCodec(ScheduleEventCodec)
-  implicit val persistentDecoder: PersistentDecoder[ScheduleEvent] =
-    PersistentDecoder.fromCodec(ScheduleEventCodec)
+  implicit val persistentEncoderDecoder: PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] =
+    new PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] {
+      val ScheduleEntryAddedManifest = "A"
+      val ScheduleEntryFiredManifest = "B"
+
+      private def manifest(o: ScheduleEvent): String = o match {
+        case e: ScheduleEvent.ScheduleEntryAdded => ScheduleEntryAddedManifest
+        case e: ScheduleEvent.ScheduleEntryFired => ScheduleEntryFiredManifest
+      }
+
+      private def tryDecode(bytes: Array[Byte], manifest: String): Try[ScheduleEvent] = manifest match {
+        case ScheduleEntryAddedManifest =>
+          msg.ScheduleEntryAdded.validate(bytes).map {
+            case msg.ScheduleEntryAdded(entryId, correlationId, dueToInEpochMillisUTC, timestamp) =>
+              val dateTime =
+                LocalDateTime.ofInstant(Instant.ofEpochMilli(dueToInEpochMillisUTC), ZoneOffset.UTC)
+              ScheduleEvent
+                .ScheduleEntryAdded(entryId, correlationId, dateTime, Instant.ofEpochMilli(timestamp))
+          }
+        case ScheduleEntryFiredManifest =>
+          msg.ScheduleEntryFired.validate(bytes).map {
+            case msg.ScheduleEntryFired(entryId, correlationId, timestamp) =>
+              ScheduleEvent.ScheduleEntryFired(entryId, correlationId, Instant.ofEpochMilli(timestamp))
+          }
+        case other => Failure(new IllegalArgumentException(s"Unknown manifest [$other]"))
+      }
+
+      private def encodeEvent(o: ScheduleEvent): Array[Byte] = o match {
+        case ScheduleEvent
+        .ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp) =>
+          msg.ScheduleEntryAdded(
+            entryId,
+            correlationId,
+            dueDate.toInstant(ZoneOffset.UTC).toEpochMilli,
+            timestamp.toEpochMilli
+          ).toByteArray
+        case ScheduleEvent
+        .ScheduleEntryFired(entryId, correlationId, timestamp) =>
+          msg.ScheduleEntryFired(entryId, correlationId, timestamp.toEpochMilli).toByteArray
+      }
+      override def encode(
+        a: ScheduleEvent
+      ): PersistentRepr = PersistentRepr(manifest(a), encodeEvent(a))
+      override def decode(
+        repr: PersistentRepr
+      ): DecodingResult[
+        ScheduleEvent
+      ] = DecodingResult.fromTry(tryDecode(repr.payload, repr.manifest))
+    }
 }
 
 private[aecor] case class ScheduleState(unfired: Map[String, ScheduleEntry], fired: Set[String]) {

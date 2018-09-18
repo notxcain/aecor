@@ -2,9 +2,11 @@ package aecor.tests.e2e
 
 import aecor.data.Folded.syntax._
 import aecor.data._
+import aecor.data.next.{EventsourcedBehavior, MonadActionBase}
 import aecor.macros.boopickleWireProtocol
 import boopickle.Default._
-import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
+import aecor.tests.e2e.notification.NotificationEvent.{NotificationCreated, NotificationSent}
+import cats.Monad
 
 object notification {
   type NotificationId = String
@@ -29,18 +31,12 @@ object notification {
     }
   }
 
-  def notificationActions = new Notification[Action[NotificationState, NotificationEvent, ?]] {
-    override def create(counterId: CounterId): Action[NotificationState, NotificationEvent, Unit] =
-      Action { _ =>
-        List(NotificationCreated(counterId)) -> (())
-      }
-
-    override def markAsSent: Action[NotificationState, NotificationEvent, Unit] =
-      Action { _ =>
-        List(NotificationSent) -> (())
-      }
+  def notificationActions[F[_]](implicit F: MonadActionBase[F, NotificationState, NotificationEvent]): Notification[F] = new Notification[F] {
+    import F._
+    override def create(counterId: CounterId): F[Unit] = append(NotificationCreated(counterId))
+    override def markAsSent: F[Unit] = append(NotificationSent)
   }
 
-  def behavior: EventsourcedBehavior[Notification, NotificationState, NotificationEvent] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent, Void] =
     EventsourcedBehavior(notificationActions, NotificationState(false), _.applyEvent(_))
 }

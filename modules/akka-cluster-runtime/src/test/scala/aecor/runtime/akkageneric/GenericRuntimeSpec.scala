@@ -1,16 +1,13 @@
-package aecor.tests
+package aecor.runtime.akkageneric
 
-import aecor.data.Behavior
-import aecor.runtime.akkageneric.GenericAkkaRuntime
-import aecor.testkit.StateRuntime
-import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
+import cats.implicits._
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.{BeforeAndAfterAll, FunSuiteLike, Matchers}
-import cats.implicits._
+
 import scala.concurrent.duration._
 
 object GenericRuntimeSpec {
@@ -18,11 +15,6 @@ object GenericRuntimeSpec {
         cluster.system-name=test
         cluster.port = 51001
         aecor.generic-akka-runtime.idle-timeout = 1s
-        cluster {
-          seed-nodes = [
-            "akka.tcp://test@127.0.0.1:51001"
-          ]
-        }
      """).withFallback(ConfigFactory.load())
 }
 
@@ -33,6 +25,8 @@ class GenericRuntimeSpec
     with ScalaFutures
     with BeforeAndAfterAll {
 
+  implicit val contextShift = IO.contextShift(system.dispatcher)
+
   override implicit val patienceConfig = PatienceConfig(15.seconds, 150.millis)
 
   val timer = IO.timer(system.dispatcher)
@@ -40,31 +34,35 @@ class GenericRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  val behavior: IO[Counter[IO]] =
-    Behavior.fromState(
-      Vector.empty[CounterEvent],
-      StateRuntime.single(CounterBehavior.instance[IO])
-    )
 
-  val deployCounters =
-    GenericAkkaRuntime(system).runBehavior("Counter", (_: CounterId) => behavior)
+  def runCounters(name: String): IO[CounterId => Counter[IO]] =
+    GenericAkkaRuntime(system).runBehavior[CounterId, Counter, IO](name, (_: CounterId) => Counter.inmem[IO])
 
-  test("Runtime should work") {
+  test("routing") {
     val program = for {
-      counters <- deployCounters
+      counters <- runCounters("CounterFoo")
       first = counters(CounterId("1"))
       second = counters(CounterId("2"))
       _ <- first.increment
-      _ <- second.increment
-      _2 <- second.value
-      _ <- first.decrement
-      _1 <- first.value
-      afterPassivation <- timer.sleep(2.seconds) >> second.value
-    } yield (_1, _2, afterPassivation)
+      _2 <- second.increment
+      _1 <- first.increment
+    } yield (_1, _2)
 
-    val (first, second, afterPassivation) = program.unsafeRunSync()
-    first shouldBe 0L
+    val (first, second) = program.unsafeRunSync()
+    first shouldBe 2L
     second shouldBe 1L
+  }
+
+  test("passivation") {
+    val program = for {
+      counters <- runCounters("CounterBar")
+      first = counters(CounterId("1"))
+      _1 <- first.increment
+      afterPassivation <- timer.sleep(2.seconds) >> first.value
+    } yield (_1, afterPassivation)
+
+    val (beforePassivation, afterPassivation) = program.unsafeRunSync()
+    beforePassivation shouldBe 1
     afterPassivation shouldBe 0
   }
 }

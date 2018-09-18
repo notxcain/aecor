@@ -25,7 +25,7 @@ private[aecor] object GenericAkkaRuntimeActor {
     createBehavior: K => F[M[F]],
     idleTimeout: FiniteDuration
   ): Props =
-    Props(new GenericAkkaRuntimeActor(createBehavior, idleTimeout))
+    Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout))
 
   private[akkageneric] final case class Command(bytes: ByteBuffer) extends Message
   private[akkageneric] final case class CommandResult(bytes: ByteBuffer) extends Message
@@ -77,7 +77,6 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
           log.error(decodingError, "Failed to decode invocation")
           sender() ! Status.Failure(decodingError)
       }
-
     case ReceiveTimeout =>
       passivate()
     case GenericAkkaRuntimeActor.Stop =>
@@ -92,7 +91,9 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
                            invocation: Invocation[M, A],
                            resultEncoder: WireProtocol.Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
-    invocation.invoke(actions).toIO.map(resultEncoder.encode)
+    invocation.invoke(actions)
+      .toIO
+      .map(resultEncoder.encode)
       .map {
         responseBytes =>
           Result(opId, Success(responseBytes))
