@@ -5,7 +5,6 @@ import java.time.Clock
 import aecor.data._
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.example.account.http.{Service => AccountService}
-import aecor.example.domain.TransactionProcess.RaiseError
 import aecor.example.domain._
 import aecor.example.domain.account.{ Account, AccountId, EventsourcedAccount }
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.tagging
@@ -66,7 +65,7 @@ object App extends IOApp {
       runtime
         .deploy(
           "Transaction",
-          EventsourcedTransactionAggregate.behavior[IO].en(metaProvider),
+          EventsourcedTransactionAggregate.behavior[IO].enrich(metaProvider),
           tagging
         )
 
