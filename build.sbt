@@ -10,11 +10,11 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.15"
+lazy val akkaVersion = "2.5.16"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
-lazy val catsVersion = "1.2.0"
-lazy val catsEffectVersion = "1.0.0-RC3"
+lazy val catsVersion = "1.4.0"
+lazy val catsEffectVersion = "1.0.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
