@@ -1,6 +1,5 @@
 package aecor.example.domain.transaction
-
-import aecor.data.next.Enriched
+import aecor.data.Enriched
 import aecor.example.domain.{Amount, Timestamp}
 import aecor.example.domain.account.AccountId
 import aecor.example.persistentEncoderUtil

@@ -1,8 +1,7 @@
 package aecor.testkit
 
 import io.aecor.liberator.Invocation
-import aecor.data._
-import aecor.data.next.EventsourcedBehavior
+import aecor.data.{EventsourcedBehavior, _}
 import aecor.runtime.{EventJournal, Eventsourced}
 import aecor.runtime.Eventsourced._
 import cats.data.{EitherT, StateT}

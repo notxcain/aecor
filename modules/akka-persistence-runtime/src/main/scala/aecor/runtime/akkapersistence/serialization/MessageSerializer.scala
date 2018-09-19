@@ -28,18 +28,15 @@ class MessageSerializer(val system: ExtendedActorSystem)
   override def manifest(o: AnyRef): String = o match {
     case HandleCommand(_)    => HandleCommandManifest
     case EntityCommand(_, _) => EntityCommandManifest
-    case CommandResult(_, _, _)    => CommandResultManifest
+    case CommandResult(_)    => CommandResultManifest
     case x                   => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
   }
 
   override def toBinary(o: AnyRef): Array[Byte] = o match {
     case x @ HandleCommand(_) =>
       x.commandBytes.array()
-    case x @ CommandResult(resultBytes, isRejection, rejectionBytes) =>
-      if (!isRejection) {
-        ByteBuffer.allocate(resultBytes.limit() + 1).put(0: Byte).put(resultBytes).array()
-      } else
-        ByteBuffer.allocate(rejectionBytes.limit() + 1).put(1: Byte).put(rejectionBytes).array()
+    case x @ CommandResult(resultBytes) =>
+      resultBytes.array()
     case x @ EntityCommand(_, _) =>
       entityCommandToBinary(x)
     case x => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
@@ -63,13 +60,7 @@ class MessageSerializer(val system: ExtendedActorSystem)
   private def handleCommandFromBinary(bytes: Array[Byte]): HandleCommand =
     HandleCommand(ByteBuffer.wrap(bytes))
 
-  private def commandResultFromBinary(bytes: Array[Byte]): CommandResult = {
-    val buffer = ByteBuffer.wrap(bytes)
-    val isRejection = buffer.get == (1: Byte)
-    if (isRejection)
-      CommandResult(ByteBuffer.allocate(0), true, buffer.slice())
-    else
-      CommandResult(buffer.slice(), false, ByteBuffer.allocate(0))
-  }
+  private def commandResultFromBinary(bytes: Array[Byte]): CommandResult =
+    CommandResult(ByteBuffer.wrap(bytes))
 
 }

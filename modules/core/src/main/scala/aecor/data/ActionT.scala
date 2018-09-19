@@ -1,10 +1,11 @@
-package aecor.data.next
+package aecor.data
 
-import aecor.data.Folded
-import aecor.data.next.ActionT.{ ActionFailure, ActionResult }
+import aecor.data.ActionT.{ActionFailure, ActionResult}
+import aecor.data.Folded.Impossible
 import cats.data._
 import cats.implicits._
-import cats.{ Applicative, Functor, Monad, MonadError, ~> }
+import cats.{Applicative, Functor, Monad, MonadError, ~>}
+import Folded.syntax._
 
 final class ActionT[F[_], S, E, R, A] private (
   val unsafeRun: (S, (S, E) => Folded[S], Chain[E]) => F[ActionResult[R, E, A]]
@@ -161,20 +162,3 @@ object ActionT {
   }
 }
 
-trait MonadActionBase[F[_], S, E] extends Monad[F] {
-  def read: F[S]
-  def append(es: E, other: E*): F[Unit]
-}
-
-trait MonadActionReject[F[_], S, E, R] extends MonadActionBase[F, S, E] with MonadError[F, R] {
-  def reject[A](r: R): F[A]
-  override def raiseError[A](e: R): F[A] = reject(e)
-}
-
-trait MonadActionLift[M[_], F[_], S, E] extends MonadActionBase[M, S, E] {
-  def liftF[A](fa: F[A]): M[A]
-}
-
-trait MonadAction[M[_], F[_], S, E, R]
-    extends MonadActionReject[M, S, E, R]
-    with MonadActionLift[M, F, S, E]

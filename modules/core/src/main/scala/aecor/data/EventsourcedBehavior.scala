@@ -1,6 +1,6 @@
-package aecor.data.next
-import aecor.Has
-import aecor.data.Folded
+package aecor.data
+
+import aecor.{Has, data}
 import cats.Monad
 import io.aecor.liberator.FunctorK
 
@@ -19,7 +19,7 @@ object EventsourcedBehavior {
                                        init: Event => Folded[State],
                                        applyEvent: (State, Event) => Folded[State]
                                      ): EventsourcedBehavior[M, F, Option[State], Event, Rejection] =
-    EventsourcedBehavior(
+    data.EventsourcedBehavior(
       actions,
       Option.empty[State],
       (os, e) => os.map(s => applyEvent(s, e)).getOrElse(init(e)).map(Some(_))

@@ -1,15 +1,15 @@
 package aecor.runtime
 
-import aecor.data.{ EitherK, Folded }
-import aecor.data.Folded.{ Impossible, Next }
-import aecor.data.next.ActionT.ActionFailure
+import aecor.data.{ActionT, EitherK, EventsourcedBehavior, Folded}
+import aecor.data.Folded.{Impossible, Next}
+import aecor.data.ActionT.ActionFailure
 import aecor.data.next._
-import cats.data.{ EitherT, NonEmptyChain }
+import cats.data.{EitherT, NonEmptyChain}
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import cats.implicits._
-import cats.{ MonadError, ~> }
-import io.aecor.liberator.{ FunctorK, Invocation, ReifiedInvocations }
+import cats.{MonadError, ~>}
+import io.aecor.liberator.{FunctorK, Invocation, ReifiedInvocations}
 
 object Eventsourced {
   sealed abstract class Entity[K, M[_[_]], F[_], R] {

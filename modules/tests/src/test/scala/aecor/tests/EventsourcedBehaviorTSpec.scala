@@ -1,7 +1,7 @@
 package aecor.tests
 
-import aecor.data.next
-import aecor.data.next.{ActionT, EventsourcedBehavior, MonadActionBase, MonadActionReject}
+import aecor.data.{ActionT, EventsourcedBehavior, MonadActionBase, next}
+import aecor.data.next.{EventsourcedBehavior, MonadActionBase, MonadActionReject}
 import aecor.tests.e2e.CounterEvent.{CounterDecremented, CounterIncremented}
 import aecor.tests.e2e.{Counter, CounterEvent, CounterState}
 import cats.Id

@@ -1,9 +1,8 @@
 package aecor.tests.e2e
 
-import aecor.data.{EventTag, Folded}
+import aecor.data._
 import aecor.data.Folded.syntax._
 import aecor.data.next._
-import aecor.data.next.MonadActionReject
 import aecor.macros.boopickleWireProtocol
 import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
 import aecor.tests.PersistentEncoderCirce

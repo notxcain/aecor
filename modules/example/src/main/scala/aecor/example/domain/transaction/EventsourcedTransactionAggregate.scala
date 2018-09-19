@@ -1,8 +1,7 @@
 package aecor.example.domain.transaction
 
 import aecor.data.Folded.syntax._
-import aecor.data.Tagging
-import aecor.data.next.{ActionT, EventsourcedBehavior, MonadActionReject}
+import aecor.data._
 import aecor.example.domain.Amount
 import aecor.example.domain.account.AccountId
 import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction

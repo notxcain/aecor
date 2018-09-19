@@ -1,12 +1,12 @@
 package aecor.testkit
 
+import aecor.data.EventsourcedBehavior
 import io.aecor.liberator.Invocation
-import aecor.data.next.EventsourcedBehavior
-import aecor.data.Folded.{ Impossible, Next }
+import aecor.data.Folded.{Impossible, Next}
 import cats.data._
-import cats.{ Functor, MonadError, ~> }
+import cats.{Functor, MonadError, ~>}
 import cats.implicits._
-import io.aecor.liberator.{ FunctorK, ReifiedInvocations }
+import io.aecor.liberator.{FunctorK, ReifiedInvocations}
 
 object StateRuntime {
 

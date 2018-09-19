@@ -62,9 +62,11 @@ object Schedule {
 
     def deployBuckets =
       runtime
-        .deploy[ScheduleBucket, F, ScheduleState, ScheduleEvent, ScheduleBucketId, Void](
+        .deploy(
           entityName,
-          DefaultScheduleBucket.behavior(clock.zonedDateTime),
+          DefaultScheduleBucket[ActionN[F, ScheduleState, ScheduleEvent, ?], F](clock.zonedDateTime),
+          ScheduleState.initial,
+          (_: ScheduleState).update(_: ScheduleEvent),
           Tagging.const[ScheduleBucketId](eventTag)
         )
 

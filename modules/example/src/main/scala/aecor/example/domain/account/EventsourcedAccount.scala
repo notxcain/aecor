@@ -1,8 +1,7 @@
 package aecor.example.domain.account
 
-import aecor.data.Folded
+import aecor.data.{EventsourcedBehavior, Folded, MonadActionReject}
 import aecor.data.Folded.syntax._
-import aecor.data.next.{EventsourcedBehavior, MonadActionReject}
 import aecor.example.domain.Amount
 import aecor.example.domain.account.Account.{AccountDoesNotExist, InsufficientFunds}
 import aecor.example.domain.account.AccountEvent._

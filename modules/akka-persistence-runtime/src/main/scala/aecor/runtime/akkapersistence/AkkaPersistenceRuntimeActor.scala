@@ -6,8 +6,8 @@ import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant}
 import java.util.UUID
 
-import aecor.data.{Folded, Tagging}
-import aecor.data.next.ActionT
+import aecor.data.Folded.{Impossible, Next}
+import aecor.data.{ActionRun, ActionT, Folded, Tagging}
 import aecor.data.next.ActionT.ActionFailure
 import aecor.encoding.WireProtocol.Encoder
 import io.aecor.liberator.Invocation
@@ -32,9 +32,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder, Rejection: Encoder](
+  def props[M[_[_]], G[_], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    actions: M[ActionT[F, State, Event, Rejection, ?]],
+    actions: M[G],
     initialState: State,
     updateState: (State, Event) => Folded[State],
     snapshotPolicy: SnapshotPolicy[State],
@@ -42,7 +42,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     idleTimeout: FiniteDuration,
     journalPluginId: String,
     snapshotPluginId: String
-  )(implicit M: WireProtocol[M]): Props =
+  )(implicit M: WireProtocol[M], G: ActionRun[G, F, State, Event]): Props =
     Props(
       new AkkaPersistenceRuntimeActor(
         entityName,
@@ -58,7 +58,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     )
 
   final case class HandleCommand(commandBytes: ByteBuffer) extends Message
-  final case class CommandResult(resultBytes: ByteBuffer, isRejection: Boolean, rejectionBytes: ByteBuffer) extends Message
+  final case class CommandResult(resultBytes: ByteBuffer) extends Message
   case object Stop
 }
 
@@ -71,9 +71,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder, Rejection](
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], G[_], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  actions: M[ActionT[F, State, Event, Rejection, ?]],
+  actions: M[G],
   initialState: State,
   updateState: (State, Event) => Folded[State],
   snapshotPolicy: SnapshotPolicy[State],
@@ -81,14 +81,14 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
   idleTimeout: FiniteDuration,
   override val journalPluginId: String,
   override val snapshotPluginId: String
-)(implicit M: WireProtocol[M], F: Effect[F], rejectionEncoder: Encoder[Rejection])
+)(implicit M: WireProtocol[M], F: Effect[F], G: ActionRun[G, F, State, Event])
     extends PersistentActor
     with ActorLogging
     with Stash {
 
   import context.dispatcher
 
-  private case class ActionResult(opId: UUID, events: Chain[Event], resultBytes: ByteBuffer, isRejection: Boolean, rejectionBytes: ByteBuffer)
+  private case class ActionResult(opId: UUID, events: Chain[Event], resultBytes: ByteBuffer)
 
   private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
@@ -161,7 +161,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
       passivate()
     case AkkaPersistenceRuntimeActor.Stop =>
       context.stop(self)
-    case ActionResult(opId, _, _, _, _) =>
+    case ActionResult(opId, _, _) =>
       log.warning(
         "[{}] Received a result of unknown command invocation [{}], ignoring",
         persistenceId,
@@ -181,25 +181,18 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
   def performInvocation[A](invocation: Invocation[M, A],
                            resultEncoder: WireProtocol.Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
-    invocation
-      .invoke(actions).run(state, updateState)
+    G.run(invocation
+      .invoke(actions))(state, updateState)
       .flatMap {
-        case Right((events, result)) =>
+        case Next((events, result)) =>
           F.delay(log.info(
             "[{}] Command [{}] produced reply [{}] and events [{}]",
             persistenceId,
             invocation,
             result,
             events
-          )) as ActionResult(opId, events, resultEncoder.encode(result), isRejection = false, ByteBuffer.allocate(0))
-        case Left(ActionFailure.Rejection(rejection)) =>
-          F.delay(log.info(
-            "[{}] Command [{}] rejected [{}]",
-            persistenceId,
-            invocation,
-            rejection
-          )) as ActionResult(opId, Chain.empty, ByteBuffer.allocate(0), isRejection = true, rejectionEncoder.encode(rejection))
-        case Left(ActionFailure.ImpossibleFold) =>
+          )) as ActionResult(opId, events, resultEncoder.encode(result))
+        case Impossible =>
           val error = new IllegalStateException(s"[$persistenceId] Command [$invocation] produced illegal fold")
           F.delay(log.error(error,
             "[{}] Command [{}] produced illegal fold",
@@ -211,8 +204,8 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
       .unsafeToFuture()
       .pipeTo(self)(sender)
     context.become {
-      case ActionResult(`opId`, events, resultBytes, isRejection, rejectionBytes) =>
-        handleCommandResult(events, CommandResult(resultBytes, isRejection, rejectionBytes))
+      case ActionResult(`opId`, events, resultBytes) =>
+        handleCommandResult(events, CommandResult(resultBytes))
         unstashAll()
         context.become(receiveCommand)
       case Status.Failure(e) =>

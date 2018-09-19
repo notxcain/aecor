@@ -2,6 +2,7 @@ package aecor.runtime.akkageneric
 
 import java.nio.ByteBuffer
 
+import aecor.encoding.WireProtocol.Encoded
 import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
@@ -14,7 +15,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 import cats.~>
-import io.aecor.liberator.Invocation
+import io.aecor.liberator.syntax._
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =
@@ -29,12 +30,14 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
   )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
-      val numberOfShards = settings.numberOfShards
+      val props = GenericAkkaRuntimeActor.props[K, M, F](createBehavior, settings.idleTimeout)
 
       val extractEntityId: ShardRegion.ExtractEntityId = {
         case KeyedCommand(entityId, c) =>
           (entityId, GenericAkkaRuntimeActor.Command(c))
       }
+
+      val numberOfShards = settings.numberOfShards
 
       val extractShardId: ShardRegion.ExtractShardId = {
         case KeyedCommand(key, _) =>
@@ -42,9 +45,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
         case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
       }
 
-      val props = GenericAkkaRuntimeActor.props[K, M, F](createBehavior, settings.idleTimeout)
-
-      val shardRegionRef = ClusterSharding(system).start(
+      val shardRegion = ClusterSharding(system).start(
         typeName = typeName,
         entityProps = props,
         settings = settings.clusterShardingSettings,
@@ -52,26 +53,25 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
         extractShardId = extractShardId
       )
 
-      implicit val timeout = Timeout(settings.askTimeout)
-
       val keyEncoder = KeyEncoder[K]
 
       key =>
-        M.mapInvocations {
-          new (Invocation[M, ?] ~> F) {
-            override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
-              val (bytes, decoder) = fa.invoke(M.encoder)
-              F.fromFuture {
-                  shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
-                }
-                .flatMap {
-                  case result: CommandResult =>
-                    F.fromEither(decoder.decode(result.bytes))
-                  case other =>
-                    F.raiseError(new IllegalArgumentException(s"Unexpected response [$other] from shard region"))
-                }
-            }
+        M.encoder.mapK(new (Encoded ~> F) {
+
+          implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
+
+          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] = {
+            val (bytes, decoder) = fa
+            F.fromFuture {
+                shardRegion ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
+              }
+              .flatMap {
+                case result: CommandResult =>
+                  F.fromEither(decoder.decode(result.bytes))
+                case other =>
+                  F.raiseError(new IllegalArgumentException(s"Unexpected response [$other] from shard region"))
+              }
           }
-        }
+        })
     }
 }
