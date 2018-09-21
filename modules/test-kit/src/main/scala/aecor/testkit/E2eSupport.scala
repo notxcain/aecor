@@ -6,12 +6,11 @@ import aecor.runtime.{EventJournal, Eventsourced}
 import aecor.runtime.Eventsourced._
 import cats.data.{EitherT, StateT}
 import cats.effect.{IO, Sync}
-import cats.implicits._
 import cats.mtl.MonadState
 import cats.{FlatMap, Monad, ~>}
 import io.aecor.liberator.{FunctorK, ReifiedInvocations}
 import monocle.Lens
-
+import cats.implicits._
 import scala.collection.immutable._
 
 object E2eSupport {
@@ -22,14 +21,13 @@ object E2eSupport {
   )(implicit M: ReifiedInvocations[M]): K => F[M[F]] =
     Eventsourced[M, F, S, E, K](behavior, journal)
 
-  final class Runtime[F[_]] {
-    def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations, R](
-      f:   K => F[EitherK[M, F, R]]
-    )(implicit F: FlatMap[F]): K => M[EitherT[F, R, ?]] = { key =>
+  final class Runtime[F[_]: FlatMap] {
+    def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations](f: K => F[M[F]]): K => M[F] = { key =>
+      val fmf = f(key)
       ReifiedInvocations[M].mapInvocations {
-        new (Invocation[M, ?] ~> EitherT[F, R, ?]) {
-          final override def apply[A](invocation: Invocation[M, A]): EitherT[F, R, A] =
-            EitherT(f(key).map(_.value).flatMap(me => invocation.invoke(me).value))
+        new (Invocation[M, ?] ~> F) {
+          final override def apply[A](invocation: Invocation[M, A]): F[A] =
+            fmf.flatMap(me => invocation.invoke(me))
         }
       }
     }

@@ -9,7 +9,7 @@ import cats.implicits._
 import io.circe.generic.auto._
 import de.heikoseeberger.akkahttpcirce.FailFastCirceSupport._
 
-trait Service[F[_]] {
+trait AccountService[F[_]] {
   def openAccount(accountId: AccountId, checkBalance: Boolean): F[Either[String, Unit]]
 }
 
@@ -20,7 +20,7 @@ object AccountRoute {
   implicit val openAccountRequestDecoder =
     io.circe.generic.semiauto.deriveDecoder[OpenAccountRequest]
 
-  def apply[F[_]: Effect](service: Service[F]): Route =
+  def apply[F[_]: Effect](service: AccountService[F]): Route =
     pathPrefix("accounts") {
       (post & entity(as[OpenAccountRequest])) {
         case OpenAccountRequest(accountId, checkBalance) =>

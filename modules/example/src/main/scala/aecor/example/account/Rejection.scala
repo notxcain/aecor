@@ -26,5 +26,4 @@ trait RejectionInstances {
 
   implicit val rejectionDecoder: Decoder[Rejection] =
     Decoder.fromTry(Unpickle[Rejection].tryFromBytes)
-
 }

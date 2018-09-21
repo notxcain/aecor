@@ -2,7 +2,6 @@ package aecor.tests.e2e
 
 import aecor.data._
 import aecor.data.Folded.syntax._
-import aecor.data.next._
 import aecor.macros.boopickleWireProtocol
 import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
 import aecor.tests.PersistentEncoderCirce
@@ -10,7 +9,7 @@ import aecor.tests.e2e.CounterEvent.{CounterDecremented, CounterIncremented}
 import io.circe.generic.auto._
 import cats.implicits._
 import boopickle.Default._
-import cats.Monad
+import cats.{Eq, Monad}
 
 @boopickleWireProtocol
 trait Counter[F[_]] {
@@ -23,11 +22,12 @@ object Counter
 
 final case class CounterId(value: String) extends AnyVal
 
-sealed trait CounterEvent
+sealed abstract class CounterEvent extends Product with Serializable
 object CounterEvent {
   case object CounterIncremented extends CounterEvent
   case object CounterDecremented extends CounterEvent
   val tag: EventTag = EventTag("Counter")
+  implicit val eq: Eq[CounterEvent] = Eq.fromUniversalEquals
   implicit def encoder: PersistentEncoder[CounterEvent] =
     PersistentEncoderCirce.circePersistentEncoder[CounterEvent]
   implicit def decoder: PersistentDecoder[CounterEvent] =

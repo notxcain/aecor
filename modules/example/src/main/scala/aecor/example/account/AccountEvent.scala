@@ -6,6 +6,7 @@ import aecor.example.persistentEncoderUtil
 import io.circe.generic.auto._
 import io.circe.java8.time._
 import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
+import io.circe.Encoder
 
 sealed abstract class AccountEvent extends Product with Serializable
 
@@ -19,8 +20,8 @@ object AccountEvent {
       extends AccountEvent
 
   implicit val encoder: PersistentEncoder[Enriched[Timestamp, AccountEvent]] =
-    persistentEncoderUtil.circePersistentEncoder(io.circe.generic.semiauto.deriveEncoder[Enriched[Timestamp, AccountEvent]])
+    persistentEncoderUtil.circePersistentEncoder(Encoder[Enriched[Timestamp, AccountEvent]])
 
   implicit val decoder: PersistentDecoder[Enriched[Timestamp, AccountEvent]] =
-    persistentEncoderUtil.circePersistentDecoder(io.circe.generic.semiauto.deriveDecoder[Enriched[Timestamp, AccountEvent]])
+    persistentEncoderUtil.circePersistentDecoder[Enriched[Timestamp, AccountEvent]]
 }

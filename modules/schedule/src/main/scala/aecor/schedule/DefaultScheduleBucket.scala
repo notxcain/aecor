@@ -10,6 +10,7 @@ import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import aecor.schedule.ScheduleState._
 import aecor.schedule.serialization.protobuf.msg
 import cats.implicits._
+import cats.kernel.Eq
 import cats.{Functor, Monad}
 
 import scala.util.{Failure, Try}
@@ -76,6 +77,8 @@ object ScheduleEvent extends ScheduleEventInstances {
 
   final case class ScheduleEntryFired(entryId: String, correlationId: String, timestamp: Instant)
       extends ScheduleEvent
+
+  implicit val eq: Eq[ScheduleEvent] = Eq.fromUniversalEquals
 }
 
 trait ScheduleEventInstances {

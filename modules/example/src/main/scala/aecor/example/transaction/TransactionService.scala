@@ -19,7 +19,7 @@ import io.circe.generic.decoding.DerivedDecoder
 import shapeless.Lazy
 
 
-trait Service[F[_]] {
+trait TransactionService[F[_]] {
   def authorizePayment(transactionId: TransactionId,
                        request: CreateTransactionRequest): F[TransactionRoute.ApiResult]
 }
@@ -47,7 +47,7 @@ object TransactionRoute {
     implicit A: Lazy[DerivedDecoder[A]]
   ): Decoder[A] = A.value
 
-  def apply[F[_]: Effect](api: Service[F]): Route =
+  def apply[F[_]: Effect](api: TransactionService[F]): Route =
     (put & pathPrefix("transactions" / Segment.map(TransactionId(_)))) { transactionId =>
       entity(as[CreateTransactionRequest]) { request =>
         complete {

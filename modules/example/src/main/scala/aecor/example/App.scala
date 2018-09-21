@@ -79,8 +79,8 @@ object App extends IOApp {
       accounts: Accounts[IO],
       transactions: Transactions[IO]
     ): IO[Http.ServerBinding] = {
-        val transactionService = transaction.DefaultService(transactions)
-        val accountService = account.DefaultService(accounts)
+        val transactionService: transaction.TransactionService[IO] = transaction.DefaultTransactionService(transactions)
+        val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
 
         val route: Route = path("check") {
           get {

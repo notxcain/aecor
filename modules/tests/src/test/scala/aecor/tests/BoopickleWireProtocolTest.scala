@@ -12,10 +12,9 @@ import io.aecor.liberator.syntax._
 import java.util.UUID
 import BoopickleWireProtocolTest._
 import boopickle.Default._
+
 object BoopickleWireProtocolTest {
-
   final case class FooId(value: UUID) extends AnyVal
-
 }
 
 class BoopickleWireProtocolTest extends FunSuite with Matchers {
@@ -27,7 +26,7 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
     def id: F[FooId]
   }
 
-  val protocol = Foo.aecorWireProtocol
+  val protocol = WireProtocol[Foo]
 
   def server[M[_[_]], F[_]: Applicative](
     actions: M[F]

@@ -1,7 +1,6 @@
 package aecor.tests
 
 import aecor.data._
-import aecor.data.next.{EventsourcedBehavior, MonadActionBase, MonadActionReject}
 import aecor.tests.e2e.CounterEvent.{CounterDecremented, CounterIncremented}
 import aecor.tests.e2e.{Counter, CounterEvent, CounterState}
 import cats.Id
@@ -14,9 +13,9 @@ class EventsourcedBehaviorTSpec extends FlatSpec with Matchers {
 
     import F._
 
-    def increment: F[Long] = append(CounterIncremented) >> read.map(_.fold(0L)(_.value))
+    def increment: F[Long] = append(CounterIncremented) >> value
 
-    def decrement: F[Long] = append(CounterDecremented) >> read.map(_.fold(0L)(_.value))
+    def decrement: F[Long] = append(CounterDecremented) >> value
 
     def value: F[Long] = read.map(_.fold(0l)(_.value))
   }

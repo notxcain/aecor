@@ -220,6 +220,10 @@ lazy val testingSettings = Seq(
     "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
   ),
   libraryDependencies ++= Seq(
+    "io.circe" %% "circe-core" % circeVersion,
+    "io.circe" %% "circe-generic" % circeVersion,
+    "io.circe" %% "circe-parser" % circeVersion,
+    "io.circe" %% "circe-java8" % circeVersion,
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,

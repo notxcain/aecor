@@ -2,7 +2,7 @@ package aecor.tests.e2e
 
 import aecor.data.Folded.syntax._
 import aecor.data._
-import aecor.data.next.EventsourcedBehavior
+import aecor.data.EventsourcedBehavior
 import aecor.macros.boopickleWireProtocol
 import boopickle.Default._
 import aecor.tests.e2e.notification.NotificationEvent.{NotificationCreated, NotificationSent}
@@ -37,6 +37,6 @@ object notification {
     override def markAsSent: F[Unit] = append(NotificationSent)
   }
 
-  def behavior[F[_]: Monad]: EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent, Void] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent] =
     EventsourcedBehavior(notificationActions, NotificationState(false), _.applyEvent(_))
 }

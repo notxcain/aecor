@@ -16,14 +16,23 @@ import scala.concurrent.duration._
 
 object AkkaPersistenceRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""
-        cluster.system-name=test
-        cluster.port = 51000
-        aecor.generic-akka-runtime.idle-timeout = 1s
-        cluster {
-          seed-nodes = [
-            "akka.tcp://test@127.0.0.1:51000"
-          ]
+        akka {
+          cluster {
+            seed-nodes = [
+              "akka.tcp://test@127.0.0.1:52000"
+            ]
+          }
+          actor.provider = cluster
+          remote {
+            netty.tcp {
+              hostname = 127.0.0.1
+              port = 52000
+              bind.hostname = "0.0.0.0"
+              bind.port = 52000
+            }
+          }
         }
+        aecor.generic-akka-runtime.idle-timeout = 1s
      """).withFallback(CassandraLifecycle.config).withFallback(ConfigFactory.load())
 }
 
@@ -51,7 +60,7 @@ class AkkaPersistenceRuntimeSpec
     val deployCounters: IO[CounterId => Counter[IO]] =
       runtime.deploy(
         "Counter",
-        CounterBehavior.instance.lift[IO],
+        CounterBehavior.instance[IO],
         Tagging.const[CounterId](CounterEvent.tag)
       )
     val program = for {

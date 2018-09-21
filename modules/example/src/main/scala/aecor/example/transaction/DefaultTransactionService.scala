@@ -6,7 +6,7 @@ import cats.effect.{Concurrent, Timer}
 import cats.implicits._
 import scala.concurrent.duration._
 
-class DefaultService[F[_]](transactions: Transactions[F])(implicit F: Concurrent[F], timer: Timer[F]) extends Service[F] {
+class DefaultTransactionService[F[_]](transactions: Transactions[F])(implicit F: Concurrent[F], timer: Timer[F]) extends TransactionService[F] {
 
   def authorizePayment(transactionId: TransactionId,
                        request: CreateTransactionRequest): F[TransactionRoute.ApiResult] =
@@ -38,7 +38,7 @@ class DefaultService[F[_]](transactions: Transactions[F])(implicit F: Concurrent
     }
 }
 
-object DefaultService {
-  def apply[F[_]](transactions: Transactions[F])(implicit F: Concurrent[F], timer: Timer[F]): Service[F]=
-    new DefaultService[F](transactions)
+object DefaultTransactionService {
+  def apply[F[_]](transactions: Transactions[F])(implicit F: Concurrent[F], timer: Timer[F]): TransactionService[F]=
+    new DefaultTransactionService[F](transactions)
 }

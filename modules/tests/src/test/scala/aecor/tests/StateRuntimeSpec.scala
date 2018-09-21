@@ -1,19 +1,19 @@
 package aecor.tests
 
 import aecor.testkit.StateRuntime
-import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
-import aecor.tests.e2e.{ Counter, CounterBehavior, CounterEvent }
-import cats.data.StateT
+import aecor.tests.e2e.CounterEvent.{CounterDecremented, CounterIncremented}
+import aecor.tests.e2e.{Counter, CounterBehavior, CounterEvent}
+import cats.data.{Chain, StateT}
 import cats.implicits._
-import org.scalatest.{ FunSuite, Matchers }
+import org.scalatest.FunSuite
 
-class StateRuntimeSpec extends FunSuite with Matchers {
+class StateRuntimeSpec extends FunSuite with StrictCatsEquality {
 
-  val counter: Counter[StateT[Either[Throwable, ?], Vector[CounterEvent], ?]] =
+  val counter: Counter[StateT[Either[Throwable, ?], Chain[CounterEvent], ?]] =
     StateRuntime.single(CounterBehavior.instance[Either[Throwable, ?]])
 
   val counters
-    : String => Counter[StateT[Either[Throwable, ?], Map[String, Vector[CounterEvent]], ?]] =
+    : String => Counter[StateT[Either[Throwable, ?], Map[String, Chain[CounterEvent]], ?]] =
     StateRuntime.route(counter)
 
   test("Shared runtime should execute all commands against shared sequence of events") {
@@ -23,10 +23,10 @@ class StateRuntimeSpec extends FunSuite with Matchers {
       x <- counter.decrement
     } yield x
 
-    val Right((state, result)) = program.run(Vector.empty)
+    val Right((state, result)) = program.run(Chain.empty)
 
-    state shouldBe Vector(CounterIncremented, CounterIncremented, CounterDecremented)
-    result shouldBe 1L
+    assert(state === Chain(CounterIncremented, CounterIncremented, CounterDecremented))
+    assert(result == 1L)
   }
 
   test(
@@ -41,11 +41,9 @@ class StateRuntimeSpec extends FunSuite with Matchers {
 
     val Right((state, result)) = program.run(Map.empty)
 
-    state shouldBe Map(
-      "1" -> Vector(CounterIncremented, CounterDecremented),
-      "2" -> Vector(CounterIncremented)
-    )
 
-    result shouldBe 0L
+    assert(state("1") === Chain(CounterIncremented, CounterDecremented))
+    assert(state("2") === Chain(CounterIncremented))
+    assert(result == 0L)
   }
 }
