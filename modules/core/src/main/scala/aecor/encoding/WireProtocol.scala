@@ -1,16 +1,14 @@
 package aecor.encoding
 
 import java.nio.ByteBuffer
+import java.nio.charset.StandardCharsets
 
-import io.aecor.liberator.Invocation
-import aecor.data.{EitherK, PairE}
+import aecor.data.PairE
 import aecor.encoding.WireProtocol.Decoder.DecodingResult
-import aecor.encoding.WireProtocol.{Decoder, Encoded, Encoder}
-import cats.data.EitherT
-import cats.~>
-import io.aecor.liberator.ReifiedInvocations
+import aecor.encoding.WireProtocol.{Decoder, Encoder}
 import cats.implicits._
-import io.aecor.liberator.syntax._
+import io.aecor.liberator.{Invocation, ReifiedInvocations}
+
 import scala.util.{Failure, Success, Try}
 
 trait WireProtocol[M[_[_]]] extends ReifiedInvocations[M] {
@@ -19,6 +17,7 @@ trait WireProtocol[M[_[_]]] extends ReifiedInvocations[M] {
 }
 
 object WireProtocol {
+  def apply[M[_[_]]](implicit M: WireProtocol[M]): WireProtocol[M] = M
   type Encoded[A] = (ByteBuffer, Decoder[A])
 
   trait Encoder[A] {
@@ -29,9 +28,8 @@ object WireProtocol {
     def instance[A](f: A => ByteBuffer): Encoder[A] = new Encoder[A] {
       override def encode(a: A): ByteBuffer = f(a)
     }
-    implicit val voidEncoder: Encoder[Void] = new Encoder[Void] {
-      override def encode(a: Void): ByteBuffer = a.asInstanceOf[ByteBuffer]
-    }
+    implicit val voidEncoder: Encoder[Nothing] = null
+    implicit val stringEncoder: Encoder[String] = Encoder.instance[String](s => ByteBuffer.wrap(s.getBytes(StandardCharsets.UTF_8)))
   }
 
   trait Decoder[A] {
@@ -39,6 +37,11 @@ object WireProtocol {
   }
 
   object Decoder {
+    def instance[A](f: ByteBuffer => DecodingResult[A]): Decoder[A] = new Decoder[A] {
+      override def decode(
+        bytes: ByteBuffer
+      ): DecodingResult[A] = f(bytes)
+    }
     final case class DecodingFailure(message: String, underlyingException: Option[Throwable] = None)
         extends RuntimeException(message, underlyingException.orNull)
     type DecodingResult[A] = Either[DecodingFailure, A]
@@ -56,94 +59,12 @@ object WireProtocol {
           case Success(value)     => Right(value)
         }
     }
-    implicit val nothingDecoder: Decoder[Void] = new Decoder[Void] {
+    implicit val nothingDecoder: Decoder[Nothing] = new Decoder[Nothing] {
       override def decode(
         bytes: ByteBuffer
-      ): DecodingResult[Void] = decode(bytes)
+      ): DecodingResult[Nothing] = DecodingFailure("Impossible").asLeft
     }
+    implicit val stringDecoder: Decoder[String] = Decoder.instance[String](b => Right(new String(b.array(), StandardCharsets.UTF_8)))
   }
 }
 
-trait WireProtocolInstances {
-  implicit def wireProtocol[M[_[_]], F[_], R](
-                                               implicit M: WireProtocol[M],
-                                               rdec: Decoder[R],
-                                               renc: Encoder[R]
-                                             ): WireProtocol[EitherK[M, ?[_], R]] =
-    new WireProtocol[EitherK[M, ?[_], R]] {
-
-      override def mapK[G[_], H[_]](mf: EitherK[M, G, R], fg: ~>[G, H]): EitherK[M, H, R] =
-        EitherK(mf.value.mapK(Lambda[EitherT[G, R, ?] ~> EitherT[H, R, ?]](_.mapK(fg))))
-
-      override def invocations: EitherK[M, Invocation[EitherK[M, ?[_], R], ?], R] =
-        EitherK {
-          M.mapInvocations(
-            new (Invocation[M, ?] ~> EitherT[Invocation[EitherK[M, ?[_], R], ?], R, ?]) {
-              override def apply[A](
-                                     fa: Invocation[M, A]
-                                   ): EitherT[Invocation[EitherK[M, ?[_], R], ?], R, A] =
-                EitherT {
-                  new Invocation[EitherK[M, ?[_], R], Either[R, A]] {
-                    override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
-                      fa.invoke(target.value).value
-                  }
-                }
-            }
-          )
-        }
-
-      override def encoder: EitherK[M, Encoded, R] =
-        EitherK[M, Encoded, R] {
-          M.mapInvocations(new (Invocation[M, ?] ~> EitherT[Encoded, R, ?]) {
-            override def apply[A](ma: Invocation[M, A]): EitherT[Encoded, R, A] =
-              EitherT[Encoded, R, A] {
-                val (bytes, decM) = ma.invoke(M.encoder)
-                val dec = new Decoder[Either[R, A]] {
-                  override def decode(bytes: ByteBuffer): DecodingResult[Either[R, A]] = {
-                    val success = bytes.get() == 1
-                    if (success) {
-                      decM.decode(bytes.slice()).map(_.asRight[R])
-                    } else {
-                      rdec.decode(bytes.slice()).map(_.asLeft[A])
-                    }
-                  }
-                }
-                (bytes, dec)
-              }
-          })
-        }
-      override def decoder
-      : Decoder[PairE[Invocation[EitherK[M, ?[_], R], ?], WireProtocol.Encoder]] =
-        new Decoder[PairE[Invocation[EitherK[M, ?[_], R], ?], WireProtocol.Encoder]] {
-          override def decode(
-                               bytes: ByteBuffer
-                             ): DecodingResult[PairE[Invocation[EitherK[M, ?[_], R], ?], WireProtocol.Encoder]] =
-            M.decoder.decode(bytes).map { p =>
-              val (invocation, encoder) = (p.first, p.second)
-
-              val invocationR =
-                new Invocation[EitherK[M, ?[_], R], Either[R, p.A]] {
-                  override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, p.A]] =
-                    invocation.invoke(target.value).value
-                }
-
-              val encoderR = Encoder.instance[Either[R, p.A]] {
-                case Right(a) =>
-                  val bytes = encoder.encode(a)
-                  val out = ByteBuffer.allocate(1 + bytes.limit())
-                  out.put(1: Byte)
-                  out.put(bytes)
-                  out
-                case Left(r) =>
-                  val bytes = renc.encode(r)
-                  val out = ByteBuffer.allocate(1 + bytes.limit())
-                  out.put(0: Byte)
-                  out.put(bytes)
-                  out
-              }
-
-              PairE(invocationR, encoderR)
-            }
-        }
-    }
-}

@@ -5,8 +5,7 @@ import pl.project13.scala.sbt._
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    scalaVersion := "2.11.12",
-    crossScalaVersions := Seq("2.11.12", "2.12.4")
+    scalaVersion := "2.12.4"
   )
 )
 
@@ -116,7 +115,6 @@ lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
 lazy val tests = aecorModule("tests", "Aecor Tests")
   .dependsOn(
     core,
-    example,
     schedule,
     testKit,
     akkaPersistence,

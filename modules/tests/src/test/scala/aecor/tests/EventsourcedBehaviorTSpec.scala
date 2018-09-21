@@ -1,6 +1,6 @@
 package aecor.tests
 
-import aecor.data.{ActionT, EventsourcedBehavior, MonadActionBase, next}
+import aecor.data._
 import aecor.data.next.{EventsourcedBehavior, MonadActionBase, MonadActionReject}
 import aecor.tests.e2e.CounterEvent.{CounterDecremented, CounterIncremented}
 import aecor.tests.e2e.{Counter, CounterEvent, CounterState}
@@ -27,9 +27,9 @@ class EventsourcedBehaviorTSpec extends FlatSpec with Matchers {
   }
 
   "EventsourcedBehavior.optional" should "correctly use init function applying events" in {
-    val behavior: EventsourcedBehavior[Counter, Id, Option[CounterState], CounterEvent, Void] =
+    val behavior: EventsourcedBehavior[Counter, Id, Option[CounterState], CounterEvent] =
       EventsourcedBehavior
-        .optional(CounterOptionalActions[ActionT[Id, Option[CounterState], CounterEvent, Void, ?]], e => CounterState(0L).applyEvent(e), _.applyEvent(_))
+        .optional(CounterOptionalActions[ActionN[Id, Option[CounterState], CounterEvent, ?]], e => CounterState(0L).applyEvent(e), _.applyEvent(_))
 
     behavior
       .update(behavior.initial, CounterEvent.CounterIncremented)

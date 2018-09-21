@@ -7,15 +7,12 @@ import java.time.{Duration, Instant}
 import java.util.UUID
 
 import aecor.data.Folded.{Impossible, Next}
-import aecor.data.{ActionRun, ActionT, Folded, Tagging}
-import aecor.data.next.ActionT.ActionFailure
-import aecor.encoding.WireProtocol.Encoder
-import io.aecor.liberator.Invocation
-import aecor.util.effect._
+import aecor.data._
 import aecor.encoding.{KeyDecoder, WireProtocol}
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{CommandResult, HandleCommand}
 import aecor.runtime.akkapersistence.SnapshotPolicy.{EachNumberOfEvents, Never}
 import aecor.runtime.akkapersistence.serialization.{Message, PersistentDecoder, PersistentEncoder, PersistentRepr}
+import aecor.util.effect._
 import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
@@ -24,6 +21,7 @@ import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 import cats.data.Chain
 import cats.effect.Effect
 import cats.implicits._
+import io.aecor.liberator.Invocation
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Left, Right}
@@ -32,9 +30,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[M[_[_]], G[_], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
+  def props[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    actions: M[G],
+    actions: M[ActionN[F, State, Event, ?]],
     initialState: State,
     updateState: (State, Event) => Folded[State],
     snapshotPolicy: SnapshotPolicy[State],
@@ -42,7 +40,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     idleTimeout: FiniteDuration,
     journalPluginId: String,
     snapshotPluginId: String
-  )(implicit M: WireProtocol[M], G: ActionRun[G, F, State, Event]): Props =
+  )(implicit M: WireProtocol[M]): Props =
     Props(
       new AkkaPersistenceRuntimeActor(
         entityName,
@@ -71,9 +69,9 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   * @param snapshotPolicy snapshot policy to use
   * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], G[_], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  actions: M[G],
+  actions: M[ActionN[F, State, Event, ?]],
   initialState: State,
   updateState: (State, Event) => Folded[State],
   snapshotPolicy: SnapshotPolicy[State],
@@ -81,7 +79,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], G[_], 
   idleTimeout: FiniteDuration,
   override val journalPluginId: String,
   override val snapshotPluginId: String
-)(implicit M: WireProtocol[M], F: Effect[F], G: ActionRun[G, F, State, Event])
+)(implicit M: WireProtocol[M], F: Effect[F])
     extends PersistentActor
     with ActorLogging
     with Stash {
@@ -181,8 +179,8 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], G[_], 
   def performInvocation[A](invocation: Invocation[M, A],
                            resultEncoder: WireProtocol.Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
-    G.run(invocation
-      .invoke(actions))(state, updateState)
+    invocation
+      .invoke(actions).run(state, updateState)
       .flatMap {
         case Next((events, result)) =>
           F.delay(log.info(

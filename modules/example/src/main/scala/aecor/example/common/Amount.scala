@@ -1,4 +1,4 @@
-package aecor.example.domain
+package aecor.example.common
 
 case class Amount(value: BigDecimal) extends AnyVal {
   def >(other: Amount): Boolean = value > other.value

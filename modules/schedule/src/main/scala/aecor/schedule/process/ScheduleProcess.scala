@@ -8,7 +8,6 @@ import aecor.runtime.KeyValueStore
 import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import aecor.schedule.{ScheduleBucket, ScheduleBucketId, ScheduleEntryRepository}
 import cats.Monad
-import cats.data.EitherT
 import cats.implicits._
 
 import scala.concurrent.duration.FiniteDuration
@@ -20,7 +19,7 @@ object ScheduleProcess {
                          offsetStore: KeyValueStore[F, TagConsumer, LocalDateTime],
                          eventualConsistencyDelay: FiniteDuration,
                          repository: ScheduleEntryRepository[F],
-                         buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]],
+                         buckets: ScheduleBucketId => ScheduleBucket[F],
                          clock: F[LocalDateTime],
                          parallelism: Int): F[Unit] = {
     val scheduleEntriesTag = EventTag("io.aecor.ScheduleDueEntries")
@@ -34,7 +33,7 @@ object ScheduleProcess {
             _ <- repository.insertScheduleEntry(id, entryId, dueDate)
             now <- clock
             _ <- if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
-                buckets(id).fireEntry(entryId).value.void
+                buckets(id).fireEntry(entryId)
               } else {
                 ().pure[F]
               }
@@ -49,7 +48,7 @@ object ScheduleProcess {
           if (entry.fired)
             ().pure[F]
           else
-            buckets(entry.bucketId).fireEntry(entry.entryId).value.void
+            buckets(entry.bucketId).fireEntry(entry.entryId)
       }
 
     val loadOffset: F[LocalDateTime] =

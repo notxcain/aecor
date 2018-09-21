@@ -14,9 +14,7 @@ import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.persistence.cassandra.{CassandraSessionInitSerialization, DefaultJournalCassandraSession}
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Sink, Source}
-import cats.data.ReaderT
 import cats.effect._
-import cats.effect.concurrent.Deferred
 import cats.implicits._
 
 import scala.concurrent.duration._

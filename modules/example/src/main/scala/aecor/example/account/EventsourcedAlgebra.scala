@@ -1,15 +1,16 @@
-package aecor.example.domain.account
+package aecor.example.account
 
-import aecor.data.{EventsourcedBehavior, Folded, MonadActionReject}
 import aecor.data.Folded.syntax._
-import aecor.example.domain.Amount
-import aecor.example.domain.account.Account.{AccountDoesNotExist, InsufficientFunds}
-import aecor.example.domain.account.AccountEvent._
-import aecor.example.domain.account.EventsourcedAccount.AccountState
+import aecor.data._
+import aecor.example.account.AccountEvent._
+import aecor.example.account.EventsourcedAlgebra.AccountState
+import Rejection._
+import aecor.example.common.Amount
 import cats.Monad
+import cats.data.EitherT
 import cats.implicits._
 
-final class EventsourcedAccount[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Account.Rejection]) extends Account[F] {
+final class EventsourcedAlgebra[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]) extends Algebra[F] {
 
   import F._
 
@@ -20,7 +21,7 @@ final class EventsourcedAccount[F[_]](implicit F: MonadActionReject[F, Option[Ac
       case None =>
         append(AccountOpened(checkBalance))
       case Some(_) =>
-        reject(Account.AccountExists)
+        reject(AccountExists)
     }
 
   override def credit(
@@ -35,7 +36,7 @@ final class EventsourcedAccount[F[_]](implicit F: MonadActionReject[F, Option[Ac
           append(AccountCredited(transactionId, amount))
         }
       case None =>
-        reject(Account.AccountDoesNotExist)
+        reject(AccountDoesNotExist)
     }
 
   override def debit(
@@ -58,11 +59,20 @@ final class EventsourcedAccount[F[_]](implicit F: MonadActionReject[F, Option[Ac
     }
 }
 
-object EventsourcedAccount {
+object EventsourcedAlgebra {
 
-  def behavior[F[_]: Monad]: EventsourcedBehavior[Account, F, Option[AccountState], AccountEvent, Account.Rejection] =
+  def apply[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]): Algebra[F] = new EventsourcedAlgebra
+
+  def actions[F[_]: Monad]: EitherK[Algebra, ActionN[F, Option[AccountState], AccountEvent, ?], Rejection] =
+    EitherK(
+      EventsourcedAlgebra[EitherT[ActionN[F, Option[AccountState], AccountEvent, ?], Rejection, ?]])
+
+  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], Rejection], F, Option[AccountState], AccountEvent] =
     EventsourcedBehavior
-      .optional(new EventsourcedAccount, AccountState.fromEvent, _.applyEvent(_))
+      .optional[EitherK[Algebra, ?[_], Rejection], F, AccountState, AccountEvent](
+        actions[F], AccountState.fromEvent, _.applyEvent(_))
+
+  val tagging: Tagging[AccountId] = Tagging.const[AccountId](EventTag("Account"))
 
   final val rootAccountId: AccountId = AccountId("ROOT")
   final case class AccountState(balance: Amount,

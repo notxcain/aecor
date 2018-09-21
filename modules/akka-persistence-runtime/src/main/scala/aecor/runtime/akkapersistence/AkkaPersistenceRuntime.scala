@@ -2,7 +2,7 @@ package aecor.runtime.akkapersistence
 
 import java.nio.ByteBuffer
 
-import aecor.data.{ActionRun, Folded, Tagging}
+import aecor.data.{EventsourcedBehavior, Tagging}
 import aecor.encoding.WireProtocol.Encoded
 import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
@@ -30,22 +30,20 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]], G[_], F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]], F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
     typeName: String,
-    actions: M[G],
-    initialState: State,
-    updateState: (State, Event) => Folded[State],
+    behavior: EventsourcedBehavior[M, F, State, Event],
     tagging: Tagging[Key],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Effect[F], G: ActionRun[G, F, State, Event]): F[Key => M[F]] =
+  )(implicit M: WireProtocol[M], F: Effect[F]): F[Key => M[F]] =
     F.delay {
       val props =
         AkkaPersistenceRuntimeActor.props(
           typeName,
-          actions,
-          initialState,
-          updateState,
+          behavior.actions,
+          behavior.initial,
+          behavior.update,
           snapshotPolicy,
           tagging,
           settings.idleTimeout,

@@ -8,7 +8,7 @@ import cats.data.{EitherT, StateT}
 import cats.effect.{IO, Sync}
 import cats.implicits._
 import cats.mtl.MonadState
-import cats.{FlatMap, Monad, MonadError, ~>}
+import cats.{FlatMap, Monad, ~>}
 import io.aecor.liberator.{FunctorK, ReifiedInvocations}
 import monocle.Lens
 
@@ -16,11 +16,11 @@ import scala.collection.immutable._
 
 object E2eSupport {
 
-  final def behavior[M[_[_]]: FunctorK, F[_]: Sync, S, E, R, K](
-    behavior: EventsourcedBehavior[M, F, S, E, R],
+  final def behavior[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
+    behavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E]
-  )(implicit M: ReifiedInvocations[M], F: MonadError[F, BehaviorFailure]): K => F[EitherK[M, F, R]] =
-    Eventsourced[M, F, S, E, R, K](behavior, journal)
+  )(implicit M: ReifiedInvocations[M]): K => F[M[F]] =
+    Eventsourced[M, F, S, E, K](behavior, journal)
 
   final class Runtime[F[_]] {
     def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations, R](

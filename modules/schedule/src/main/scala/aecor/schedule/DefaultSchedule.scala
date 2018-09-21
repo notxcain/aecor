@@ -11,13 +11,12 @@ import akka.stream.scaladsl.Source
 import cats.effect.Effect
 import cats.implicits._
 import aecor.util.effect._
-import cats.data.EitherT
 
 import scala.concurrent.duration.FiniteDuration
 
 private[schedule] class DefaultSchedule[F[_]: Effect](
   clock: ClockT[F],
-  buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]],
+  buckets: ScheduleBucketId => ScheduleBucket[F],
   bucketLength: FiniteDuration,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],
   eventTag: EventTag
@@ -30,7 +29,7 @@ private[schedule] class DefaultSchedule[F[_]: Effect](
       zone <- clock.zone
       scheduleBucket = dueDate.atZone(zone).toEpochSecond / bucketLength.toSeconds
       _ <- buckets(ScheduleBucketId(scheduleName, scheduleBucket.toString))
-            .addScheduleEntry(entryId, correlationId, dueDate).value
+            .addScheduleEntry(entryId, correlationId, dueDate)
     } yield ()
 
   override def committableScheduleEvents(

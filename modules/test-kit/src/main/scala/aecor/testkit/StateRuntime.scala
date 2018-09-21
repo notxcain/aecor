@@ -1,6 +1,6 @@
 package aecor.testkit
 
-import aecor.data.EventsourcedBehavior
+import aecor.data.{EventsourcedBehavior, Folded}
 import io.aecor.liberator.Invocation
 import aecor.data.Folded.{Impossible, Next}
 import cats.data._
@@ -16,24 +16,28 @@ object StateRuntime {
     *
     */
   def single[M[_[_]], F[_], S, E, R](
-    behavior: EventsourcedBehavior[M, F, S, E, R]
-  )(implicit F: MonadError[F, Throwable], M: ReifiedInvocations[M]): M[StateT[F, Vector[E], ?]] =
+    behavior: EventsourcedBehavior[M, F, S, E]
+  )(implicit F: MonadError[F, Throwable], M: ReifiedInvocations[M]): M[StateT[F, Chain[E], ?]] =
     M.mapInvocations {
-      new (Invocation[M, ?] ~> StateT[F, Vector[E], ?]) {
-        override def apply[A](op: Invocation[M, A]): StateT[F, Vector[E], A] =
+      new (Invocation[M, ?] ~> StateT[F, Chain[E], ?]) {
+        override def apply[A](op: Invocation[M, A]): StateT[F, Chain[E], A] =
           for {
-            events <- StateT.get[F, Vector[E]]
+            events <- StateT.get[F, Chain[E]]
             foldedState = events.foldM(behavior.initial)(behavior.update)
             result <- foldedState match {
                        case Next(state) =>
                          StateT.liftF(op.invoke(behavior.actions).run(state, behavior.update)).flatMap {
-                           case (es, r) =>
+                           case Folded.Next((es, r)) =>
                              StateT
-                               .modify[F, Vector[E]](_ ++ es)
+                               .modify[F, Chain[E]](_ ++ es)
                                .map(_ => r)
+                           case Folded.Impossible =>
+                             StateT.liftF[F, Chain[E], A](
+                               F.raiseError(new IllegalStateException(s"Failed to fold $events"))
+                             )
                          }
                        case Impossible =>
-                         StateT.liftF[F, Vector[E], A](
+                         StateT.liftF[F, Chain[E], A](
                            F.raiseError(new IllegalStateException(s"Failed to fold $events"))
                          )
                      }
@@ -51,10 +55,10 @@ object StateRuntime {
     *
     */
   def route[M[_[_]], F[_]: Functor, E, I](
-    behavior: M[StateT[F, Vector[E], ?]]
-  )(implicit M: FunctorK[M]): I => M[StateT[F, Map[I, Vector[E]], ?]] = { i =>
-    val lift = Lambda[StateT[F, Vector[E], ?] ~> StateT[F, Map[I, Vector[E]], ?]](
-      _.transformS(_.getOrElse(i, Vector.empty[E]), _.updated(i, _))
+    behavior: M[StateT[F, Chain[E], ?]]
+  )(implicit M: FunctorK[M]): I => M[StateT[F, Map[I, Chain[E]], ?]] = { i =>
+    val lift = Lambda[StateT[F, Chain[E], ?] ~> StateT[F, Map[I, Chain[E]], ?]](
+      _.transformS(_.getOrElse(i, Chain.empty[E]), _.updated(i, _))
     )
     M.mapK(behavior, lift)
   }

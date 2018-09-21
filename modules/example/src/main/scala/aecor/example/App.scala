@@ -3,31 +3,22 @@ package aecor.example
 import java.time.Clock
 
 import aecor.data._
-import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.example.account.http.{Service => AccountService}
-import aecor.example.domain._
-import aecor.example.domain.account.{ Account, AccountId, EventsourcedAccount }
-import aecor.example.domain.transaction.EventsourcedTransactionAggregate.tagging
-import aecor.example.domain.transaction.{
-  EventsourcedTransactionAggregate,
-  TransactionAggregate,
-  TransactionEvent,
-  TransactionId
-}
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
+import aecor.distributedprocessing.{AkkaStreamProcess, DistributedProcessing}
+import aecor.example.account.{AccountRoute, Accounts}
+import aecor.example.common.Timestamp
+import aecor.example.process.TransactionProcessor
+import aecor.example.transaction.transaction.Transactions
+import aecor.example.transaction.{TransactionEvent, TransactionId, TransactionRoute}
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
+import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
-import akka.event.Logging
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives.{ complete, get, path, _ }
+import akka.http.scaladsl.server.Directives.{complete, get, path, _}
 import akka.http.scaladsl.server.Route
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ ActorMaterializer, Materializer }
-import cats.data.ReaderT
-import cats.effect.concurrent.Deferred
-import cats.implicits._
+import akka.stream.{ActorMaterializer, Materializer}
 import cats.effect._
 import com.typesafe.config.ConfigFactory
 
@@ -59,38 +50,19 @@ object App extends IOApp {
     val createOffsetStore =
       createCassandraSession.map(CassandraOffsetStore[IO](_, offsetStoreConfig))
 
-    val metaProvider = taskClock.instant.map(Timestamp(_))
-
-    val deployTransactions: IO[TransactionId => TransactionAggregate[IO]] =
-      runtime
-        .deploy(
-          "Transaction",
-          EventsourcedTransactionAggregate.behavior[IO].enrich(metaProvider),
-          tagging
-        )
-
-    val deployAccounts: IO[AccountId => Account[IO]] =
-      runtime
-        .deploy(
-          "Account",
-          EventsourcedAccount.behavior.liftEnrich(metaProvider),
-          Tagging.const[AccountId](EventTag("Account"))
-        )
-
     def startTransactionProcessing(
-      accounts: AccountId => Account[IO],
-      transactions: TransactionId => TransactionAggregate[IO]
+      accounts: Accounts[IO],
+      transactions: Transactions[IO]
     ): IO[DistributedProcessing.KillSwitch[IO]] =
       createOffsetStore.flatMap { offsetStore =>
-
         val processor =
-          TransactionProcess(transactions, accounts)
+          TransactionProcessor(transactions, accounts)
         val journal = runtime
           .journal[TransactionId, Enriched[Timestamp, TransactionEvent]]
           .committable(offsetStore)
         val consumerId = ConsumerId("processing")
         val processes =
-          EventsourcedTransactionAggregate.tagging.tags.map { tag =>
+          transaction.EventsourcedAlgebra.tagging.tags.map { tag =>
             AkkaStreamProcess[IO](
               journal
                 .eventsByTag(tag, consumerId)
@@ -104,31 +76,25 @@ object App extends IOApp {
       }
 
     def startHttpServer(
-      accounts: AccountId => Account[IO],
-      transactions: TransactionId => TransactionAggregate[IO]
-    ): IO[Http.ServerBinding] =
-      IO.fromFuture {
-        IO {
-          val transactionEndpoint =
-            new TransactionEndpoint(transactions, Logging(system, classOf[TransactionEndpoint[IO]]))
-          val accountApi = new AccountService(accounts)
+      accounts: Accounts[IO],
+      transactions: Transactions[IO]
+    ): IO[Http.ServerBinding] = {
+        val transactionService = transaction.DefaultService(transactions)
+        val accountService = account.DefaultService(accounts)
 
-          val route: Route = path("check") {
-            get {
-              complete(StatusCodes.OK)
-            }
-          } ~
-            TransactionEndpoint.route(transactionEndpoint) ~
-            AccountService.route(accountApi)
-
-          Http()
-            .bindAndHandle(route, config.getString("http.interface"), config.getInt("http.port"))
-        }
+        val route: Route = path("check") {
+          get {
+            complete(StatusCodes.OK)
+          }
+        } ~
+          TransactionRoute(transactionService) ~
+          AccountRoute(accountService)
+        HttpServer.start[IO](route, config.getString("http.interface"), config.getInt("http.port"))
       }
 
     for {
-      transactions <- deployTransactions
-      accounts <- deployAccounts
+      transactions <- transaction.deployment.deploy[IO](runtime, taskClock)
+      accounts <- account.deployment.deploy[IO](runtime, taskClock)
       _ <- startTransactionProcessing(accounts, transactions)
       bindResult <- startHttpServer(accounts, transactions)
       _ = system.log.info("Bind result [{}]", bindResult)

@@ -1,9 +1,7 @@
 package aecor.runtime
 
-import aecor.data.{ActionT, EitherK, EventsourcedBehavior, Folded}
+import aecor.data._
 import aecor.data.Folded.{Impossible, Next}
-import aecor.data.ActionT.ActionFailure
-import aecor.data.next._
 import cats.data.{EitherT, NonEmptyChain}
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
@@ -30,6 +28,14 @@ object Eventsourced {
       mfr: K => M[EitherT[F, R, ?]]
     ): Entity[K, M, F, R] =
       new EntityImpl(mfr)
+
+    def fromEitherK[K, M[_[_]]: FunctorK, F[_], R](
+                                              mfr: K => EitherK[M, F, R]
+                                            ): Entity[K, M, F, R] =
+      new Entity[K, M, F, R] {
+        override def apply(k: K): M[λ[x => F[Either[R, x]]]] = mfr(k).unwrap
+      }
+
   }
 
   final case class Snapshotting[F[_], K, S](snapshotEach: Long,
@@ -54,12 +60,12 @@ object Eventsourced {
       }
   }
 
-  def apply[M[_[_]], F[_]: Sync, S, E, R, K](
-    entityBehavior: EventsourcedBehavior[M, F, S, E, R],
+  def apply[M[_[_]], F[_]: Sync, S, E, K](
+    entityBehavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
     snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
-  )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => F[EitherK[M, F, R]] = { key =>
-    val effectiveActions = M.mapK(entityBehavior.actions, ActionT.xmapState[F, S, InternalState[S], E, R]((is: InternalState[S], s: S) => is.copy(entityState = s))(_.entityState))
+  )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => F[M[F]] = { key =>
+    val effectiveActions = M.mapK(entityBehavior.actions, ActionN.xmapState[F, S, InternalState[S], E]((is: InternalState[S], s: S) => is.copy(entityState = s))(_.entityState))
 
     val initialState = InternalState(entityBehavior.initial, 0)
 
@@ -96,12 +102,6 @@ object Eventsourced {
                 }
       } yield out
 
-    def appendEvents(currentVersion: Long, events: NonEmptyChain[E]): F[Boolean] = {
-      for {
-        _ <- journal.append(key, currentVersion + 1, events)
-      } yield (currentVersion to (currentVersion + events.size)).exists(needsSnapshot)
-    }
-
     def updateState(state: InternalState[S], events: NonEmptyChain[E]) = {
       val folded: Folded[(Boolean, InternalState[S])] =
         events.foldM((false, state)) {
@@ -132,25 +132,21 @@ object Eventsourced {
       initialState <- loadState
       ref <- Ref[F].of(initialState)
     } yield
-      EitherK(M.mapInvocations(new (Invocation[M, ?] ~> EitherT[F, R, ?]) {
-        override def apply[A](fa: Invocation[M, A]): EitherT[F, R, A] = EitherT {
+      M.mapInvocations(new (Invocation[M, ?] ~> F) {
+        override def apply[A](fa: Invocation[M, A]): F[A] =
           for {
             current <- ref.get
             action = fa.invoke(effectiveActions)
-            result <- action.flatMap(a => ActionT.read[F, InternalState[S], E, R].map(s => (s, a))).run(current, effectiveUpdate)
-            _ <- result match {
-                  case Left(ActionFailure.ImpossibleFold) =>
-                    F.fail(BehaviorFailure.illegalFold(key.toString))
-                  case Left(ActionFailure.Rejection(r)) =>
-                    r.asLeft[A].pure[F]
-                  case Right((es, (next, a))) =>
+            result <- action.flatMap(a => ActionN.read[F, InternalState[S], E].map(s => (s, a))).run(current, effectiveUpdate)
+            out <- result match {
+                  case Next((es, (next, a))) =>
                     NonEmptyChain
                       .fromChain(es)
-                      .traverse(updateState(current, _).flatMap(ref.set))
-                      .as(a.asRight[R])
+                      .traverse_(updateState(current, _).flatMap(ref.set)).as(a)
+                  case Impossible =>
+                    F.fail[A](BehaviorFailure.illegalFold(key.toString))
                 }
-          } yield null
-        }
-      }))
+          } yield out
+      })
   }
 }

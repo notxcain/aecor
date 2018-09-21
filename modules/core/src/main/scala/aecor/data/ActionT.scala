@@ -1,11 +1,9 @@
 package aecor.data
 
 import aecor.data.ActionT.{ActionFailure, ActionResult}
-import aecor.data.Folded.Impossible
 import cats.data._
 import cats.implicits._
-import cats.{Applicative, Functor, Monad, MonadError, ~>}
-import Folded.syntax._
+import cats.{Applicative, Functor, Monad, ~>}
 
 final class ActionT[F[_], S, E, R, A] private (
   val unsafeRun: (S, (S, E) => Folded[S], Chain[E]) => F[ActionResult[R, E, A]]
@@ -108,8 +106,23 @@ object ActionT {
 
   implicit def monadActionInstance[F[_], S, E, R](
     implicit F: Monad[F]
-  ): MonadAction[ActionT[F, S, E, R, ?], F, S, E, R] =
-    new MonadAction[ActionT[F, S, E, R, ?], F, S, E, R] {
+  ): MonadAction[ActionT[F, S, E, R, ?], F, S, E, R] with ActionRun[ActionT[F, S, E, R, ?], EitherT[F, R, ?], S, E] =
+    new MonadAction[ActionT[F, S, E, R, ?], F, S, E, R] with ActionRun[ActionT[F, S, E, R, ?], EitherT[F, R, ?], S, E] {
+
+      override def run[A](ma: ActionT[F, S, E, R, A])(
+        current: S,
+        update: (S, E) => Folded[S]
+      ): EitherT[F, R, Folded[(Chain[E], A)]] = EitherT {
+        ma.run(current, update).map {
+          case Left(ActionFailure.ImpossibleFold) =>
+            Folded.impossible.asRight[R]
+          case Left(ActionFailure.Rejection(r)) =>
+            r.asLeft
+          case Right(r) =>
+            Folded.next(r).asRight[R]
+        }
+      }
+
       override def read: ActionT[F, S, E, R, S] = ActionT.read
       override def append(e: E, es: E*): ActionT[F, S, E, R, Unit] =
         ActionT.append(NonEmptyChain(e, es: _*))

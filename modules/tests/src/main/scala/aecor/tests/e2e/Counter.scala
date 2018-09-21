@@ -42,8 +42,8 @@ case class CounterState(value: Long) {
 }
 
 object CounterBehavior {
-  def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent, Void] =
-    EventsourcedBehavior(CounterActions[ActionT[F, CounterState, CounterEvent, Void, ?]], CounterState(0), _.applyEvent(_))
+  def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent] =
+    EventsourcedBehavior(CounterActions[ActionN[F, CounterState, CounterEvent, ?]], CounterState(0), _.applyEvent(_))
 }
 
 final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]) extends Counter[F] {

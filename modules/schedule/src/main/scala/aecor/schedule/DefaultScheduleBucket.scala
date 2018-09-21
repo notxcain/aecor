@@ -2,7 +2,7 @@ package aecor.schedule
 
 import java.time.{Instant, LocalDateTime, ZoneOffset, ZonedDateTime}
 
-import aecor.data.{EventsourcedBehavior, Folded, MonadActionLift}
+import aecor.data.{ActionN, EventsourcedBehavior, Folded, MonadActionLift}
 import aecor.data.Folded.syntax._
 import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
 import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder, PersistentRepr}
@@ -23,8 +23,8 @@ object DefaultScheduleBucket {
 
   def behavior[F[_]: Monad](
     clock: F[ZonedDateTime]
-  ): EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent, Void] =
-    EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent, Void](DefaultScheduleBucket(clock), ScheduleState.initial, _.update(_))
+  ): EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent] =
+    EventsourcedBehavior(DefaultScheduleBucket[ActionN[F, ScheduleState, ScheduleEvent, ?], F](clock)(Functor[F], ActionN.monadActionLiftInstance[F, ScheduleState, ScheduleEvent]), ScheduleState.initial, _.update(_))
 }
 
 class DefaultScheduleBucket[F[_], G[_]: Functor](clock: G[ZonedDateTime])(

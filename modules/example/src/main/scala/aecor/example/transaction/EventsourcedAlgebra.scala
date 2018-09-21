@@ -1,19 +1,20 @@
-package aecor.example.domain.transaction
+package aecor.example.transaction
 
 import aecor.data.Folded.syntax._
 import aecor.data._
-import aecor.example.domain.Amount
-import aecor.example.domain.account.AccountId
-import aecor.example.domain.transaction.EventsourcedTransactionAggregate.Transaction
-import aecor.example.domain.transaction.EventsourcedTransactionAggregate.TransactionStatus.{Authorized, Failed, Requested, Succeeded}
-import aecor.example.domain.transaction.TransactionAggregate._
-import aecor.example.domain.transaction.TransactionEvent.{TransactionAuthorized, TransactionCreated, TransactionFailed, TransactionSucceeded}
+import aecor.example.account.AccountId
+import aecor.example.common.Amount
+import aecor.example.transaction.Algebra.TransactionInfo
+import aecor.example.transaction.EventsourcedAlgebra.State
+import aecor.example.transaction.EventsourcedAlgebra.TransactionStatus.{Authorized, Failed, Requested, Succeeded}
+import aecor.example.transaction.TransactionEvent._
 import cats.Monad
+import cats.data.EitherT
 import cats.implicits._
 
-class EventsourcedTransactionAggregate[F[_]](
-  implicit F: MonadActionReject[F, Option[Transaction], TransactionEvent, String]
-) extends TransactionAggregate[F] {
+class EventsourcedAlgebra[F[_]](
+  implicit F: MonadActionReject[F, Option[State], TransactionEvent, String]
+) extends Algebra[F] {
   import F._
   override def create(fromAccountId: From[AccountId],
                       toAccountId: To[AccountId],
@@ -67,7 +68,7 @@ class EventsourcedTransactionAggregate[F[_]](
 
   override def getInfo: F[TransactionInfo] =
     read.flatMap {
-      case Some(Transaction(status, from, to, amount)) =>
+      case Some(State(status, from, to, amount)) =>
         TransactionInfo(from, to, amount, Some(status).collect {
           case Succeeded => true
           case Failed    => false
@@ -77,14 +78,19 @@ class EventsourcedTransactionAggregate[F[_]](
     }
 }
 
-object EventsourcedTransactionAggregate {
+object EventsourcedAlgebra {
+  def apply[F[_]](
+    implicit F: MonadActionReject[F, Option[State], TransactionEvent, String]
+  ): Algebra[F] = new EventsourcedAlgebra
 
-  def actions[F[_]: Monad]: TransactionAggregate[ActionT[F, Option[Transaction], TransactionEvent, String, ?]] =
-    new EventsourcedTransactionAggregate()
+  def actions[F[_]: Monad]: EitherK[Algebra, ActionN[F, Option[State], TransactionEvent, ?], String] =
+    EitherK(
+      EventsourcedAlgebra[EitherT[ActionN[F, Option[State], TransactionEvent, ?], String, ?]])
 
-  def behavior[F[_]: Monad]: EventsourcedBehavior[TransactionAggregate, F, Option[Transaction], TransactionEvent, String] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], String], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
-      .optional(actions, Transaction.fromEvent, _.applyEvent(_))
+      .optional[EitherK[Algebra, ?[_], String], F, State, TransactionEvent](
+        actions[F], State.fromEvent, _.applyEvent(_))
 
   def tagging: Tagging.Partitioned[TransactionId] =
     Tagging.partitioned(20)(EventTag("Transaction"))
@@ -96,21 +102,21 @@ object EventsourcedTransactionAggregate {
     case object Failed extends TransactionStatus
     case object Succeeded extends TransactionStatus
   }
-  final case class Transaction(status: TransactionStatus,
+  final case class State(status: TransactionStatus,
                                from: From[AccountId],
                                to: To[AccountId],
                                amount: Amount) {
-    def applyEvent(event: TransactionEvent): Folded[Transaction] = event match {
+    def applyEvent(event: TransactionEvent): Folded[State] = event match {
       case TransactionCreated(_, _, _) => impossible
       case TransactionAuthorized       => copy(status = TransactionStatus.Authorized).next
       case TransactionFailed(_)        => copy(status = TransactionStatus.Failed).next
       case TransactionSucceeded        => copy(status = TransactionStatus.Succeeded).next
     }
   }
-  object Transaction {
-    def fromEvent(event: TransactionEvent): Folded[Transaction] = event match {
+  object State {
+    def fromEvent(event: TransactionEvent): Folded[State] = event match {
       case TransactionEvent.TransactionCreated(fromAccount, toAccount, amount) =>
-        Transaction(TransactionStatus.Requested, fromAccount, toAccount, amount).next
+        State(TransactionStatus.Requested, fromAccount, toAccount, amount).next
       case _ => impossible
     }
   }

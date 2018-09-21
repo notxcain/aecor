@@ -39,7 +39,7 @@ object StateEventJournal {
             Chain.fromSeq(e.tags.toSeq).map(t => t -> EntityEvent(key, idx + offset, e.event))
         }
         .groupBy(_._1)
-        .mapValues(_.map(_._2))
+        .mapValues(_.map(_._2).toChain)
       copy(
         eventsByKey = updatedEventsById,
         eventsByTag =

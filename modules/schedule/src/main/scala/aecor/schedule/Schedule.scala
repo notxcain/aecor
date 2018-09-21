@@ -13,7 +13,6 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import cats.data.EitherT
 import cats.effect.Effect
 import cats.implicits._
 import com.datastax.driver.core.utils.UUIDs
@@ -64,13 +63,11 @@ object Schedule {
       runtime
         .deploy(
           entityName,
-          DefaultScheduleBucket[ActionN[F, ScheduleState, ScheduleEvent, ?], F](clock.zonedDateTime),
-          ScheduleState.initial,
-          (_: ScheduleState).update(_: ScheduleEvent),
+          DefaultScheduleBucket.behavior(clock.zonedDateTime),
           Tagging.const[ScheduleBucketId](eventTag)
         )
 
-    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]]) = clock.zone.map { zone =>
+    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
       val journal =
         DefaultScheduleEventJournal[F](
           settings.consumerId,
@@ -93,7 +90,7 @@ object Schedule {
       PeriodicProcessRuntime(entityName, settings.refreshInterval, process).run(system)
     }
 
-    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[EitherT[F, Void, ?]]): Schedule[F] =
+    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[F]): Schedule[F] =
       new DefaultSchedule(
         clock,
         buckets,

@@ -1,18 +1,16 @@
-package aecor.example.domain
+package aecor.example.process
 
 import aecor.Has
 import aecor.Has.syntax._
-import aecor.example.domain.account.{Account, AccountId, AccountTransactionId, AccountTransactionKind}
-import aecor.example.domain.transaction.TransactionAggregate.TransactionInfo
-import aecor.example.domain.transaction._
-import cats.data.EitherT
+import aecor.example.account.{AccountTransactionId, AccountTransactionKind, Accounts}
+import aecor.example.transaction.Algebra.TransactionInfo
+import aecor.example.transaction.{From, TransactionEvent, TransactionId}
+import aecor.example.transaction.transaction.Transactions
+import cats.MonadError
 import cats.implicits._
-import cats.{MonadError, ~>}
-import io.aecor.liberator.FunctorK
 
 
-class TransactionProcess[F[_]](transactions: Entity[TransactionId, TransactionAggregate, F, String],
-                                      accounts: Entity[AccountId, Account, F, Account.Rejection])(implicit F: MonadError[F, Throwable]) {
+final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: Accounts[F])(implicit F: MonadError[F, Throwable]) {
   def process[A: Has[?, TransactionId]: Has[?, TransactionEvent]](a: A): F[Unit] = {
     val transactionId = a.get[TransactionId]
     a.get[TransactionEvent] match {
@@ -31,7 +29,7 @@ class TransactionProcess[F[_]](transactions: Entity[TransactionId, TransactionAg
         for {
           txn <- transactions(transactionId).getInfo.flatMap {
             case Right(x) => x.pure[F]
-            case Left(r) => F.raiseError[TransactionInfo](TransactionProcess.Failure(r))
+            case Left(r) => F.raiseError[TransactionInfo](TransactionProcessor.Failure(r))
           }
           creditResult <- accounts(txn.toAccountId.value).credit(
                            AccountTransactionId(transactionId, AccountTransactionKind.Normal),
@@ -47,17 +45,16 @@ class TransactionProcess[F[_]](transactions: Entity[TransactionId, TransactionAg
                   transactions(transactionId).succeed.value
               }
         } yield ()
-      case other =>
+      case _ =>
         ().pure[F]
     }
   }
 }
 
-object TransactionProcess {
+object TransactionProcessor {
 
   final case class Failure(description: String) extends RuntimeException(description)
 
-  def apply[F[_]: MonadError[?[_], Throwable]](transactions: TransactionId => TransactionAggregate[F],
-                         accounts: AccountId => Account[F]): TransactionProcess[F] =
-    new TransactionProcess(transactions, accounts, failure)
+  def apply[F[_]: MonadError[?[_], Throwable]](transactions: Transactions[F], accounts: Accounts[F]): TransactionProcessor[F] =
+    new TransactionProcessor(transactions, accounts)
 }
