@@ -33,7 +33,7 @@ trait MonadAction[M[_], F[_], S, E, R]
 object MonadAction {
   implicit def eitherTMonadActionInstance[M[_], F[_], S, E, R](implicit F: MonadActionLift[M, F, S, E]): MonadAction[EitherT[M, R, ?], F, S, E, R] =
     new MonadAction[EitherT[M, R, ?], F, S, E, R] {
-      private val eitherTMonad = Monad[EitherT[M, R, ?]]
+      private val eitherTMonad = EitherT.catsDataMonadErrorForEitherT[M, R]
       override def reject[A](r: R): EitherT[M, R, A] = EitherT.leftT(r)
 
       override def handleErrorWith[A](fa: EitherT[M, R, A])(
@@ -43,6 +43,7 @@ object MonadAction {
       override def read: EitherT[M, R, S] = EitherT.right(F.read)
       override def append(es: E, other: E*): EitherT[M, R, Unit] = EitherT.right(F.append(es, other: _*))
       override def pure[A](x: A): EitherT[M, R, A] = EitherT.pure[M, R](x)
+      override def map[A, B](fa: EitherT[M, R, A])(f: A => B): EitherT[M, R, B] = fa.map(f)
       override def flatMap[A, B](fa: EitherT[M, R, A])(
         f: A => EitherT[M, R, B]
       ): EitherT[M, R, B] = fa.flatMap(f)

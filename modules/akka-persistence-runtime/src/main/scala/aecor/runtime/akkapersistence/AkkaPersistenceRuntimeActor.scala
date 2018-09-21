@@ -172,7 +172,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
       case Right(pair) =>
         performInvocation(pair.first, pair.second)
       case Left(decodingFailure) =>
-        log.error(new IllegalArgumentException(decodingFailure), "Failed to decode command")
+        log.error(new IllegalArgumentException(decodingFailure.getMessage, decodingFailure), "Failed to decode command")
         sender() ! Status.Failure(decodingFailure)
     }
 

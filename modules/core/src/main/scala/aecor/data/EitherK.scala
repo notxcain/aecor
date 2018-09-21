@@ -80,32 +80,35 @@ object EitherK {
           override def decode(
                                bytes: ByteBuffer
                              ): DecodingResult[PairE[Invocation[EitherK[M, ?[_], R], ?], WireProtocol.Encoder]] =
-            M.decoder.decode(bytes).map { p =>
-              val (invocation, encoder) = (p.first, p.second)
+              M.decoder.decode(bytes).map { p =>
+                val (invocation, encoder) = (p.first, p.second)
 
-              val invocationR =
-                new Invocation[EitherK[M, ?[_], R], Either[R, p.A]] {
-                  override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, p.A]] =
-                    invocation.invoke(target.value).value
+                val invocationR =
+                  new Invocation[EitherK[M, ?[_], R], Either[R, p.A]] {
+                    override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, p.A]] =
+                      invocation.invoke(target.value).value
+                  }
+
+                val encoderR = Encoder.instance[Either[R, p.A]] {
+                  case Right(a) =>
+                    val aBytes = encoder.encode(a)
+                    val out = ByteBuffer.allocate(1 + aBytes.limit())
+                    out.put(1: Byte)
+                    out.put(aBytes)
+                    out.flip()
+                    out
+                  case Left(r) =>
+                    val rBytes = renc.encode(r)
+                    val out = ByteBuffer.allocate(1 + rBytes.limit())
+                    out.put(0: Byte)
+                    out.put(rBytes)
+                    out.flip()
+                    out
                 }
 
-              val encoderR = Encoder.instance[Either[R, p.A]] {
-                case Right(a) =>
-                  val bytes = encoder.encode(a)
-                  val out = ByteBuffer.allocate(1 + bytes.limit())
-                  out.put(1: Byte)
-                  out.put(bytes)
-                  out
-                case Left(r) =>
-                  val bytes = renc.encode(r)
-                  val out = ByteBuffer.allocate(1 + bytes.limit())
-                  out.put(0: Byte)
-                  out.put(bytes)
-                  out
+                PairE(invocationR, encoderR)
               }
 
-              PairE(invocationR, encoderR)
-            }
         }
     }
 }

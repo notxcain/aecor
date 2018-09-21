@@ -92,7 +92,7 @@ object EventsourcedAlgebra {
       .optional[EitherK[Algebra, ?[_], String], F, State, TransactionEvent](
         actions[F], State.fromEvent, _.applyEvent(_))
 
-  def tagging: Tagging.Partitioned[TransactionId] =
+  def tagging: Tagging[TransactionId] =
     Tagging.partitioned(20)(EventTag("Transaction"))
 
   sealed abstract class TransactionStatus

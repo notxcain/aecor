@@ -15,6 +15,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 import cats.~>
+import io.aecor.liberator.Invocation
 import io.aecor.liberator.syntax._
 
 object GenericAkkaRuntime {
@@ -56,12 +57,12 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
       val keyEncoder = KeyEncoder[K]
 
       key =>
-        M.encoder.mapK(new (Encoded ~> F) {
+        M.mapInvocations(new (Invocation[M, ?] ~> F) {
 
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
-          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] = {
-            val (bytes, decoder) = fa
+          override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
+            val (bytes, decoder) = fa.invoke(M.encoder)
             F.fromFuture {
                 shardRegion ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
               }

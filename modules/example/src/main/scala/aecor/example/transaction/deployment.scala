@@ -1,7 +1,6 @@
 package aecor.example.transaction
 import java.util.UUID
 
-import aecor.data.{EventTag, Tagging}
 import aecor.example.common.Timestamp
 import aecor.example.transaction.transaction.Transactions
 import aecor.runtime.Eventsourced
@@ -14,8 +13,8 @@ object deployment {
   def deploy[F[_]: Effect](runtime: AkkaPersistenceRuntime[UUID], clock: ClockT[F]): F[Transactions[F]] =
     runtime
       .deploy(
-        "Account",
+        "Transaction",
         EventsourcedAlgebra.behavior[F].enrich(clock.instant.map(Timestamp(_))),
-        Tagging.const[TransactionId](EventTag("Transaction"))
-      ).map(Eventsourced.Entity.fromEitherK(_))
+        EventsourcedAlgebra.tagging
+      ).map(Eventsourced.Entity.  fromEitherK(_))
 }

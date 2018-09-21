@@ -22,9 +22,9 @@ class DefaultTransactionService[F[_]](transactions: Transactions[F])(implicit F:
               }
             def loop: F[Boolean] = getTransaction.flatMap {
               case Algebra.TransactionInfo(_, _, _, Some(value)) => value.pure[F]
-              case _ => timer.sleep(5.millis) >> loop
+              case _ => timer.sleep(100.millis) >> loop
             }
-            Concurrent.timeout(loop, 30.seconds)
+            Concurrent.timeout(loop, 10.seconds)
           }
           .map { succeeded =>
             if (succeeded) {

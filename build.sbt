@@ -194,6 +194,8 @@ lazy val exampleSettings = {
     resolvers += Resolver.sonatypeRepo("releases"),
     libraryDependencies ++=
       Seq(
+        "com.github.krasserm" %% "streamz-converter" % "0.10-SNAPSHOT",
+        "co.fs2" %% "fs2-core" % "1.0.0-M5",
         "org.typelevel" %% "cats-mtl-core" % "0.3.0",
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,

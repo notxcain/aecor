@@ -3,24 +3,26 @@ package aecor.example
 import java.time.Clock
 
 import aecor.data._
-import aecor.distributedprocessing.{AkkaStreamProcess, DistributedProcessing}
-import aecor.example.account.{AccountRoute, Accounts}
+import aecor.distributedprocessing.DistributedProcessing
+import aecor.example.account.{ AccountRoute, Accounts }
 import aecor.example.common.Timestamp
-import aecor.example.process.TransactionProcessor
+import aecor.example.process.{ FS2QueueProcess, TransactionProcessor }
 import aecor.example.transaction.transaction.Transactions
-import aecor.example.transaction.{TransactionEvent, TransactionId, TransactionRoute}
+import aecor.example.transaction.{ TransactionEvent, TransactionId, TransactionRoute }
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
-import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives.{complete, get, path, _}
+import akka.http.scaladsl.server.Directives.{ complete, get, path, _ }
 import akka.http.scaladsl.server.Route
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ActorMaterializer, Materializer}
+import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
 import com.typesafe.config.ConfigFactory
+import streamz.converter._
+import cats.implicits._
 
 object App extends IOApp {
 
@@ -61,36 +63,41 @@ object App extends IOApp {
           .journal[TransactionId, Enriched[Timestamp, TransactionEvent]]
           .committable(offsetStore)
         val consumerId = ConsumerId("processing")
-        val processes =
-          transaction.EventsourcedAlgebra.tagging.tags.map { tag =>
-            AkkaStreamProcess[IO](
-              journal
-                .eventsByTag(tag, consumerId)
-                .mapAsync(30) {
-                  _.traverse(processor.process(_)).unsafeToFuture()
-                }
-                .mapAsync(1)(_.commit.unsafeToFuture())
-            )
-          }
-        distributedProcessing.start[IO]("TransactionProcessing", processes)
+        val sources = transaction.EventsourcedAlgebra.tagging.tags.map { tag =>
+          journal
+            .eventsByTag(tag, consumerId)
+            .toStream[IO]()
+        }
+        FS2QueueProcess.create(50)(sources).flatMap {
+          case (stream, processes) =>
+            val run = distributedProcessing.start[IO]("TransactionProcessing", processes)
+            run.flatMap { ks =>
+              stream
+                .mapAsync(30)(_.traverse(processor.process(_)))
+                .evalMap(_.commit)
+                .compile
+                .drain
+                .start
+                .as(ks)
+            }
+        }
       }
 
-    def startHttpServer(
-      accounts: Accounts[IO],
-      transactions: Transactions[IO]
-    ): IO[Http.ServerBinding] = {
-        val transactionService: transaction.TransactionService[IO] = transaction.DefaultTransactionService(transactions)
-        val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
+    def startHttpServer(accounts: Accounts[IO],
+                        transactions: Transactions[IO]): IO[Http.ServerBinding] = {
+      val transactionService: transaction.TransactionService[IO] =
+        transaction.DefaultTransactionService(transactions)
+      val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
 
-        val route: Route = path("check") {
-          get {
-            complete(StatusCodes.OK)
-          }
-        } ~
-          TransactionRoute(transactionService) ~
-          AccountRoute(accountService)
-        HttpServer.start[IO](route, config.getString("http.interface"), config.getInt("http.port"))
-      }
+      val route: Route = path("check") {
+        get {
+          complete(StatusCodes.OK)
+        }
+      } ~
+        TransactionRoute(transactionService) ~
+        AccountRoute(accountService)
+      HttpServer.start[IO](route, config.getString("http.interface"), config.getInt("http.port"))
+    }
 
     for {
       transactions <- transaction.deployment.deploy[IO](runtime, taskClock)

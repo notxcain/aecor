@@ -3,7 +3,6 @@ package aecor.runtime.akkapersistence
 import java.nio.ByteBuffer
 
 import aecor.data.{EventsourcedBehavior, Tagging}
-import aecor.encoding.WireProtocol.Encoded
 import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.CommandResult
@@ -17,7 +16,7 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 import cats.~>
-import io.aecor.liberator.syntax._
+import io.aecor.liberator.Invocation
 
 object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
@@ -75,14 +74,15 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
       val keyEncoder = KeyEncoder[Key]
 
       key =>
-        M.encoder.mapK(new (Encoded ~> F) {
+        M.mapInvocations(new (Invocation[M, ?] ~> F) {
 
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
-          override def apply[A](fa: (ByteBuffer, WireProtocol.Decoder[A])): F[A] = {
-            val (bytes, decoder) = fa
+          override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
+            val (bytes, decoder) = fa.invoke(M.encoder)
+            bytes.position(0)
             F.fromFuture {
-                shardRegion ? EntityCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
+                shardRegion ? EntityCommand(keyEncoder(key), bytes)
               }
               .flatMap {
                 case CommandResult(resultBytes) =>
