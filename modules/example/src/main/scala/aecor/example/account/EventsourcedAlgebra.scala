@@ -63,9 +63,9 @@ object EventsourcedAlgebra {
 
   def apply[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]): Algebra[F] = new EventsourcedAlgebra
 
-  def actions[F[_]: Monad]: EitherK[Algebra, ActionN[F, Option[AccountState], AccountEvent, ?], Rejection] =
+  def actions[F[_]: Monad]: EitherK[Algebra, ActionT[F, Option[AccountState], AccountEvent, ?], Rejection] =
     EitherK(
-      EventsourcedAlgebra[EitherT[ActionN[F, Option[AccountState], AccountEvent, ?], Rejection, ?]])
+      EventsourcedAlgebra[EitherT[ActionT[F, Option[AccountState], AccountEvent, ?], Rejection, ?]])
 
   def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], Rejection], F, Option[AccountState], AccountEvent] =
     EventsourcedBehavior

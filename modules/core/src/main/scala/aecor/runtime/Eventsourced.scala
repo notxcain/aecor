@@ -65,7 +65,7 @@ object Eventsourced {
     journal: EventJournal[F, K, E],
     snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
   )(implicit M: ReifiedInvocations[M], F: FailureHandler[F]): K => F[M[F]] = { key =>
-    val effectiveActions = M.mapK(entityBehavior.actions, ActionN.xmapState[F, S, InternalState[S], E]((is: InternalState[S], s: S) => is.copy(entityState = s))(_.entityState))
+    val effectiveActions = M.mapK(entityBehavior.actions, ActionT.xmapState[F, S, InternalState[S], E]((is: InternalState[S], s: S) => is.copy(entityState = s))(_.entityState))
 
     val initialState = InternalState(entityBehavior.initial, 0)
 
@@ -137,7 +137,7 @@ object Eventsourced {
           for {
             current <- ref.get
             action = fa.invoke(effectiveActions)
-            result <- action.flatMap(a => ActionN.read[F, InternalState[S], E].map(s => (s, a))).run(current, effectiveUpdate)
+            result <- action.flatMap(a => ActionT.read[F, InternalState[S], E].map(s => (s, a))).run(current, effectiveUpdate)
             out <- result match {
                   case Next((es, (next, a))) =>
                     NonEmptyChain

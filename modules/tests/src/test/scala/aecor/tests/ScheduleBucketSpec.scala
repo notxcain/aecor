@@ -2,7 +2,7 @@ package aecor.tests
 
 import java.time._
 
-import aecor.data.{ActionN, Folded}
+import aecor.data.{ ActionT, Folded}
 import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
 import aecor.schedule.{DefaultScheduleBucket, ScheduleEvent, ScheduleState}
 import cats.Id
@@ -11,7 +11,7 @@ import org.scalatest.{FlatSpec, Matchers}
 
 class ScheduleBucketSpec extends FlatSpec with Matchers with StrictCatsEquality {
   val clock = Clock.fixed(Instant.now, ZoneId.systemDefault())
-  val aggregate = DefaultScheduleBucket[ActionN[Id, ScheduleState, ScheduleEvent, ?], Id](ZonedDateTime.now(clock))
+  val aggregate = DefaultScheduleBucket[ActionT[Id, ScheduleState, ScheduleEvent, ?], Id](ZonedDateTime.now(clock))
 
   "ScheduleBucket" should "fire entry when due date is before now" in {
     val handler = aggregate.addScheduleEntry(

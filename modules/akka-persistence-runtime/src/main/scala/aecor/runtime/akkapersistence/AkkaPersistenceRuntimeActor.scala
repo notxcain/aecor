@@ -32,7 +32,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   def props[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    actions: M[ActionN[F, State, Event, ?]],
+    actions: M[ActionT[F, State, Event, ?]],
     initialState: State,
     updateState: (State, Event) => Folded[State],
     snapshotPolicy: SnapshotPolicy[State],
@@ -71,7 +71,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   */
 private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  actions: M[ActionN[F, State, Event, ?]],
+  actions: M[ActionT[F, State, Event, ?]],
   initialState: State,
   updateState: (State, Event) => Folded[State],
   snapshotPolicy: SnapshotPolicy[State],

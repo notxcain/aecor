@@ -28,7 +28,7 @@ class EventsourcedBehaviorTSpec extends FlatSpec with Matchers {
   "EventsourcedBehavior.optional" should "correctly use init function applying events" in {
     val behavior: EventsourcedBehavior[Counter, Id, Option[CounterState], CounterEvent] =
       EventsourcedBehavior
-        .optional(CounterOptionalActions[ActionN[Id, Option[CounterState], CounterEvent, ?]], e => CounterState(0L).applyEvent(e), _.applyEvent(_))
+        .optional(CounterOptionalActions[ActionT[Id, Option[CounterState], CounterEvent, ?]], e => CounterState(0L).applyEvent(e), _.applyEvent(_))
 
     behavior
       .update(behavior.initial, CounterEvent.CounterIncremented)

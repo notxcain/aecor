@@ -83,9 +83,9 @@ object EventsourcedAlgebra {
     implicit F: MonadActionReject[F, Option[State], TransactionEvent, String]
   ): Algebra[F] = new EventsourcedAlgebra
 
-  def actions[F[_]: Monad]: EitherK[Algebra, ActionN[F, Option[State], TransactionEvent, ?], String] =
+  def actions[F[_]: Monad]: EitherK[Algebra, ActionT[F, Option[State], TransactionEvent, ?], String] =
     EitherK(
-      EventsourcedAlgebra[EitherT[ActionN[F, Option[State], TransactionEvent, ?], String, ?]])
+      EventsourcedAlgebra[EitherT[ActionT[F, Option[State], TransactionEvent, ?], String, ?]])
 
   def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], String], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
