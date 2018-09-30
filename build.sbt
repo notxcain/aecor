@@ -11,10 +11,10 @@ lazy val buildSettings = inThisBuild(
 )
 
 lazy val akkaVersion = "2.5.11"
-lazy val akkaPersistenceCassandraVersion = "0.59"
-lazy val akkaPersistenceJdbcVersion = "3.2.0"
-lazy val catsVersion = "1.1.0"
-lazy val catsEffectVersion = "0.10"
+lazy val akkaPersistenceCassandraVersion = "0.59" // #todo 0.7
+lazy val akkaPersistenceJdbcVersion = "3.3.0"
+lazy val catsVersion = "1.4.0"
+lazy val catsEffectVersion = "1.0.0-RC"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -24,22 +24,23 @@ lazy val monocleVersion = "1.5.0-cats"
 lazy val monixVersion = "3.0.0-M3"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
-lazy val scalaCheckShapelessVersion = "1.1.4"
+lazy val scalaCheckShapelessVersion = "1.1.6"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.4"
-lazy val scalametaVersion = "1.8.0"
+lazy val scalametaVersion = "4.0.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.9.2"
-lazy val akkaHttpVersion = "10.1.0"
-lazy val akkaHttpJsonVersion = "1.19.0"
+lazy val circeVersion = "0.9.3"
+lazy val akkaHttpVersion = "10.1.5"
+lazy val akkaHttpJsonVersion = "1.21.0"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
 lazy val liberatorVersion = "0.8.0"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
+  resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
   parallelExecution in Test := false,
