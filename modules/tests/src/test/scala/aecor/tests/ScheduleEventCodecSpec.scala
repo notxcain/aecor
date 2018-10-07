@@ -4,7 +4,7 @@ import java.time.{ Instant, LocalDateTime }
 
 import aecor.schedule.ScheduleEvent
 import aecor.schedule.protobuf.ScheduleEventCodec
-import org.scalacheck.Shapeless._
+import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{ Arbitrary, Gen }
 import org.scalatest.prop.PropertyChecks
 

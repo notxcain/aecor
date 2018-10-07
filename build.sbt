@@ -27,7 +27,7 @@ lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.6"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.4"
-lazy val scalametaVersion = "4.0.0"
+lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
 
@@ -40,7 +40,7 @@ lazy val liberatorVersion = "0.8.0"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
-  resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
+  //resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
   parallelExecution in Test := false,
