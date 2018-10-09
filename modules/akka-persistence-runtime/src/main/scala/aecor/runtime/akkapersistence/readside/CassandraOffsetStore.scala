@@ -17,6 +17,8 @@ object CassandraOffsetStore {
       s"CREATE TABLE IF NOT EXISTS $keyspace.$tableName (consumer_id text, tag text, offset uuid, PRIMARY KEY ((consumer_id, tag)))"
     def updateOffsetQuery: String =
       s"UPDATE $keyspace.$tableName SET offset = ? where consumer_id = ? AND tag = ?"
+    def deleteOffsetQuery: String =
+      s"DELETE FROM $keyspace.$tableName where consumer_id = ? AND tag = ?"
     def selectOffsetQuery: String =
       s"SELECT offset FROM $keyspace.$tableName WHERE consumer_id = ? AND tag = ?"
   }
@@ -47,6 +49,9 @@ class CassandraOffsetStore[F[_]] private[akkapersistence] (
   private val updateOffsetStatement =
     session.prepare(config.updateOffsetQuery)
 
+  private val deleteOffsetStatement =
+    session.prepare(config.deleteOffsetQuery)
+
   override def setValue(key: TagConsumer, value: UUID): F[Unit] =
     F.fromFuture {
         updateOffsetStatement
@@ -68,4 +73,11 @@ class CassandraOffsetStore[F[_]] private[akkapersistence] (
       .map(_.bind(key.consumerId.value, key.tag.value))
       .flatMap(x => F.fromFuture(session.selectOne(x)))
       .map(_.map(_.getUUID("offset")))
+  override def deleteValue(key: TagConsumer): F[Unit] =
+    F.fromFuture {
+      deleteOffsetStatement
+    }
+      .map(_.bind(key.consumerId.value, key.tag.value))
+      .flatMap(x => F.fromFuture(session.executeWrite(x)))
+      .void
 }

@@ -48,6 +48,7 @@ object EitherK {
                   new Invocation[EitherK[M, ?[_], R], Either[R, A]] {
                     override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
                       fa.invoke(target.value).value
+                    override def toString: String = fa.toString
                   }
                 }
             }
@@ -87,6 +88,7 @@ object EitherK {
                   new Invocation[EitherK[M, ?[_], R], Either[R, p.A]] {
                     override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, p.A]] =
                       invocation.invoke(target.value).value
+                    override def toString: String = invocation.toString
                   }
 
                 val encoderR = Encoder.instance[Either[R, p.A]] {

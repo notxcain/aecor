@@ -4,25 +4,26 @@ import java.time.Clock
 
 import aecor.data._
 import aecor.distributedprocessing.DistributedProcessing
-import aecor.example.account.{ AccountRoute, Accounts }
+import aecor.example.account.{AccountRoute, Accounts}
 import aecor.example.common.Timestamp
-import aecor.example.process.{ FS2QueueProcess, TransactionProcessor }
+import aecor.example.process.{FS2QueueProcess, TransactionProcessor}
 import aecor.example.transaction.transaction.Transactions
-import aecor.example.transaction.{ TransactionEvent, TransactionId, TransactionRoute }
+import aecor.example.transaction.{TransactionEvent, TransactionId, TransactionRoute}
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
+import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives.{ complete, get, path, _ }
-import akka.http.scaladsl.server.Route
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ ActorMaterializer, Materializer }
+import akka.stream.{ActorMaterializer, Materializer}
 import cats.effect._
 import com.typesafe.config.ConfigFactory
 import streamz.converter._
 import cats.implicits._
+
+import scala.concurrent.duration._
+import fs2._
+import org.http4s.server.Server
+import org.http4s.server.blaze.BlazeBuilder
 
 object App extends IOApp {
 
@@ -68,13 +69,20 @@ object App extends IOApp {
             .eventsByTag(tag, consumerId)
             .toStream[IO]()
         }
-        FS2QueueProcess.create(50)(sources).flatMap {
+        FS2QueueProcess.create(sources).flatMap {
           case (stream, processes) =>
             val run = distributedProcessing.start[IO]("TransactionProcessing", processes)
             run.flatMap { ks =>
               stream
-                .mapAsync(30)(_.traverse(processor.process(_)))
-                .evalMap(_.commit)
+                .map { s =>
+                  val run = s
+                    .mapAsync(30)(_.traverse(processor.process(_)))
+                    .evalMap(_.commit)
+                    .compile
+                    .drain
+                  Stream.retry(run, 1.second, identity, Int.MaxValue)
+                }
+                .parJoin(processes.size)
                 .compile
                 .drain
                 .start
@@ -84,19 +92,17 @@ object App extends IOApp {
       }
 
     def startHttpServer(accounts: Accounts[IO],
-                        transactions: Transactions[IO]): IO[Http.ServerBinding] = {
+                        transactions: Transactions[IO]): IO[Server[IO]] = {
       val transactionService: transaction.TransactionService[IO] =
         transaction.DefaultTransactionService(transactions)
       val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
 
-      val route: Route = path("check") {
-        get {
-          complete(StatusCodes.OK)
-        }
-      } ~
-        TransactionRoute(transactionService) ~
-        AccountRoute(accountService)
-      HttpServer.start[IO](route, config.getString("http.interface"), config.getInt("http.port"))
+
+      BlazeBuilder[IO]
+        .bindHttp(config.getInt("http.port"), config.getString("http.interface"))
+        .mountService(TransactionRoute(transactionService), "/")
+        .mountService(AccountRoute(accountService), "/")
+        .start
     }
 
     for {

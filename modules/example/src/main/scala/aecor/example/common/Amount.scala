@@ -1,6 +1,6 @@
 package aecor.example.common
 
-case class Amount(value: BigDecimal) extends AnyVal {
+final case class Amount(value: BigDecimal) extends AnyVal {
   def >(other: Amount): Boolean = value > other.value
   def <=(other: Amount): Boolean = value <= other.value
   def >=(other: Amount): Boolean = value >= other.value

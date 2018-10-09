@@ -2,26 +2,22 @@ package aecor.example.transaction
 
 import java.util.UUID
 
-import aecor.example.CirceSupport._
-import aecor.example.EffectSupport._
 import aecor.example.account
 import aecor.example.account.AccountId
 import aecor.example.common.Amount
-import aecor.example.transaction.TransactionRoute.TransactionEndpointRequest.CreateTransactionRequest
-import akka.http.scaladsl.marshalling.ToResponseMarshallable
-import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.Route
-import cats.effect.Effect
+import cats.effect.{Effect, Sync}
 import cats.implicits._
-import io.circe.Decoder
-import io.circe.generic.decoding.DerivedDecoder
-import shapeless.Lazy
+import org.http4s.HttpRoutes
+import org.http4s.circe.CirceEntityDecoder
+import org.http4s.dsl.Http4sDsl
+import io.circe.generic.auto._
 
 
 trait TransactionService[F[_]] {
   def authorizePayment(transactionId: TransactionId,
-                       request: CreateTransactionRequest): F[TransactionRoute.ApiResult]
+                       from: From[AccountId],
+                       to: To[AccountId],
+                       amount: Amount): F[TransactionRoute.ApiResult]
 }
 
 object TransactionRoute {
@@ -32,52 +28,45 @@ object TransactionRoute {
     case class Declined(reason: String) extends ApiResult
   }
 
-  sealed abstract class TransactionEndpointRequest
+  final case class CreateTransactionRequest(from: From[AccountId],
+                                            to: To[AccountId],
+                                            amount: Amount)
 
-  object TransactionEndpointRequest {
-
-    final case class CreateTransactionRequest(from: From[AccountId],
-                                              to: To[AccountId],
-                                              amount: Amount)
-        extends TransactionEndpointRequest
-
+  object TransactionIdVar {
+    def unapply(arg: String): Option[TransactionId] = TransactionId(arg).some
   }
 
-  implicit def requestDecoder[A <: TransactionEndpointRequest](
-    implicit A: Lazy[DerivedDecoder[A]]
-  ): Decoder[A] = A.value
-
-  def apply[F[_]: Effect](api: TransactionService[F]): Route =
-    (put & pathPrefix("transactions" / Segment.map(TransactionId(_)))) { transactionId =>
-      entity(as[CreateTransactionRequest]) { request =>
-        complete {
-          api.authorizePayment(transactionId, request).map[ToResponseMarshallable] {
+  private final class Builder[F[_]: Sync](service: TransactionService[F]) extends Http4sDsl[F] with CirceEntityDecoder {
+    def routes: HttpRoutes[F] = HttpRoutes.of[F] {
+      case req @ PUT -> Root / "transactions" / TransactionIdVar(transactionId) =>
+        for {
+          body <- req.as[CreateTransactionRequest]
+          CreateTransactionRequest(from, to, amount) = body
+          resp <- service.authorizePayment(transactionId, from, to, amount).flatMap {
             case ApiResult.Authorized =>
-              StatusCodes.OK -> "Authorized"
+              Ok("Authorized")
             case ApiResult.Declined(reason) =>
-              StatusCodes.BadRequest -> s"Declined: $reason"
+              BadRequest(s"Declined: $reason")
           }
-        }
-      }
-
-    } ~ (post & path("test")) {
-      complete {
-        api
+        } yield resp
+      case POST -> Root / "test" =>
+        service
           .authorizePayment(
             TransactionId(UUID.randomUUID.toString),
-            CreateTransactionRequest(
-              From(account.EventsourcedAlgebra.rootAccountId),
-              To(AccountId("foo" + scala.util.Random.nextInt(20))),
-              Amount(1)
-            )
+            From(account.EventsourcedAlgebra.rootAccountId),
+            To(AccountId("foo")),
+            Amount(1)
           )
-          .map[ToResponseMarshallable] {
-            case ApiResult.Authorized =>
-              StatusCodes.OK -> "Authorized"
-            case ApiResult.Declined(reason) =>
-              StatusCodes.BadRequest -> s"Declined: $reason"
-          }
-      }
+          .flatMap {
+          case ApiResult.Authorized =>
+            Ok("Authorized")
+          case ApiResult.Declined(reason) =>
+            BadRequest(s"Declined: $reason")
+        }
     }
+  }
+
+  def apply[F[_]: Effect](api: TransactionService[F]): HttpRoutes[F] =
+    new Builder(api).routes
 
 }

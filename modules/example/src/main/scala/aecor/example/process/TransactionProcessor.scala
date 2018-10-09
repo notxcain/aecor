@@ -4,8 +4,8 @@ import aecor.Has
 import aecor.Has.syntax._
 import aecor.example.account.{AccountTransactionId, AccountTransactionKind, Accounts}
 import aecor.example.transaction.Algebra.TransactionInfo
-import aecor.example.transaction.{From, TransactionEvent, TransactionId}
 import aecor.example.transaction.transaction.Transactions
+import aecor.example.transaction.{From, TransactionEvent, TransactionId}
 import cats.MonadError
 import cats.implicits._
 
@@ -40,15 +40,17 @@ final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: 
                   accounts(txn.fromAccountId.value).debit(
                     AccountTransactionId(transactionId, AccountTransactionKind.Revert),
                     txn.amount
-                  ).value >> transactions(transactionId).fail(rejection.toString).value
+                  ) >> transactions(transactionId).fail(rejection.toString)
                 case Right(_) =>
-                  transactions(transactionId).succeed.value
+                  transactions(transactionId).succeed
               }
         } yield ()
       case _ =>
         ().pure[F]
     }
   }
+
+
 }
 
 object TransactionProcessor {
