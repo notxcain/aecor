@@ -20,7 +20,6 @@ lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.0-cats"
 
-lazy val monixVersion = "3.0.0-RC1"
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
@@ -31,8 +30,7 @@ lazy val scalametaVersion = "1.8.0"
 // Example dependencies
 
 lazy val circeVersion = "0.9.3"
-lazy val akkaHttpVersion = "10.1.4"
-lazy val akkaHttpJsonVersion = "1.19.0"
+lazy val http4sVersion = "0.19.0-M4"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
 lazy val liberatorVersion = "0.8.0"
@@ -87,6 +85,14 @@ lazy val akkaPersistence = aecorModule(
 ).dependsOn(core)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
+
+lazy val queueRuntime = aecorModule(
+  "queue-runtime",
+  "Aecor Runtime based on Queueing"
+).dependsOn(core)
+  .dependsOn(boopickleWireProtocol % "test->compile")
+  .settings(aecorSettings)
+  .settings(queueRuntimeSettings)
 
 lazy val akkaGeneric =
   aecorModule("akka-cluster-runtime", "Aecor Runtime based on Akka Cluster Sharding")
@@ -173,6 +179,22 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
 )
 
+lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
+  addCompilerPlugin(
+    ("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch)
+  ),
+  libraryDependencies ++= Seq(
+    "co.fs2" %% "fs2-core" % "1.0.0-M5",
+    "com.github.krasserm" %% "streamz-converter" % "0.10-SNAPSHOT",
+    "org.http4s" %% "http4s-blaze-server" % http4sVersion,
+    "org.http4s" %% "http4s-dsl" % http4sVersion,
+    "org.http4s" %% "http4s-blaze-client" % http4sVersion,
+    "org.http4s" %% "http4s-boopickle" % http4sVersion,
+    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
+    "org.scalatest" %% "scalatest" % scalaTestVersion % Test
+  )
+)
+
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
@@ -198,8 +220,9 @@ lazy val exampleSettings = {
         "co.fs2" %% "fs2-core" % "1.0.0-M5",
         "org.typelevel" %% "cats-mtl-core" % "0.3.0",
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-        "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
-        "de.heikoseeberger" %% "akka-http-circe" % akkaHttpJsonVersion,
+        "org.http4s" %% "http4s-dsl" % http4sVersion,
+        "org.http4s" %% "http4s-blaze-server" % http4sVersion,
+        "org.http4s" %% "http4s-circe" % http4sVersion,
         "io.circe" %% "circe-core" % circeVersion,
         "io.circe" %% "circe-generic" % circeVersion,
         "io.circe" %% "circe-parser" % circeVersion,
