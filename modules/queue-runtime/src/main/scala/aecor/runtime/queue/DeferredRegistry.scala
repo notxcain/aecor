@@ -22,7 +22,7 @@ private [queue] class DeferredRegistry[F[_], K, A](timeout: FiniteDuration, kvs:
     for {
       pair <- kvs.takeValue(key)
       _ <- pair.traverse_[F, Unit] { case StoreItem(cancelTimeout, deferred) =>
-          cancelTimeout >> deferred.complete(Right(value))
+          cancelTimeout >> deferred.complete(Right(value)).attempt.void
       }
     } yield ()
 }

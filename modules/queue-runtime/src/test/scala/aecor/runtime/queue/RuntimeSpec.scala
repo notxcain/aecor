@@ -1,19 +1,17 @@
 package aecor.runtime.queue
 
-import aecor.runtime.queue.Runtime.{CommandEnvelope, EntityName}
 import cats.effect.IO
 
 import scala.concurrent.duration._
 class RuntimeSpec extends TestSuite {
   test("Runtime should work") {
     for {
-      runtime <- Runtime.create[IO, Unit](10.seconds, 60.seconds, ClientServer.local)
-      queue <- PartitionedQueue.local[IO, EntityName, CommandEnvelope[Unit, String]]
+      runtime <- Runtime.create[IO](10.seconds, 60.seconds)
       result <- runtime
-        .run[String, Counter](
-        EntityName("Counter"),
+        .run[String, Unit, Counter](
         _ => Counter.inmem[IO],
-        queue
+        ClientServer.local,
+        PartitionedQueue.local
       )
         .use { counters =>
           for {

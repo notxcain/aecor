@@ -36,7 +36,7 @@ class ActorSpec extends TestSuite {
     } yield assert(result.left.get.isInstanceOf[IllegalStateException])
   }
 
-  ignore("Actor should restart after receive error ") {
+  test("Actor should restart after receive error ") {
     for {
       queue <- Queue.unbounded[IO, Int]
       actor <- Actor.create[IO, Unit] { _ =>

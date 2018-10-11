@@ -183,11 +183,14 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
   addCompilerPlugin(
-    ("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch)
+    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
   ),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.2.4"),
+  resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
   libraryDependencies ++= Seq(
     "co.fs2" %% "fs2-core" % fs2Version,
-//    "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
+    "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
+    "com.typesafe.akka" %% "akka-stream-kafka" % "0.22",
     "io.chrisdavenport" %% "log4cats-slf4j" % log4catsVersion,
     "org.http4s" %% "http4s-blaze-server" % http4sVersion,
     "org.http4s" %% "http4s-dsl" % http4sVersion,

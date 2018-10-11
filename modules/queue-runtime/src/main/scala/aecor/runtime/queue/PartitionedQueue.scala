@@ -1,24 +1,23 @@
 package aecor.runtime.queue
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, Resource}
 import fs2.Stream
-import fs2.concurrent.Queue
+import fs2.concurrent.{Enqueue, Queue}
 import cats.implicits._
 
-trait PartitionedQueue[F[_], I, A] {
-  def enqueue(a: A): F[Unit]
-  def subscribe(consumerId: I): Stream[F, Stream[F, A]]
+trait PartitionedQueue[F[_], A] {
+  def start: Resource[F, (Enqueue[F, A], Stream[F, Stream[F, A]])]
 }
 
 object PartitionedQueue {
-  def local[F[_]: Concurrent, I, A]: F[PartitionedQueue[F, I, A]] =
-    Queue.unbounded[F, A].map { queue =>
-      new PartitionedQueue[F, I, A] {
-
-        override def enqueue(a: A): F[Unit] =
-          queue.enqueue1(a)
-
-        override def subscribe(consumerId: I): Stream[F, Stream[F, A]] =
-          Stream.emit(queue.dequeue)
+  def local[F[_]: Concurrent, A]: PartitionedQueue[F, A] =
+    new PartitionedQueue[F, A] {
+      override def start: Resource[F,
+        (Enqueue[F, A],
+          Stream[F, Stream[F, A]])] = Resource.liftF {
+        Queue.unbounded[F, A].map { queue =>
+          (queue, Stream.emit(queue.dequeue))
+        }
       }
     }
+
 }

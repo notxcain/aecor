@@ -21,27 +21,27 @@ import org.http4s.{EntityDecoder, EntityEncoder}
 
 import scala.concurrent.duration.FiniteDuration
 
-class Runtime[F[_], I] private[queue] (
+class Runtime[F[_]] private[queue] (
                                     idleTimeout: FiniteDuration,
-                                    registry: DeferredRegistry[F, CommandId, Array[Byte]], clientServer: ClientServer[F, I, CommandResponse]
+                                    registry: DeferredRegistry[F, CommandId, Array[Byte]]
 )(implicit
   F: ConcurrentEffect[F],
   timer: Timer[F])
     extends Http4sDsl[F] {
 
-  def run[K, M[_[_]]](
-    name: EntityName,
+  def run[K, I, M[_[_]]](
     create: K => F[M[F]],
-    commands: PartitionedQueue[F, EntityName, CommandEnvelope[I, K]]
+    clientServer: ClientServer[F, I, CommandResponse],
+    commandQueue: PartitionedQueue[F, CommandEnvelope[I, K]]
   )(implicit M: WireProtocol[M]): Resource[F, K => M[F]] = {
 
     def startCommandProcessor(
       create: K => F[M[F]],
+      commandPartitions: Stream[F, Stream[F, CommandEnvelope[I, K]]],
       sendResponse: (I, CommandResponse) => F[Unit]
     ): Resource[F, Unit] =
       Resource[F, Unit] {
-        commands
-          .subscribe(name)
+        commandPartitions
           .map { commands =>
             val startShard =
               ActorShard.create[F, K, (CommandId, I, PairE[Invocation[M, ?], Encoder])](
@@ -61,7 +61,7 @@ class Runtime[F[_], I] private[queue] (
               }
             Stream.bracket(startShard)(_.terminate).flatMap { shard =>
               commands.evalMap {
-                case x @ CommandEnvelope(commandId, replyTo, key, bytes) =>
+                case CommandEnvelope(commandId, replyTo, key, bytes) =>
                   F.fromEither(M.decoder.decode(ByteBuffer.wrap(bytes))).flatMap { pair =>
                     shard.send((key, (commandId, replyTo, pair)))
                   }
@@ -76,19 +76,19 @@ class Runtime[F[_], I] private[queue] (
       }
 
     for {
-      cs <- clientServer.start(name)(body => registry.fulfill(body.commandId, body.bytes))
-      _ <- startCommandProcessor(create, cs._2)
+      (selfAddress, responseSender) <- clientServer.start(body => registry.fulfill(body.commandId, body.bytes))
+      (commands, commandPartitions) <- commandQueue.start
+      _ <- startCommandProcessor(create, commandPartitions, responseSender)
       encoder = M.encoder
     } yield { key: K =>
       M.mapInvocations(new (Invocation[M, ?] ~> F) {
-        private val selfAddress = cs._1
         override def apply[A](invocation: Invocation[M, A]): F[A] = {
           val (bytes, decoder) = invocation.invoke(encoder)
           for {
             commandId <- F.delay(CommandId(UUID.randomUUID()))
             waitForResult <- registry.defer(commandId)
             envelope = CommandEnvelope(commandId, selfAddress, key, bytes.array())
-            _ <- commands.enqueue(envelope)
+            _ <- commands.enqueue1(envelope)
             responseBytes <- waitForResult
             out <- F.fromEither(decoder.decode(ByteBuffer.wrap(responseBytes)))
           } yield out
@@ -100,9 +100,8 @@ class Runtime[F[_], I] private[queue] (
 }
 
 object Runtime {
-  final case class EntityName(value: String) extends AnyVal
-  private[queue] final case class CommandResponse(commandId: CommandId, bytes: Array[Byte])
-  private[queue] object CommandResponse {
+  final case class CommandResponse(commandId: CommandId, bytes: Array[Byte])
+  object CommandResponse {
     import boopickle.Default._
     implicit def entityDecoder[F[_]: Sync]: EntityDecoder[F, CommandResponse] =
       booOf[F, CommandResponse]
@@ -116,13 +115,12 @@ object Runtime {
                                       bytes: Array[Byte])
   private[queue] final case class ResponseEnvelope[K](commandId: CommandId, bytes: Array[Byte])
 
-  def create[F[_]: ConcurrentEffect: ContextShift: Timer, I](
+  def create[F[_]: ConcurrentEffect: ContextShift: Timer](
     requestTimeout: FiniteDuration,
-    idleTimeout: FiniteDuration,
-    clientServer: ClientServer[F, I, CommandResponse]
-  ): F[Runtime[F, I]] =
+    idleTimeout: FiniteDuration
+  ): F[Runtime[F]] =
     for {
       kvs <- HashMapKeyValueStore.create[F, CommandId, StoreItem[F, Array[Byte]]]
       registry = DeferredRegistry(requestTimeout, kvs)
-    } yield new Runtime(idleTimeout, registry, clientServer)
+    } yield new Runtime(idleTimeout, registry)
 }
