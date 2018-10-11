@@ -1,37 +1,33 @@
 package aecor.runtime.queue
 
-import aecor.runtime.queue.Runtime.{ CommandEnvelope, MemberAddress }
+import aecor.runtime.queue.Runtime.{CommandEnvelope, EntityName}
 import cats.effect.IO
-import fs2.concurrent.Queue
-import org.scalatest.FunSuite
-import scala.concurrent.ExecutionContext.Implicits.global
+
 import scala.concurrent.duration._
-import fs2._
-class RuntimeSpec extends FunSuite with IOContextShift with IOTimer {
+class RuntimeSpec extends TestSuite {
   test("Runtime should work") {
-    val program = for {
-      runtime <- Runtime.create[IO](MemberAddress("localhost", 9449), 10.seconds, 60.seconds)
-      queue <- Queue.unbounded[IO, CommandEnvelope[String]]
-      out <- runtime
-        .deploy[String, Counter](
-        "Counter",
+    for {
+      runtime <- Runtime.create[IO, Unit](10.seconds, 60.seconds, ClientServer.local)
+      queue <- PartitionedQueue.local[IO, EntityName, CommandEnvelope[Unit, String]]
+      result <- runtime
+        .run[String, Counter](
+        EntityName("Counter"),
         _ => Counter.inmem[IO],
-        queue,
-        Stream.emit(queue.dequeue)
+        queue
       )
         .use { counters =>
           for {
             _ <- counters("foo").increment
             _ <- counters("bar").increment
+            _ <- counters("baz").increment
             _ <- counters("foo").increment
+            _ <- counters("baz").decrement
             foo <- counters("foo").value
             bar <- counters("bar").value
-          } yield (foo, bar)
+            baz <- counters("baz").value
+          } yield (foo, bar, baz)
         }
 
-    } yield out
-
-    val result = program.unsafeRunSync()
-    assert(result == (2 -> 1))
+    } yield assert(result == ((2, 1, 0)))
   }
 }

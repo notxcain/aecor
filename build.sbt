@@ -12,16 +12,18 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.15"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
-lazy val catsVersion = "1.3.1"
+lazy val catsVersion = "1.4.0"
 lazy val catsEffectVersion = "1.0.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.0-cats"
+lazy val fs2Version = "1.0.0"
+lazy val log4catsVersion = "0.2.0-M1"
 
 lazy val scalaCheckVersion = "1.13.4"
-lazy val scalaTestVersion = "3.0.1"
+lazy val scalaTestVersion = "3.0.5"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.7"
@@ -184,13 +186,13 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
     ("org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch)
   ),
   libraryDependencies ++= Seq(
-    "co.fs2" %% "fs2-core" % "1.0.0-M5",
-    "com.github.krasserm" %% "streamz-converter" % "0.10-SNAPSHOT",
+    "co.fs2" %% "fs2-core" % fs2Version,
+//    "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
+    "io.chrisdavenport" %% "log4cats-slf4j" % log4catsVersion,
     "org.http4s" %% "http4s-blaze-server" % http4sVersion,
     "org.http4s" %% "http4s-dsl" % http4sVersion,
     "org.http4s" %% "http4s-blaze-client" % http4sVersion,
     "org.http4s" %% "http4s-boopickle" % http4sVersion,
-    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test
   )
 )

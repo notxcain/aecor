@@ -2,7 +2,6 @@ package aecor.runtime.akkageneric
 
 import java.nio.ByteBuffer
 
-import aecor.encoding.WireProtocol.Encoded
 import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
@@ -16,7 +15,6 @@ import cats.effect.Effect
 import cats.implicits._
 import cats.~>
 import io.aecor.liberator.Invocation
-import io.aecor.liberator.syntax._
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =

@@ -10,7 +10,7 @@ private [queue] final class HashMapKeyValueStore[F[_], K, V] private (store: Con
   override def deleteValue(key: K): F[Unit] = F.delay { store.remove(key); () }
 }
 
-object HashMapKeyValueStore {
+private [queue] object HashMapKeyValueStore {
   def create[F[_]: Sync, K, V]: F[KeyValueStore[F, K, V]] =
     Sync[F].delay {
       new HashMapKeyValueStore(new ConcurrentHashMap[K, V]())

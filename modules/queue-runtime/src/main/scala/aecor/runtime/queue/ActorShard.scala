@@ -2,7 +2,7 @@ package aecor.runtime.queue
 
 import aecor.runtime.queue.Actor.Receive
 import cats.effect.implicits._
-import cats.effect.{ Concurrent, ContextShift, Timer }
+import cats.effect.{ Concurrent, Timer }
 import cats.implicits._
 import fs2._
 
@@ -18,7 +18,6 @@ private [queue]  object ActorShard {
   def create[F[_], K, A](idleTimeout: FiniteDuration)(
     create: K => F[Actor[F, A]])(
     implicit F: Concurrent[F],
-    context: ContextShift[F],
     timer: Timer[F]
   ): F[Actor[F, (K, A)]] =
     Actor.create[F, (K, Message[A])] { self =>
@@ -58,16 +57,15 @@ private [queue]  object ActorShard {
         }
     }.map(_.contramap[(K, A)](x => x._1 -> Message.Handle(x._2)))
 
-  def apply[F[_], K, A](
+  def sink[F[_], K, A](
     init: K => F[Actor[F, A]],
     idleTimeout: FiniteDuration
-  )(implicit F: Concurrent[F], context: ContextShift[F], timer: Timer[F]): Sink[F, (K, A)] = {
+  )(implicit F: Concurrent[F], timer: Timer[F]): Sink[F, (K, A)] = {
     commands =>
       Stream.force {
         create(idleTimeout)(init).map { ac =>
           commands.evalMap(ac.send)
         }
       }
-
   }
 }

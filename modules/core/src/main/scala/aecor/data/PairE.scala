@@ -17,6 +17,7 @@ object PairE {
       final override type A = A0
       final override def first: F[A0] = fa
       final override def second: G[A0] = ga
+      override def toString: String = s"Pair($first, $second)"
     }
   }
 }
