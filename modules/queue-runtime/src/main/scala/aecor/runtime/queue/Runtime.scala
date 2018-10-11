@@ -36,6 +36,7 @@ class Runtime[F[_]] private[queue] (
   )(implicit M: WireProtocol[M]): Resource[F, K => M[F]] = {
 
     def startCommandProcessor(
+      selfMemberId: I,
       create: K => F[M[F]],
       commandPartitions: Stream[F, Stream[F, CommandEnvelope[I, K]]],
       sendResponse: (I, CommandResponse) => F[Unit]
@@ -53,7 +54,11 @@ class Runtime[F[_]] private[queue] (
                       case (commandId, replyTo, pair) =>
                         val (inv, enc) = (pair.first, pair.second)
                         inv.invoke(mf).map(enc.encode).flatMap { bytes =>
-                          sendResponse(replyTo, CommandResponse(commandId, bytes.array()))
+                          if (replyTo == selfMemberId) {
+                            registry.fulfill(commandId, bytes.array())
+                          } else {
+                            sendResponse(replyTo, CommandResponse(commandId, bytes.array()))
+                          }
                         }
                     }
                   }
@@ -78,7 +83,7 @@ class Runtime[F[_]] private[queue] (
     for {
       (selfAddress, responseSender) <- clientServer.start(body => registry.fulfill(body.commandId, body.bytes))
       (commands, commandPartitions) <- commandQueue.start
-      _ <- startCommandProcessor(create, commandPartitions, responseSender)
+      _ <- startCommandProcessor(selfAddress, create, commandPartitions, responseSender)
       encoder = M.encoder
     } yield { key: K =>
       M.mapInvocations(new (Invocation[M, ?] ~> F) {
