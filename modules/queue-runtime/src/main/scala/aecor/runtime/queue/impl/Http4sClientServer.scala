@@ -1,15 +1,18 @@
-package aecor.runtime.queue
+package aecor.runtime.queue.impl
+
 import java.net.InetSocketAddress
 
-import cats.effect.{ ConcurrentEffect, Resource }
+import aecor.runtime.queue.ClientServer
+import aecor.runtime.queue.ClientServer.Instance
+import cats.effect.{ConcurrentEffect, Resource}
 import cats.implicits._
-import org.http4s.Uri.{ Authority, Scheme }
+import org.http4s.Uri.{Authority, Scheme}
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.Server
 import org.http4s.server.blaze.BlazeBuilder
-import org.http4s.{ EntityDecoder, EntityEncoder, HttpRoutes, Method, Request, Uri }
+import org.http4s.{EntityDecoder, EntityEncoder, HttpRoutes, Method, Request, Uri}
 
 import scala.concurrent.ExecutionContext
 
@@ -23,11 +26,11 @@ final class Http4sClientServer[F[_], A: EntityDecoder[F, ?]: EntityEncoder[F, ?]
 
   override def start(
     f: A => F[Unit]
-  ): Resource[F, (InetSocketAddress, (InetSocketAddress, A) => F[Unit])] =
+  ): Resource[F, Instance[F, InetSocketAddress, A]] =
     for {
       _ <- startServer(f)
       s <- startClient
-    } yield (externalAddress, s)
+    } yield Instance(externalAddress, s)
 
   private def startServer(f: A => F[Unit]): Resource[F, Server[F]] = {
     val routes = HttpRoutes.of[F] {
@@ -52,7 +55,7 @@ final class Http4sClientServer[F[_], A: EntityDecoder[F, ?]: EntityEncoder[F, ?]
           Some(Authority(host = Uri.IPv4(address.getHostString), port = Some(address.getPort))),
           path = s"/$path"
         )
-        client.fetch(Request[F](Method.POST, uri).withEntity(a))(x => F.unit)
+        client.fetch(Request[F](Method.POST, uri).withEntity(a))(_ => F.unit)
     }
 
     BlazeClientBuilder[F](ec).resource

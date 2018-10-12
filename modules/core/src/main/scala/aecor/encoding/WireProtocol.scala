@@ -22,9 +22,11 @@ object WireProtocol {
 
   trait Encoder[A] {
     def encode(a: A): ByteBuffer
+    final def contramap[B](f: B => A): Encoder[B] = Encoder.instance[B](b => encode(f(b)))
   }
 
   object Encoder {
+    def apply[A](implicit instance: Encoder[A]): Encoder[A] = instance
     def instance[A](f: A => ByteBuffer): Encoder[A] = new Encoder[A] {
       override def encode(a: A): ByteBuffer = f(a)
     }
@@ -34,6 +36,8 @@ object WireProtocol {
 
   trait Decoder[A] {
     def decode(bytes: ByteBuffer): DecodingResult[A]
+    final def map[B](f: A => B): Decoder[B] = Decoder.instance(b => decode(b).map(f))
+    final def tryMap[B](f: A => DecodingResult[B]): Decoder[B] = Decoder.instance(b => decode(b).flatMap(f))
   }
 
   object Decoder {

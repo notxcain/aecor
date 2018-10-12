@@ -2,6 +2,7 @@ package aecor.runtime.queue
 import cats.effect.IO
 import cats.effect.concurrent.Deferred
 import cats.implicits._
+import fs2.concurrent.Queue
 
 import scala.concurrent.duration._
 class ActorShardSpec extends TestSuite {
@@ -23,22 +24,22 @@ class ActorShardSpec extends TestSuite {
       _ <- shard.send(("B", 2))
       a <- deferredA.get
       b <- deferredB.get
-      _ <- shard.terminate
     } yield assert(a == 1 && b == 2)
   }
 
   test("It should terminate actor after idle timeout") {
     for {
-      terminated <- Deferred[IO, Boolean]
+      queue <- Queue.unbounded[IO, Boolean]
       shard <- ActorShard.create[IO, String, Int](1.second) {
         _ =>
-          Actor.ignore[IO, Int].flatTap { actor =>
-            actor.watchTermination.flatMap(_ => terminated.complete(true)).start
+          Actor.void[IO, Int].flatTap { actor =>
+            actor.watchTermination.flatMap(_ => queue.enqueue1(true)).start
           }
       }
       _ <- shard.send(("B", 2))
-      a <- terminated.get
-      _ <- shard.terminate
-    } yield assert(a)
+      a <- queue.dequeue1
+      _ <- shard.send(("B", 2))
+      b <- queue.dequeue1
+    } yield assert(a && b)
   }
 }

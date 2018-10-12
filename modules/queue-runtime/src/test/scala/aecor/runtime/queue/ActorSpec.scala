@@ -1,8 +1,8 @@
 package aecor.runtime.queue
 
 import aecor.runtime.queue.Actor.Receive
-import cats.effect.IO
-import cats.effect.concurrent.Ref
+import cats.effect.{IO, Resource}
+import cats.effect.concurrent.{Deferred, Ref}
 import cats.implicits._
 import fs2.concurrent.Queue
 
@@ -27,13 +27,14 @@ class ActorSpec extends TestSuite {
     } yield assert(result == Vector(1, 2))
   }
 
-  test("Actor should terminate and complete subsequent tell with error") {
+  test("Actor should close behavior resource when terminated") {
     for {
-      actor <- Actor.create[IO, Int](_ => IO.pure(_ => ().pure[IO]))
+      cleaned <- Deferred[IO, Unit]
+      actor <- Actor.resource[IO, Int](_ => Resource(IO.pure(((_: Int) => ().pure[IO], cleaned.complete(())))))
       _ <- actor.send(1)
       _ <- actor.terminate
-      result <- actor.send(2).attempt
-    } yield assert(result.left.get.isInstanceOf[IllegalStateException])
+      _ <- cleaned.get
+    } yield assert(true)
   }
 
   test("Actor should restart after receive error ") {

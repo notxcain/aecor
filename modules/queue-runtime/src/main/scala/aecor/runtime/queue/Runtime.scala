@@ -7,8 +7,8 @@ import aecor.data.PairE
 import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Encoder
 import aecor.runtime.queue.Actor.Receive
-import aecor.runtime.queue.DeferredRegistry.StoreItem
 import aecor.runtime.queue.Runtime._
+import aecor.runtime.queue.impl.ConcurrentHashMapDeferredRegistry
 import cats.effect._
 import cats.effect.implicits._
 import cats.implicits._
@@ -45,9 +45,7 @@ class Runtime[F[_]] private[queue] (
         commandPartitions
           .map { commands =>
             val startShard =
-              ActorShard.create[F, K, (CommandId, I, PairE[Invocation[M, ?], Encoder])](
-                idleTimeout
-              ) { key =>
+              ActorShard.create(idleTimeout) { key: K =>
                 Actor.create[F, (CommandId, I, PairE[Invocation[M, ?], Encoder])] { _ =>
                   create(key).map { mf =>
                     Receive[(CommandId, I, PairE[Invocation[M, ?], Encoder])] {
@@ -64,7 +62,7 @@ class Runtime[F[_]] private[queue] (
                   }
                 }
               }
-            Stream.bracket(startShard)(_.terminate).flatMap { shard =>
+            Stream.bracket(startShard)(_.terminateAndWatch).flatMap { shard =>
               commands.evalMap {
                 case CommandEnvelope(commandId, replyTo, key, bytes) =>
                   F.fromEither(M.decoder.decode(ByteBuffer.wrap(bytes))).flatMap { pair =>
@@ -81,9 +79,9 @@ class Runtime[F[_]] private[queue] (
       }
 
     for {
-      (selfAddress, responseSender) <- clientServer.start(body => registry.fulfill(body.commandId, body.bytes))
-      (commands, commandPartitions) <- commandQueue.start
-      _ <- startCommandProcessor(selfAddress, create, commandPartitions, responseSender)
+      ClientServer.Instance(selfId, responseSender) <- clientServer.start(body => registry.fulfill(body.commandId, body.bytes))
+      PartitionedQueue.Instance(commands, commandPartitions) <- commandQueue.start
+      _ <- startCommandProcessor(selfId, create, commandPartitions, responseSender)
       encoder = M.encoder
     } yield { key: K =>
       M.mapInvocations(new (Invocation[M, ?] ~> F) {
@@ -92,7 +90,7 @@ class Runtime[F[_]] private[queue] (
           for {
             commandId <- F.delay(CommandId(UUID.randomUUID()))
             waitForResult <- registry.defer(commandId)
-            envelope = CommandEnvelope(commandId, selfAddress, key, bytes.array())
+            envelope = CommandEnvelope(commandId, selfId, key, bytes.array())
             _ <- commands.enqueue1(envelope)
             responseBytes <- waitForResult
             out <- F.fromEither(decoder.decode(ByteBuffer.wrap(responseBytes)))
@@ -125,7 +123,6 @@ object Runtime {
     idleTimeout: FiniteDuration
   ): F[Runtime[F]] =
     for {
-      kvs <- HashMapKeyValueStore.create[F, CommandId, StoreItem[F, Array[Byte]]]
-      registry = DeferredRegistry(requestTimeout, kvs)
+      registry <- ConcurrentHashMapDeferredRegistry.create[F, CommandId, Array[Byte]](requestTimeout)
     } yield new Runtime(idleTimeout, registry)
 }

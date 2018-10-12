@@ -196,6 +196,7 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
     "org.http4s" %% "http4s-dsl" % http4sVersion,
     "org.http4s" %% "http4s-blaze-client" % http4sVersion,
     "org.http4s" %% "http4s-boopickle" % http4sVersion,
+    "org.http4s" %% "http4s-circe" % http4sVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test
   )
 )

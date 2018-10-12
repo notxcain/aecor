@@ -1,13 +1,19 @@
 package aecor.runtime.queue
 
 import cats.effect.implicits._
-import cats.effect.Concurrent
+import cats.effect.{Concurrent, Resource}
 import cats.implicits._
-import fs2.concurrent.{Queue, SignallingRef}
+import fs2.concurrent.Queue
 import fs2._
+import _root_.io.aecor.liberator.ReifiedInvocations
+import _root_.io.aecor.liberator.Invocation
+import aecor.data.PairE
+import cats.effect.concurrent.Deferred
+import cats.{Applicative, ~>}
 
 private[queue] trait Actor[F[_], A] { outer =>
   def send(message: A): F[Unit]
+  final def terminateAndWatch(implicit F: Applicative[F]): F[Unit] = terminate *> watchTermination
   def terminate: F[Unit]
   def watchTermination: F[Unit]
   final def contramap[B](f: B => A): Actor[F, B] = new Actor[F, B] {
@@ -18,43 +24,42 @@ private[queue] trait Actor[F[_], A] { outer =>
 }
 
 private[queue] object Actor {
+
+  type Receive[F[_], A] = A => F[Unit]
+
   object Receive {
     final class Builder[A] {
       def apply[F[_]](f: A => F[Unit]): A => F[Unit] = f
     }
     private val instance: Builder[Any] = new Builder[Any]
     def apply[A]: Builder[A] = instance.asInstanceOf[Builder[A]]
+    def void[F[_], A](implicit F: Applicative[F]): A => F[Unit] = _ => F.pure(())
   }
+
   trait Context[F[_], A] {
     def send(a: A): F[Unit]
+    def terminate: F[Unit]
   }
-  //TODO: Make handler a Resource
-  def create[F[_], A](
-    init: Context[F, A] => F[A => F[Unit]]
-  )(implicit F: Concurrent[F]): F[Actor[F, A]] =
+
+  def resource[F[_], A](init: Context[F, A] => Resource[F, A => F[Unit]])(implicit F: Concurrent[F]): F[Actor[F, A]] =
     for {
-      mailbox <- Queue.unbounded[F, A]
-      killed <- SignallingRef[F, Boolean](false)
+      mailbox <- Queue.unbounded[F, Option[A]]
+
       actorContext = new Context[F, A] {
         override def send(a: A): F[Unit] =
-          killed.get.ifM(
-            F.raiseError(new IllegalStateException("Actor terminated")),
-            mailbox.enqueue1(a)
-          )
+          mailbox.enqueue1(a.some)
+
+        override def terminate: F[Unit] =
+          mailbox.enqueue1(none)
       }
 
       runloop <- {
+        def run: Stream[F, Unit] =
+          Stream.resource(init(actorContext)).flatMap { handle =>
+            mailbox.dequeue.unNoneTerminate.evalMap(handle)
+          }.handleErrorWith(_ => run)
 
-        def run: Stream[F, Unit] = Stream.force {
-          init(actorContext).map { handle =>
-            mailbox.dequeue.interruptWhen(killed).evalMap(handle)
-          }
-        }.handleErrorWith(_ => run)
-
-        run
-          .compile
-          .drain
-          .start
+        run.compile.drain.start
       }
     } yield
       new Actor[F, A] {
@@ -62,15 +67,41 @@ private[queue] object Actor {
           actorContext.send(message)
 
         override def terminate: F[Unit] =
-          killed.set(true) >> watchTermination.attempt.void
+          actorContext.terminate
 
         override def watchTermination: F[Unit] =
           runloop.join
       }
 
-  def ignore[F[_], A](implicit F: Concurrent[F]): F[Actor[F, A]] =
-    create[F, A](_ => { _: A =>
-      ().pure[F]
-    }.pure[F])
+  def create[F[_]: Concurrent, A](
+    init: Context[F, A] => F[A => F[Unit]]
+  ): F[Actor[F, A]] =
+    resource[F, A](ctx => Resource.liftF(init(ctx)))
 
+  def void[F[_], A](implicit F: Concurrent[F]): F[Actor[F, A]] =
+    create[F, A](_ => F.pure(Receive.void[F, A]))
+
+  def wrap[F[_], M[_[_]]](load: M[F] => F[M[F]])(implicit F: Concurrent[F],
+                                                 M: ReifiedInvocations[M]): F[M[F]] =
+    for {
+      self <- Deferred[F, M[F]]
+      actor <- Actor.create[F, PairE[Invocation[M, ?], Deferred[F, ?]]] { ctx =>
+                self.get.flatMap(load).map { mf =>
+                  Receive[PairE[Invocation[M, ?], Deferred[F, ?]]] { pair =>
+                    pair.first.invoke(mf).flatMap(pair.second.complete)
+                  }
+                }
+              }
+      out = M.mapInvocations {
+        new (Invocation[M, ?] ~> F) {
+          override def apply[A](invocation: Invocation[M, A]): F[A] =
+            for {
+              deferred <- Deferred[F, A]
+              _ <- actor.send(PairE(invocation, deferred))
+              out <- deferred.get
+            } yield out
+        }
+      }
+      _ <- self.complete(out)
+    } yield out
 }

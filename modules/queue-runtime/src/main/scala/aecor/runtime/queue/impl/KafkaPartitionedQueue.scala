@@ -1,23 +1,23 @@
-package aecor.runtime.queue
+package aecor.runtime.queue.impl
+
 import java.util.UUID
 
-import aecor.runtime.queue.KafkaPartitionedQueue.Serialization
-import akka.NotUsed
+import aecor.runtime.queue.PartitionedQueue
+import aecor.runtime.queue.PartitionedQueue.Instance
+import aecor.runtime.queue.impl.KafkaPartitionedQueue.Serialization
+import aecor.util.effect._
 import akka.actor.ActorSystem
-import akka.kafka.ConsumerMessage.CommittableMessage
-import akka.kafka.{ ConsumerSettings, Subscriptions }
+import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.kafka.scaladsl.Consumer
-import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.Source
-import cats.effect.concurrent.Deferred
+import akka.kafka.{ ConsumerSettings, Subscriptions }
+import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
-import fs2.concurrent.{ Enqueue, Queue }
-import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
+import cats.effect.concurrent.Deferred
 import cats.implicits._
-import streamz.converter._
-import fs2.Stream
+import fs2.concurrent.{ Enqueue, Queue }
 import org.apache.kafka.clients.producer._
-import org.apache.kafka.common.TopicPartition
+import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
+import streamz.converter._
 
 import scala.concurrent.duration._
 
@@ -33,46 +33,54 @@ class KafkaPartitionedQueue[F[_], K, A](
   commitGrouping: (Int, FiniteDuration)
 )(implicit F: ConcurrentEffect[F], contextShift: ContextShift[F], timer: Timer[F])
     extends PartitionedQueue[F, A] {
-  override def start: Resource[F, (Enqueue[F, A], fs2.Stream[F, fs2.Stream[F, A]])] =
-    (startProducer, startConsumer).tupled
+  override def start: Resource[F, Instance[F, A]] =
+    (startProducer, startConsumer).mapN(Instance(_, _))
 
   def startConsumer: Resource[F, fs2.Stream[F, fs2.Stream[F, A]]] =
     Resource[F, fs2.Stream[F, fs2.Stream[F, A]]] {
-      Deferred[F, Consumer.Control].map { deferred =>
-        implicit val materializer = ActorMaterializer()(system)
-        val consumerSettings =
-          ConsumerSettings(system, serialization.keyDeserializer, serialization.valueDeserializer)
-            .withBootstrapServers(contactPoints.mkString(","))
-            .withClientId(UUID.randomUUID().toString)
-            .withGroupId(groupId)
-            .withProperties(consumerProperties)
+      Deferred[F, Consumer.Control].flatMap { deferredControl =>
+        Deferred[F, Unit].map { deferredComplete =>
+          implicit val materializer: Materializer = ActorMaterializer()(system)
 
-        val x: Stream[F, (TopicPartition, Source[CommittableMessage[K, A], NotUsed])] = Consumer
-          .committablePartitionedSource(consumerSettings, Subscriptions.topics(topicName))
-          .toStream[F](
-            control => F.runAsync(deferred.complete(control))(_ => IO.unit).unsafeRunSync()
-          )
+          val consumerSettings =
+            ConsumerSettings(system, serialization.keyDeserializer, serialization.valueDeserializer)
+              .withBootstrapServers(contactPoints.mkString(","))
+              .withClientId(UUID.randomUUID().toString)
+              .withGroupId(groupId)
+              .withProperties(consumerProperties)
 
-        val out = x.evalMap {
-          case (_, partition) =>
-            Queue.unbounded[F, F[Unit]].map { commits =>
-              partition
-                .toStream[F]()
-                .mapAsync(10) { c =>
-                  commits
-                    .enqueue1(
-                      F.liftIO(IO.fromFuture(IO(c.committableOffset.commitScaladsl()))).void
+          val stream = Consumer
+            .committablePartitionedSource(consumerSettings, Subscriptions.topics(topicName))
+            .toStream[F](
+              control => F.runAsync(deferredControl.complete(control))(_ => IO.unit).unsafeRunSync()
+            )
+            .evalMap {
+              case (i, partition) =>
+                println(s"Assigned partition $i")
+                Queue.unbounded[F, CommittableOffset].map { commits =>
+                  partition
+                    .toStream()
+                    .evalMap { m =>
+                      commits
+                        .enqueue1(m.committableOffset)
+                        .as(m.record.value())
+                    }
+                    .concurrently(
+                      commits.dequeue
+                        .groupWithin(commitGrouping._1, commitGrouping._2)
+                        .evalMap(_.last.traverse_(o => F.fromFuture(o.commitScaladsl())))
                     )
-                    .as(c.record.value())
+                    .onFinalize(F.delay(println(s"Partition revoked $i")))
                 }
-                .concurrently(
-                  commits.dequeue
-                    .groupWithin(commitGrouping._1, commitGrouping._2)
-                    .evalMap(_.last.sequence_)
-                )
             }
+            .onFinalize(deferredComplete.complete(()))
+
+          val free =
+            deferredControl.get.flatMap { c =>
+              F.fromFuture(c.stop()) >> deferredComplete.get >> F.fromFuture(c.shutdown()).void
+            }
+          (stream, free)
         }
-        (out, deferred.get.flatMap(c => F.liftIO(IO.fromFuture(IO(c.shutdown())).void)))
       }
     }
 
@@ -145,4 +153,5 @@ object KafkaPartitionedQueue {
       consumerProperties,
       commitGrouping
     )
+
 }
