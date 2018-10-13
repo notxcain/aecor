@@ -13,7 +13,7 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.server.Server
 import org.http4s.server.blaze.BlazeBuilder
 import org.http4s.{EntityDecoder, EntityEncoder, HttpRoutes, Method, Request, Uri}
-
+import cats.effect.implicits._
 import scala.concurrent.ExecutionContext
 
 final class Http4sClientServer[F[_], A: EntityDecoder[F, ?]: EntityEncoder[F, ?]](
@@ -55,7 +55,7 @@ final class Http4sClientServer[F[_], A: EntityDecoder[F, ?]: EntityEncoder[F, ?]
           Some(Authority(host = Uri.IPv4(address.getHostString), port = Some(address.getPort))),
           path = s"/$path"
         )
-        client.fetch(Request[F](Method.POST, uri).withEntity(a))(_ => F.unit)
+        client.fetch(Request[F](Method.POST, uri).withEntity(a))(_ => F.unit).start.void
     }
 
     BlazeClientBuilder[F](ec).resource

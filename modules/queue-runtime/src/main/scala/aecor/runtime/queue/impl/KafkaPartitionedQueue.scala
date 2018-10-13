@@ -9,14 +9,14 @@ import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ ConsumerSettings, Subscriptions }
-import akka.stream.{ ActorMaterializer, Materializer }
+import akka.kafka.{ConsumerSettings, Subscriptions}
+import akka.stream.{ActorMaterializer, Materializer}
 import cats.effect._
 import cats.effect.concurrent.Deferred
 import cats.implicits._
-import fs2.concurrent.{ Enqueue, Queue }
+import fs2.concurrent.{Enqueue, Queue}
 import org.apache.kafka.clients.producer._
-import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
+import org.apache.kafka.common.serialization.{Deserializer, Serializer}
 import streamz.converter._
 
 import scala.concurrent.duration._
@@ -75,6 +75,7 @@ class KafkaPartitionedQueue[F[_], K, A](
             }
             .onFinalize(deferredComplete.complete(()))
 
+
           val free =
             deferredControl.get.flatMap { c =>
               F.fromFuture(c.stop()) >> deferredComplete.get >> F.fromFuture(c.shutdown()).void
@@ -90,7 +91,10 @@ class KafkaPartitionedQueue[F[_], K, A](
         Map(
           ProducerConfig.BOOTSTRAP_SERVERS_CONFIG -> contactPoints
             .mkString(","),
-          ProducerConfig.ACKS_CONFIG -> "all"
+          ProducerConfig.ACKS_CONFIG -> "0",
+          ProducerConfig.BATCH_SIZE_CONFIG -> "32000",
+          ProducerConfig.LINGER_MS_CONFIG -> "10",
+          ProducerConfig.COMPRESSION_TYPE_CONFIG -> "snappy"
         )
 
       val javaProps =

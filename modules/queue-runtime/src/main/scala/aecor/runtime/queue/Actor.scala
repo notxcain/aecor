@@ -1,15 +1,17 @@
 package aecor.runtime.queue
 
 import cats.effect.implicits._
-import cats.effect.{Concurrent, Resource}
+import cats.effect.{Concurrent, Resource, Timer}
 import cats.implicits._
 import fs2.concurrent.Queue
 import fs2._
 import _root_.io.aecor.liberator.ReifiedInvocations
 import _root_.io.aecor.liberator.Invocation
 import aecor.data.PairE
-import cats.effect.concurrent.Deferred
+import cats.effect.concurrent.{Deferred, Ref}
 import cats.{Applicative, ~>}
+
+import scala.concurrent.duration.FiniteDuration
 
 private[queue] trait Actor[F[_], A] { outer =>
   def send(message: A): F[Unit]
@@ -104,4 +106,17 @@ private[queue] object Actor {
       }
       _ <- self.complete(out)
     } yield out
+
+  def withIdleTimeout[F[_]: Concurrent, A](duration: FiniteDuration, actor: Actor[F, A])(implicit timer: Timer[F]): F[Actor[F, A]] =
+    Actor.resource[F, Either[Unit, A]] { ctx =>
+      Resource[F, Receive[F, Either[Unit, A]]] {
+        for {
+          timeout <- Ref[F].of(().pure[F])
+          receive = Receive[Either[Unit, A]] {
+            case Right(a) => actor.send(a) >> timeout.getAndSet((timer.sleep(duration) >> ctx.send(Left(()))).start.map(_.cancel)).flatten
+            case Left(_) => ctx.terminate
+          }
+        } yield (receive, actor.terminateAndWatch)
+      }
+    }.map(_.contramap(Right(_)))
 }

@@ -33,26 +33,26 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
       InetSocketAddress.createUnresolved(host, port)
     }
   }
-  val serialization = Serialization(
+  def serialization[I: Pickler] = Serialization(
     org.apache.kafka.common.serialization.Serdes.String().serializer(),
     org.apache.kafka.common.serialization.Serdes.String().deserializer(),
-    new Serializer[CommandEnvelope[InetSocketAddress, String]] {
+    new Serializer[CommandEnvelope[I, String]] {
       override def configure(configs: util.Map[String, _],
                              isKey: Boolean): Unit = ()
       override def serialize(
         topic: String,
-        data: CommandEnvelope[InetSocketAddress, String]
+        data: CommandEnvelope[I, String]
       ): Array[Byte] = Pickle.intoBytes(data).array()
       override def close(): Unit = ()
     },
-    new Deserializer[CommandEnvelope[InetSocketAddress, String]] {
+    new Deserializer[CommandEnvelope[I, String]] {
       override def configure(configs: util.Map[String, _],
                              isKey: Boolean): Unit = ()
       override def deserialize(
         topic: String,
         data: Array[Byte]
-      ): CommandEnvelope[InetSocketAddress, String] =
-        Unpickle[CommandEnvelope[InetSocketAddress, String]].fromBytes(ByteBuffer.wrap(data))
+      ): CommandEnvelope[I, String] =
+        Unpickle[CommandEnvelope[I, String]].fromBytes(ByteBuffer.wrap(data))
       override def close(): Unit = ()
     }
   )
@@ -64,13 +64,15 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
     httpPort = args.tail.head.toInt
     _ = println(httpPort)
     runtime <- Runtime.create[IO](10.seconds, 15.seconds)
-    queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](system, Set("localhost:9092"), "counter-command-ext", "test-app", _.key, serialization)
+    queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](system, Set("localhost:9092"), "counter-commands-40", "test-app", _.key, serialization)
+    _ = PartitionedQueue.local[IO, CommandEnvelope[InetSocketAddress, String]]
     stream = for {
       counters <- {
         val clientServer = {
           implicit val ec: ExecutionContext = system.dispatcher
           Http4sClientServer[IO, CommandResponse](new InetSocketAddress("localhost", runtimePort), new InetSocketAddress("localhost", runtimePort),"counter")
         }
+        val _ = ClientServer.local[IO, CommandResponse]
         Stream.resource(runtime.run((_: String) => Counter.inmem[IO], clientServer, queue))
       }
       _ <- Stream.resource {

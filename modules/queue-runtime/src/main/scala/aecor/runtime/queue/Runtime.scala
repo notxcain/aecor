@@ -43,7 +43,7 @@ class Runtime[F[_]] private[queue] (
     ): Resource[F, Unit] =
       Resource[F, Unit] {
         commandPartitions
-          .map { commands =>
+          .mapAsyncUnordered(Int.MaxValue) { commands =>
             val startShard =
               ActorShard.create(idleTimeout) { key: K =>
                 Actor.create[F, (CommandId, I, PairE[Invocation[M, ?], Encoder])] { _ =>
@@ -69,9 +69,8 @@ class Runtime[F[_]] private[queue] (
                     shard.send((key, (commandId, replyTo, pair)))
                   }
               }
-            }
+            }.drain.compile.drain
           }
-          .parJoinUnbounded
           .compile
           .drain
           .start
