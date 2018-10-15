@@ -4,7 +4,6 @@ import cats.effect.implicits._
 import cats.effect.{ Concurrent, Resource, Timer }
 import cats.implicits._
 import fs2.concurrent.Queue
-import fs2._
 import _root_.io.aecor.liberator.ReifiedInvocations
 import _root_.io.aecor.liberator.Invocation
 import aecor.data.PairE
