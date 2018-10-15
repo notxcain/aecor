@@ -1,7 +1,7 @@
 package aecor.runtime.queue.app
 import java.net.InetSocketAddress
 
-import aecor.runtime.queue.Runtime.{ CommandEnvelope, CommandId, CommandResponse }
+import aecor.runtime.queue.Runtime.{ CommandEnvelope, CommandId, CommandResult }
 import aecor.runtime.queue._
 import aecor.runtime.queue.impl.KafkaPartitionedQueue.Serialization
 import aecor.runtime.queue.impl.{ Http4sClientServer, KafkaPartitionedQueue }
@@ -54,13 +54,13 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
         counters <- {
           val clientServer = {
             implicit val ec: ExecutionContext = system.dispatcher
-            Http4sClientServer[IO, CommandResponse](
+            Http4sClientServer[IO, CommandResult](
               new InetSocketAddress("localhost", runtimePort),
               new InetSocketAddress("localhost", runtimePort),
               "counter"
             )
           }
-          val _ = ClientServer.local[IO, CommandResponse]
+          val _ = ClientServer.local[IO, CommandResult]
           Stream.resource(runtime.run((_: String) => Counter.inmem[IO], clientServer, queue))
         }
         _ <- Stream.resource {

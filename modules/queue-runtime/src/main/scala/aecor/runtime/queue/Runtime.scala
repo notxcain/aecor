@@ -15,7 +15,6 @@ import cats.{ Applicative, ~> }
 import io.aecor.liberator.Invocation
 import fs2._
 import org.http4s.booPickle._
-import org.http4s.dsl.Http4sDsl
 import org.http4s.{ EntityDecoder, EntityEncoder }
 import scodec.bits.BitVector
 import scodec.{ Attempt, Encoder }
@@ -27,8 +26,7 @@ class Runtime[F[_]] private[queue] (
   registry: DeferredRegistry[F, CommandId, BitVector]
 )(implicit
   F: ConcurrentEffect[F],
-  timer: Timer[F])
-    extends Http4sDsl[F] {
+  timer: Timer[F]) {
 
   def run[K, I, M[_[_]]](
     create: K => F[M[F]],
