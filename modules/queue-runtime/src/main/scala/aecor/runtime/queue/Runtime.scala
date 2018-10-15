@@ -32,7 +32,7 @@ class Runtime[F[_]] private[queue] (
 
   def run[K, I, M[_[_]]](
     create: K => F[M[F]],
-    clientServer: ClientServer[F, I, CommandResponse],
+    clientServer: ClientServer[F, I, CommandResult],
     commandQueue: PartitionedQueue[F, CommandEnvelope[I, K]]
   )(implicit M: WireProtocol[M]): Resource[F, K => M[F]] = {
 
@@ -42,7 +42,7 @@ class Runtime[F[_]] private[queue] (
     def startCommandProcessor(selfMemberId: I,
                               create: K => F[M[F]],
                               commandPartitions: Stream[F, Stream[F, CommandEnvelope[I, K]]],
-                              sendResponse: (I, CommandResponse) => F[Unit]): Resource[F, Unit] =
+                              sendResponse: (I, CommandResult) => F[Unit]): Resource[F, Unit] =
       Resource[F, Unit] {
         commandPartitions
           .mapAsyncUnordered(Int.MaxValue) { commands =>
@@ -57,7 +57,7 @@ class Runtime[F[_]] private[queue] (
                           if (replyTo == selfMemberId) {
                             registry.fulfill(commandId, bytes)
                           } else {
-                            sendResponse(replyTo, CommandResponse(commandId, bytes))
+                            sendResponse(replyTo, CommandResult(commandId, bytes))
                           }
                         }
                     }
@@ -112,14 +112,14 @@ class Runtime[F[_]] private[queue] (
 }
 
 object Runtime {
-  final case class CommandResponse(commandId: CommandId, bytes: BitVector)
-  object CommandResponse {
+  final case class CommandResult(commandId: CommandId, bytes: BitVector)
+  object CommandResult {
     import boopickle.Default._
     implicit val pickler = transformPickler((b: ByteBuffer) => BitVector(b))(_.toByteBuffer)
-    implicit def entityDecoder[F[_]: Sync]: EntityDecoder[F, CommandResponse] =
-      booOf[F, CommandResponse]
-    implicit def entityEncoder[F[_]: Applicative]: EntityEncoder[F, CommandResponse] =
-      booEncoderOf[F, CommandResponse]
+    implicit def entityDecoder[F[_]: Sync]: EntityDecoder[F, CommandResult] =
+      booOf[F, CommandResult]
+    implicit def entityEncoder[F[_]: Applicative]: EntityEncoder[F, CommandResult] =
+      booEncoderOf[F, CommandResult]
   }
   final case class CommandId(value: UUID) extends AnyVal
   final case class CommandEnvelope[I, K](commandId: CommandId, replyTo: I, key: K, bytes: BitVector)
