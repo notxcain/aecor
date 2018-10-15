@@ -41,17 +41,16 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
       httpPort = args.tail.head.toInt
       _ = println(httpPort)
       runtime <- Runtime.create[IO](10.seconds, 15.seconds)
-      queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](
-        system,
-        Set("localhost:9092"),
-        "counter-commands-40",
-        "test-app",
-        _.key,
-        serialization
-      )
-      _ = PartitionedQueue.local[IO, CommandEnvelope[InetSocketAddress, String]]
       stream = for {
         counters <- {
+          val queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](
+            system,
+            Set("localhost:9092"),
+            "counter-commands-40",
+            "test-app",
+            _.key,
+            serialization
+          )
           val clientServer = {
             implicit val ec: ExecutionContext = system.dispatcher
             Http4sClientServer[IO, CommandResult](
@@ -60,7 +59,6 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
               "counter"
             )
           }
-          val _ = ClientServer.local[IO, CommandResult]
           Stream.resource(runtime.run((_: String) => Counter.inmem[IO], clientServer, queue))
         }
         _ <- Stream.resource {

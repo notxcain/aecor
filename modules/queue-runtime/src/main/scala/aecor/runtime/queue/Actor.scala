@@ -1,15 +1,15 @@
 package aecor.runtime.queue
 
 import cats.effect.implicits._
-import cats.effect.{Concurrent, Resource, Timer}
+import cats.effect.{ Concurrent, Resource, Timer }
 import cats.implicits._
 import fs2.concurrent.Queue
 import fs2._
 import _root_.io.aecor.liberator.ReifiedInvocations
 import _root_.io.aecor.liberator.Invocation
 import aecor.data.PairE
-import cats.effect.concurrent.{Deferred, Ref}
-import cats.{Applicative, ~>}
+import cats.effect.concurrent.{ Deferred, Ref }
+import cats.{ Applicative, ~> }
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -38,12 +38,14 @@ private[queue] object Actor {
     def void[F[_], A](implicit F: Applicative[F]): A => F[Unit] = _ => F.pure(())
   }
 
-  trait Context[F[_], A] {
+  sealed abstract class Context[F[_], A] {
     def send(a: A): F[Unit]
     def terminate: F[Unit]
   }
 
-  def resource[F[_], A](init: Context[F, A] => Resource[F, A => F[Unit]])(implicit F: Concurrent[F]): F[Actor[F, A]] =
+  def resource[F[_], A](
+    init: Context[F, A] => Resource[F, A => F[Unit]]
+  )(implicit F: Concurrent[F]): F[Actor[F, A]] =
     for {
       mailbox <- Queue.unbounded[F, Option[A]]
 
@@ -56,15 +58,12 @@ private[queue] object Actor {
       }
 
       runloop <- {
-        def run: F[Unit] = init(actorContext).use { handle =>
-          mailbox.dequeue.unNoneTerminate.evalMap(handle).compile.drain
-        }.handleErrorWith(_ => run)
-
-        val _ =
-          Stream.resource(init(actorContext)).flatMap { handle =>
-            mailbox.dequeue.unNoneTerminate.evalMap(handle)
-          }.compile.drain.handleErrorWith(_ => run)
-
+        def run: F[Unit] =
+          init(actorContext)
+            .use { handle =>
+              mailbox.dequeue.unNoneTerminate.evalMap(handle).compile.drain
+            }
+            .handleErrorWith(_ => run)
         run.start
       }
     } yield
@@ -79,9 +78,7 @@ private[queue] object Actor {
           runloop.join
       }
 
-  def create[F[_]: Concurrent, A](
-    init: Context[F, A] => F[A => F[Unit]]
-  ): F[Actor[F, A]] =
+  def create[F[_]: Concurrent, A](init: Context[F, A] => F[A => F[Unit]]): F[Actor[F, A]] =
     resource[F, A](ctx => Resource.liftF(init(ctx)))
 
   def void[F[_]: Concurrent, A]: F[Actor[F, A]] =
@@ -111,14 +108,18 @@ private[queue] object Actor {
       _ <- self.complete(out)
     } yield out
 
-  def withIdleTimeout[F[_]: Concurrent, A](duration: FiniteDuration, onTimeout: F[Unit], actor: Actor[F, A])(implicit timer: Timer[F]): F[Actor[F, A]] =
+  def withIdleTimeout[F[_]: Concurrent, A](
+    duration: FiniteDuration,
+    onTimeout: F[Unit],
+    actor: Actor[F, A]
+  )(implicit timer: Timer[F]): F[Actor[F, A]] =
     Actor.resource[F, A] { _ =>
       Resource[F, Receive[F, A]] {
         for {
           timeoutCancellation <- Ref[F].of(().pure[F])
-          receive = Receive[A] {
-            a =>
-              actor.send(a) >> (timer.sleep(duration) >> onTimeout).start.flatMap(f => timeoutCancellation.getAndSet(f.cancel).flatten)
+          receive = Receive[A] { a =>
+            actor.send(a) >> (timer.sleep(duration) >> onTimeout).start
+              .flatMap(f => timeoutCancellation.getAndSet(f.cancel).flatten)
           }
         } yield (receive, timeoutCancellation.get.flatten >> actor.terminateAndWatch)
       }
