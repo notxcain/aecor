@@ -1,24 +1,23 @@
 package aecor.runtime.akkageneric
 
 import java.net.URLDecoder
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import io.aecor.liberator.Invocation
-import aecor.encoding.KeyDecoder
-import aecor.encoding.WireProtocol
-import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
+import aecor.encoding.{KeyDecoder, WireProtocol}
+import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{Command, CommandResult}
 import aecor.runtime.akkageneric.serialization.Message
-import cats.effect.syntax.effect._
-import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
+import akka.actor.{Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status}
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import cats.effect.Effect
+import cats.effect.syntax.effect._
+import io.aecor.liberator.Invocation
+import scodec.bits.BitVector
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
-import scala.util.{ Failure, Success, Try }
+import scala.util.{Failure, Success, Try}
 
 private[aecor] object GenericAkkaRuntimeActor {
   def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
@@ -27,8 +26,8 @@ private[aecor] object GenericAkkaRuntimeActor {
   ): Props =
     Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout))
 
-  private[akkageneric] final case class Command(bytes: ByteBuffer) extends Message
-  private[akkageneric] final case class CommandResult(bytes: ByteBuffer) extends Message
+  private[akkageneric] final case class Command(bytes: BitVector) extends Message
+  private[akkageneric] final case class CommandResult(bytes: BitVector) extends Message
   private[akkageneric] case object Stop
 }
 
@@ -53,7 +52,7 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
       throw new IllegalArgumentException(error)
     }
 
-  private case class Result(id: UUID, value: Try[ByteBuffer])
+  private case class Result(id: UUID, value: Try[BitVector])
   private case class Actions(value: M[F])
 
   setIdleTimeout()

@@ -1,7 +1,5 @@
 package aecor.runtime.akkageneric
 
-import java.nio.ByteBuffer
-
 import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
@@ -15,11 +13,12 @@ import cats.effect.Effect
 import cats.implicits._
 import cats.~>
 import io.aecor.liberator.Invocation
+import scodec.bits.BitVector
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =
     new GenericAkkaRuntime(system)
-  private[akkageneric] final case class KeyedCommand(key: String, bytes: ByteBuffer) extends Message
+  private[akkageneric] final case class KeyedCommand(key: String, bytes: BitVector) extends Message
 }
 
 final class GenericAkkaRuntime private (system: ActorSystem) {
@@ -62,7 +61,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
           override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
             val (bytes, decoder) = fa.invoke(M.encoder)
             F.fromFuture {
-                shardRegion ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer())
+                shardRegion ? KeyedCommand(keyEncoder(key), bytes)
               }
               .flatMap {
                 case result: CommandResult =>

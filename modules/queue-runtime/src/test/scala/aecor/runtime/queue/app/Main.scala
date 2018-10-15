@@ -1,104 +1,92 @@
 package aecor.runtime.queue.app
 import java.net.InetSocketAddress
-import java.nio.ByteBuffer
-import java.util
 
-import aecor.runtime.queue.Runtime.{CommandEnvelope, CommandResponse}
-import akka.actor.ActorSystem
-import cats.effect.{ExitCode, IO, IOApp}
+import aecor.runtime.queue.Runtime.{ CommandEnvelope, CommandId, CommandResponse }
 import aecor.runtime.queue._
-import aecor.runtime.queue.impl.{Http4sClientServer, KafkaPartitionedQueue}
 import aecor.runtime.queue.impl.KafkaPartitionedQueue.Serialization
+import aecor.runtime.queue.impl.{ Http4sClientServer, KafkaPartitionedQueue }
+import akka.actor.ActorSystem
+import cats.effect.{ ExitCode, IO, IOApp }
 import fs2._
-import org.apache.kafka.common.serialization.{Deserializer, Serializer}
 import org.http4s.HttpRoutes
+import org.http4s.circe.CirceEntityEncoder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.blaze.BlazeBuilder
-import org.http4s.circe.CirceEntityEncoder
-
+import scodec._
+import codecs._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
-  import boopickle.Default._
-  implicit object inetSocketAddressPickler extends Pickler[InetSocketAddress] {
-    @inline override def pickle(value: InetSocketAddress)(implicit state: PickleState): Unit = {
-      state.enc.writeString(value.getHostString).writeInt(value.getPort)
-      ()
-    }
 
-    @inline override def unpickle(implicit state: UnpickleState): InetSocketAddress = {
-      val host = state.dec.readString
-      val port = state.dec.readInt
-      InetSocketAddress.createUnresolved(host, port)
-    }
-  }
-  def serialization[I: Pickler] = Serialization(
-    org.apache.kafka.common.serialization.Serdes.String().serializer(),
-    org.apache.kafka.common.serialization.Serdes.String().deserializer(),
-    new Serializer[CommandEnvelope[I, String]] {
-      override def configure(configs: util.Map[String, _],
-                             isKey: Boolean): Unit = ()
-      override def serialize(
-        topic: String,
-        data: CommandEnvelope[I, String]
-      ): Array[Byte] = Pickle.intoBytes(data).array()
-      override def close(): Unit = ()
-    },
-    new Deserializer[CommandEnvelope[I, String]] {
-      override def configure(configs: util.Map[String, _],
-                             isKey: Boolean): Unit = ()
-      override def deserialize(
-        topic: String,
-        data: Array[Byte]
-      ): CommandEnvelope[I, String] =
-        Unpickle[CommandEnvelope[I, String]].fromBytes(ByteBuffer.wrap(data))
-      override def close(): Unit = ()
-    }
-  )
-  override def run(
-    args: List[String]
-  ): IO[ExitCode] = for {
-    system <- IO.delay(ActorSystem())
-    runtimePort = args.head.toInt
-    httpPort = args.tail.head.toInt
-    _ = println(httpPort)
-    runtime <- Runtime.create[IO](10.seconds, 15.seconds)
-    queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](system, Set("localhost:9092"), "counter-commands-40", "test-app", _.key, serialization)
-    _ = PartitionedQueue.local[IO, CommandEnvelope[InetSocketAddress, String]]
-    stream = for {
-      counters <- {
-        val clientServer = {
-          implicit val ec: ExecutionContext = system.dispatcher
-          Http4sClientServer[IO, CommandResponse](new InetSocketAddress("localhost", runtimePort), new InetSocketAddress("localhost", runtimePort),"counter")
+  implicit def commandEnvelopeCodec[I, K](implicit I: Codec[I],
+                                          K: Codec[K]): Codec[CommandEnvelope[I, K]] =
+    (uuid.xmapc[CommandId](CommandId(_))(_.value) :: I :: K :: codecs.bits)
+      .as[CommandEnvelope[I, K]]
+
+  implicit val inetSocketAddressCodec: Codec[InetSocketAddress] = (utf8_32 ~ int16).xmap({
+    case (host, port) => InetSocketAddress.createUnresolved(host, port)
+  }, { x =>
+    (x.getHostString, x.getPort)
+  })
+
+  def serialization[I](implicit I: Codec[I]): Serialization[String, CommandEnvelope[I, String]] =
+    Serialization
+      .scodec(utf8_32, commandEnvelopeCodec(I, utf8_32))
+
+  override def run(args: List[String]): IO[ExitCode] =
+    for {
+      system <- IO.delay(ActorSystem())
+      runtimePort = args.head.toInt
+      httpPort = args.tail.head.toInt
+      _ = println(httpPort)
+      runtime <- Runtime.create[IO](10.seconds, 15.seconds)
+      queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](
+        system,
+        Set("localhost:9092"),
+        "counter-commands-40",
+        "test-app",
+        _.key,
+        serialization
+      )
+      _ = PartitionedQueue.local[IO, CommandEnvelope[InetSocketAddress, String]]
+      stream = for {
+        counters <- {
+          val clientServer = {
+            implicit val ec: ExecutionContext = system.dispatcher
+            Http4sClientServer[IO, CommandResponse](
+              new InetSocketAddress("localhost", runtimePort),
+              new InetSocketAddress("localhost", runtimePort),
+              "counter"
+            )
+          }
+          val _ = ClientServer.local[IO, CommandResponse]
+          Stream.resource(runtime.run((_: String) => Counter.inmem[IO], clientServer, queue))
         }
-        val _ = ClientServer.local[IO, CommandResponse]
-        Stream.resource(runtime.run((_: String) => Counter.inmem[IO], clientServer, queue))
-      }
-      _ <- Stream.resource {
-        val routes = HttpRoutes.of[IO] {
-          case GET -> Root / counterId =>
-            for {
-              value <- counters(counterId).value
-              resp <- Ok(value)
-            } yield resp
-          case POST -> Root / counterId =>
-            for {
-              value <- counters(counterId).increment
-              resp <- Ok(value)
-            } yield resp
-          case DELETE -> Root / counterId =>
-            for {
-              value <- counters(counterId).decrement
-              resp <- Ok(value)
-            } yield resp
-        }
-        BlazeBuilder[IO]
-          .bindHttp(httpPort)
-          .mountService(routes, s"/counters")
-          .resource
-      }
-    } yield ()
-    _ <- stream.evalMap(_ => IO.never).compile.drain
-  } yield ExitCode.Success
+        _ <- Stream.resource {
+              val routes = HttpRoutes.of[IO] {
+                case GET -> Root / counterId =>
+                  for {
+                    value <- counters(counterId).value
+                    resp <- Ok(value)
+                  } yield resp
+                case POST -> Root / counterId =>
+                  for {
+                    value <- counters(counterId).increment
+                    resp <- Ok(value)
+                  } yield resp
+                case DELETE -> Root / counterId =>
+                  for {
+                    value <- counters(counterId).decrement
+                    resp <- Ok(value)
+                  } yield resp
+              }
+              BlazeBuilder[IO]
+                .bindHttp(httpPort)
+                .mountService(routes, s"/counters")
+                .resource
+            }
+      } yield ()
+      _ <- stream.evalMap(_ => IO.never).compile.drain
+    } yield ExitCode.Success
 }

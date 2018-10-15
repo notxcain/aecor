@@ -56,12 +56,16 @@ private[queue] object Actor {
       }
 
       runloop <- {
-        def run: Stream[F, Unit] =
+        def run: F[Unit] = init(actorContext).use { handle =>
+          mailbox.dequeue.unNoneTerminate.evalMap(handle).compile.drain
+        }.handleErrorWith(_ => run)
+
+        val _ =
           Stream.resource(init(actorContext)).flatMap { handle =>
             mailbox.dequeue.unNoneTerminate.evalMap(handle)
-          }.handleErrorWith(_ => run)
+          }.compile.drain.handleErrorWith(_ => run)
 
-        run.compile.drain.start
+        run.start
       }
     } yield
       new Actor[F, A] {
@@ -80,14 +84,14 @@ private[queue] object Actor {
   ): F[Actor[F, A]] =
     resource[F, A](ctx => Resource.liftF(init(ctx)))
 
-  def void[F[_], A](implicit F: Concurrent[F]): F[Actor[F, A]] =
-    create[F, A](_ => F.pure(Receive.void[F, A]))
+  def void[F[_]: Concurrent, A]: F[Actor[F, A]] =
+    resource[F, A](_ => Resource.pure(Receive.void[F, A]))
 
   def wrap[F[_], M[_[_]]](load: M[F] => F[M[F]])(implicit F: Concurrent[F],
                                                  M: ReifiedInvocations[M]): F[M[F]] =
     for {
       self <- Deferred[F, M[F]]
-      actor <- Actor.create[F, PairE[Invocation[M, ?], Deferred[F, ?]]] { ctx =>
+      actor <- Actor.create[F, PairE[Invocation[M, ?], Deferred[F, ?]]] { _ =>
                 self.get.flatMap(load).map { mf =>
                   Receive[PairE[Invocation[M, ?], Deferred[F, ?]]] { pair =>
                     pair.first.invoke(mf).flatMap(pair.second.complete)
@@ -107,16 +111,16 @@ private[queue] object Actor {
       _ <- self.complete(out)
     } yield out
 
-  def withIdleTimeout[F[_]: Concurrent, A](duration: FiniteDuration, actor: Actor[F, A])(implicit timer: Timer[F]): F[Actor[F, A]] =
-    Actor.resource[F, Either[Unit, A]] { ctx =>
-      Resource[F, Receive[F, Either[Unit, A]]] {
+  def withIdleTimeout[F[_]: Concurrent, A](duration: FiniteDuration, onTimeout: F[Unit], actor: Actor[F, A])(implicit timer: Timer[F]): F[Actor[F, A]] =
+    Actor.resource[F, A] { _ =>
+      Resource[F, Receive[F, A]] {
         for {
-          timeout <- Ref[F].of(().pure[F])
-          receive = Receive[Either[Unit, A]] {
-            case Right(a) => actor.send(a) >> timeout.getAndSet((timer.sleep(duration) >> ctx.send(Left(()))).start.map(_.cancel)).flatten
-            case Left(_) => ctx.terminate
+          timeoutCancellation <- Ref[F].of(().pure[F])
+          receive = Receive[A] {
+            a =>
+              actor.send(a) >> (timer.sleep(duration) >> onTimeout).start.flatMap(f => timeoutCancellation.getAndSet(f.cancel).flatten)
           }
-        } yield (receive, actor.terminateAndWatch)
+        } yield (receive, timeoutCancellation.get.flatten >> actor.terminateAndWatch)
       }
-    }.map(_.contramap(Right(_)))
+    }
 }

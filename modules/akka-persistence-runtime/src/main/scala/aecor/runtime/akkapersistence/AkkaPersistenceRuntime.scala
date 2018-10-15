@@ -1,7 +1,5 @@
 package aecor.runtime.akkapersistence
 
-import java.nio.ByteBuffer
-
 import aecor.data.{EventsourcedBehavior, Tagging}
 import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
@@ -17,13 +15,14 @@ import cats.effect.Effect
 import cats.implicits._
 import cats.~>
 import io.aecor.liberator.Invocation
+import scodec.bits.BitVector
 
 object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
     new AkkaPersistenceRuntime(system, journalAdapter)
 
   private[akkapersistence] final case class EntityCommand(entityKey: String,
-                                                          commandBytes: ByteBuffer)
+                                                          commandBytes: BitVector)
       extends Message
 }
 
@@ -80,7 +79,6 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
 
           override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
             val (bytes, decoder) = fa.invoke(M.encoder)
-            bytes.position(0)
             F.fromFuture {
                 shardRegion ? EntityCommand(keyEncoder(key), bytes)
               }

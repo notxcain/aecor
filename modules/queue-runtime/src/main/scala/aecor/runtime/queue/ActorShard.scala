@@ -1,7 +1,6 @@
 package aecor.runtime.queue
 
 import aecor.runtime.queue.Actor.Receive
-import cats.effect.implicits._
 import cats.effect.{ Concurrent, Resource, Timer }
 import cats.implicits._
 
@@ -23,7 +22,6 @@ private[queue] object ActorShard {
         Resource[F, Receive[F, (K, Message[A])]] {
           for {
             workers <- F.delay(scala.collection.mutable.Map.empty[K, Actor[F, A]])
-            scheduledTerminations <- F.delay(scala.collection.mutable.Map.empty[K, F[Unit]])
             receive = Receive[(K, Message[A])] {
               case (key, Handle(a)) =>
                 val getWorker: F[Actor[F, A]] = F.suspend {
@@ -31,35 +29,34 @@ private[queue] object ActorShard {
                     case Some(actor) => actor.pure[F]
                     case None =>
                       create(key)
+                        .flatMap(
+                          Actor.withIdleTimeout(
+                            idleTimeout,
+                            F.delay(println(s"Sending terminate to $key")) >> self
+                              .send((key, TerminateWorker)),
+                            _
+                          )
+                        )
                         .flatTap { a =>
                           F.delay(workers.update(key, a))
                         }
                   }
                 }
 
-                val tell = getWorker.flatMap(_.send(a))
-
-                val cancelTermination =
-                  F.suspend(scheduledTerminations.get(key).sequence_) >>
-                    F.delay(scheduledTerminations.remove(key))
-
-                val scheduleTermination =
-                  (timer.sleep(idleTimeout) >> self.send(key -> TerminateWorker)).start
-                    .flatMap(fiber => F.delay(scheduledTerminations.update(key, fiber.cancel)))
-
-                tell >> cancelTermination >> scheduleTermination
+                getWorker.flatMap(_.send(a))
               case (key, TerminateWorker) =>
-                F.delay(scheduledTerminations.remove(key)) >>
-                  F.suspend(workers.get(key).traverse_(_.terminateAndWatch)) >>
-                  F.delay(workers.remove(key)).void
+                F.suspend {
+                  val out = workers.get(key).traverse_(_.terminateAndWatch)
+                  workers.remove(key)
+                  out
+                }
             }
             cleanUp = F.suspend(workers.values.toVector.traverse_(_.terminateAndWatch)) >>
-              F.delay(workers.clear()) >>
-              F.suspend(scheduledTerminations.values.toVector.sequence_) >>
-              F.delay(scheduledTerminations.clear())
+              F.delay(workers.clear())
 
           } yield (receive, cleanUp)
         }
       }
       .map(_.contramap[(K, A)](x => x._1 -> Message.Handle(x._2)))
 }
+

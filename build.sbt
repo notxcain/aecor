@@ -14,6 +14,7 @@ lazy val akkaPersistenceCassandraVersion = "0.61"
 
 lazy val catsVersion = "1.4.0"
 lazy val catsEffectVersion = "1.0.0"
+lazy val scodecVersion = "1.10.4"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -150,7 +151,9 @@ lazy val coreSettings = Seq(
     "io.aecor" %% "liberator" % liberatorVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
-    "org.typelevel" %% "cats-effect" % catsEffectVersion
+    "org.typelevel" %% "cats-effect" % catsEffectVersion,
+    "org.scodec" %% "scodec-bits" % "1.1.6",
+    "org.scodec" %% "scodec-core" % "1.10.3"
   )
 )
 
@@ -190,6 +193,7 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "co.fs2" %% "fs2-core" % fs2Version,
     "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
+    "com.spinoco" %% "fs2-kafka" % "0.4.0-M2",
     "com.typesafe.akka" %% "akka-stream-kafka" % "0.22",
     "io.chrisdavenport" %% "log4cats-slf4j" % log4catsVersion,
     "org.http4s" %% "http4s-blaze-server" % http4sVersion,

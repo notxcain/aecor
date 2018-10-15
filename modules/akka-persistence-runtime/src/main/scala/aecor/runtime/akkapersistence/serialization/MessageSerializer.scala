@@ -1,12 +1,11 @@
 package aecor.runtime.akkapersistence.serialization
 
-import java.nio.ByteBuffer
-
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime.EntityCommand
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{ HandleCommand, CommandResult }
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{ CommandResult, HandleCommand }
 import akka.actor.ExtendedActorSystem
 import akka.serialization.{ BaseSerializer, SerializerWithStringManifest }
 import com.google.protobuf.ByteString
+import scodec.bits.BitVector
 
 import scala.collection.immutable._
 
@@ -34,9 +33,9 @@ class MessageSerializer(val system: ExtendedActorSystem)
 
   override def toBinary(o: AnyRef): Array[Byte] = o match {
     case x @ HandleCommand(_) =>
-      x.commandBytes.array()
+      x.commandBytes.toByteArray
     case x @ CommandResult(resultBytes) =>
-      resultBytes.array()
+      resultBytes.toByteArray
     case x @ EntityCommand(_, _) =>
       entityCommandToBinary(x)
     case x => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
@@ -49,18 +48,18 @@ class MessageSerializer(val system: ExtendedActorSystem)
     }
 
   private def entityCommandToBinary(a: EntityCommand): Array[Byte] =
-    msg.EntityCommand(a.entityKey, ByteString.copyFrom(a.commandBytes)).toByteArray
+    msg.EntityCommand(a.entityKey, ByteString.copyFrom(a.commandBytes.toByteBuffer)).toByteArray
 
   private def entityCommandFromBinary(bytes: Array[Byte]): EntityCommand =
     msg.EntityCommand.parseFrom(bytes) match {
       case msg.EntityCommand(entityId, commandBytes) =>
-        EntityCommand(entityId, commandBytes.asReadOnlyByteBuffer)
+        EntityCommand(entityId, BitVector(commandBytes.asReadOnlyByteBuffer))
     }
 
   private def handleCommandFromBinary(bytes: Array[Byte]): HandleCommand =
-    HandleCommand(ByteBuffer.wrap(bytes))
+    HandleCommand(BitVector(bytes))
 
   private def commandResultFromBinary(bytes: Array[Byte]): CommandResult =
-    CommandResult(ByteBuffer.wrap(bytes))
+    CommandResult(BitVector(bytes))
 
 }

@@ -1,7 +1,6 @@
 package aecor.runtime.akkapersistence
 
 import java.net.URLDecoder
-import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.time.{Duration, Instant}
 import java.util.UUID
@@ -22,6 +21,7 @@ import cats.data.Chain
 import cats.effect.Effect
 import cats.implicits._
 import io.aecor.liberator.Invocation
+import scodec.bits.BitVector
 
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{Left, Right}
@@ -55,8 +55,8 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
       )
     )
 
-  final case class HandleCommand(commandBytes: ByteBuffer) extends Message
-  final case class CommandResult(resultBytes: ByteBuffer) extends Message
+  final case class HandleCommand(commandBytes: BitVector) extends Message
+  final case class CommandResult(resultBytes: BitVector) extends Message
   case object Stop
 }
 
@@ -86,7 +86,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
 
   import context.dispatcher
 
-  private case class ActionResult(opId: UUID, events: Chain[Event], resultBytes: ByteBuffer)
+  private case class ActionResult(opId: UUID, events: Chain[Event], resultBytes: BitVector)
 
   private val idString: String =
     URLDecoder.decode(self.path.name, StandardCharsets.UTF_8.name())
@@ -167,7 +167,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
       )
   }
 
-  private def handleCommand(commandBytes: ByteBuffer): Unit =
+  private def handleCommand(commandBytes: BitVector): Unit =
     M.decoder.decode(commandBytes) match {
       case Right(pair) =>
         performInvocation(pair.first, pair.second)

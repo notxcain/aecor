@@ -101,15 +101,15 @@ object BoopickleWireProtocolMacro {
           case q"def $name[..$tps](..$params): ${someF: Type.Name}[$out]" if someF.value == theF.value =>
             q"""
                         final def $name[..$tps](..$params): aecor.encoding.WireProtocol.Encoded[$out] = (
-                          _root_.boopickle.Default.Pickle.intoBytes((${Lit.String(name.value)}, ..${params.map(_.name.value).map(Term.Name(_))})),
-                          _root_.aecor.encoding.WireProtocol.Decoder.fromTry(bs => _root_.scala.util.Try(_root_.boopickle.Default.Unpickle[$out].fromBytes(bs)))
+                          _root_.scodec.bits.BitVector(_root_.boopickle.Default.Pickle.intoBytes((${Lit.String(name.value)}, ..${params.map(_.name.value).map(Term.Name(_))}))),
+                          _root_.aecor.macros.boopickle.BoopickleCodec.decoder[$out]
                         )
                       """
           case q"def $name: ${someF: Type.Name}[$out]" if someF.value == theF.value =>
             q"""
                         final val ${Pat.Var.Term(name)}: aecor.encoding.WireProtocol.Encoded[$out] = (
-                          _root_.boopickle.Default.Pickle.intoBytes(${Lit.String(name.value)}),
-                          _root_.aecor.encoding.WireProtocol.Decoder.fromTry(bs => _root_.scala.util.Try(_root_.boopickle.Default.Unpickle[$out].fromBytes(bs)))
+                          _root_.scodec.bits.BitVector(_root_.boopickle.Default.Pickle.intoBytes(${Lit.String(name.value)})),
+                          _root_.aecor.macros.boopickle.BoopickleCodec.decoder[$out]
                         )
                       """
           case other =>
@@ -118,12 +118,12 @@ object BoopickleWireProtocolMacro {
       }
             }
 
-            final val decoder: _root_.aecor.encoding.WireProtocol.Decoder[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] =
-              new _root_.aecor.encoding.WireProtocol.Decoder[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] {
+            final val decoder: _root_.scodec.Decoder[aecor.data.PairE[$unifiedInvocation, _root_.scodec.Encoder]] =
+              new _root_.scodec.Decoder[aecor.data.PairE[$unifiedInvocation, _root_.scodec.Encoder]] {
 
-                override def decode(bytes: _root_.java.nio.ByteBuffer): _root_.aecor.encoding.WireProtocol.Decoder.DecodingResult[aecor.data.PairE[$unifiedInvocation, aecor.encoding.WireProtocol.Encoder]] = {
-                  _root_.aecor.encoding.WireProtocol.Decoder.DecodingResult.fromTry(scala.util.Try {
-                  val state = _root_.boopickle.UnpickleState(bytes.order(_root_.java.nio.ByteOrder.LITTLE_ENDIAN))
+                final override def decode(bytes: _root_.scodec.bits.BitVector) = {
+                  _root_.aecor.macros.boopickle.BoopickleCodec.attemptFromTry(scala.util.Try {
+                  val state = _root_.boopickle.UnpickleState(bytes.toByteBuffer.order(_root_.java.nio.ByteOrder.LITTLE_ENDIAN))
                   state.unpickle[String] match {
                      ..case ${
         val cases = traitStats.map {
@@ -141,7 +141,7 @@ object BoopickleWireProtocolMacro {
                       s"$$name$$args"
                     }
                   }
-                  aecor.data.PairE(invocation, aecor.encoding.WireProtocol.Encoder.instance[$out](_root_.boopickle.Default.Pickle.intoBytes))
+                  aecor.data.PairE(invocation, _root_.aecor.macros.boopickle.BoopickleCodec.encoder[$out])
              """
           case q"def $name: ${someF: Type.Name}[$out]" if someF.value == theF.value =>
             val nameLit =  Lit.String(name.value)
@@ -150,12 +150,12 @@ object BoopickleWireProtocolMacro {
                     final override def invoke[F[_]](mf: $unifiedBase[F]): F[$out] = mf.$name
                     final override def toString: String = $nameLit
                   }
-                  aecor.data.PairE(invocation, aecor.encoding.WireProtocol.Encoder.instance[$out](_root_.boopickle.Default.Pickle.intoBytes))
+                  aecor.data.PairE(invocation, _root_.aecor.macros.boopickle.BoopickleCodec.encoder[$out])
              """
           case other =>
             abort(s"Illegal method [$other]")
         }
-        cases :+ p"""case other => throw aecor.encoding.WireProtocol.Decoder.DecodingFailure(s"Unknown type tag $$other")"""
+        cases :+ p"""case other => throw new IllegalArgumentException(s"Unknown type tag $$other")"""
       }
                   }
                   })

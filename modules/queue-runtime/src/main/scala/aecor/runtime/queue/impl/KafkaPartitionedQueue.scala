@@ -1,5 +1,6 @@
 package aecor.runtime.queue.impl
 
+import java.util
 import java.util.UUID
 
 import aecor.runtime.queue.PartitionedQueue
@@ -9,14 +10,16 @@ import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.kafka.ConsumerMessage.CommittableOffset
 import akka.kafka.scaladsl.Consumer
-import akka.kafka.{ConsumerSettings, Subscriptions}
-import akka.stream.{ActorMaterializer, Materializer}
+import akka.kafka.{ ConsumerSettings, Subscriptions }
+import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
 import cats.effect.concurrent.Deferred
 import cats.implicits._
-import fs2.concurrent.{Enqueue, Queue}
+import fs2.concurrent.{ Enqueue, Queue }
 import org.apache.kafka.clients.producer._
-import org.apache.kafka.common.serialization.{Deserializer, Serializer}
+import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
+import scodec.Codec
+import scodec.bits.BitVector
 import streamz.converter._
 
 import scala.concurrent.duration._
@@ -74,7 +77,6 @@ class KafkaPartitionedQueue[F[_], K, A](
                 }
             }
             .onFinalize(deferredComplete.complete(()))
-
 
           val free =
             deferredControl.get.flatMap { c =>
@@ -135,6 +137,39 @@ object KafkaPartitionedQueue {
                                        keyDeserializer: Deserializer[K],
                                        valueSerializer: Serializer[A],
                                        valueDeserializer: Deserializer[A])
+  object Serialization {
+    def scodec[K, A](implicit K: Codec[K], A: Codec[A]): Serialization[K, A] =
+      Serialization(
+        new Serializer[K] {
+          override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
+          override def serialize(topic: String, data: K): Array[Byte] =
+            K.encode(data)
+              .fold(e => throw new IllegalArgumentException(e.messageWithContext), _.toByteArray)
+          override def close(): Unit = ()
+        },
+        new Deserializer[K] {
+          override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
+          override def deserialize(topic: String, data: Array[Byte]): K =
+            K.decodeValue(BitVector(data))
+              .fold(e => throw new IllegalArgumentException(e.messageWithContext), identity)
+          override def close(): Unit = ()
+        },
+        new Serializer[A] {
+          override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
+          override def serialize(topic: String, data: A): Array[Byte] =
+            A.encode(data)
+              .fold(e => throw new IllegalArgumentException(e.messageWithContext), _.toByteArray)
+          override def close(): Unit = ()
+        },
+        new Deserializer[A] {
+          override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
+          override def deserialize(topic: String, data: Array[Byte]): A =
+            A.decodeValue(BitVector(data))
+              .fold(e => throw new IllegalArgumentException(e.messageWithContext), identity)
+          override def close(): Unit = ()
+        }
+      )
+  }
   def apply[F[_]: ConcurrentEffect: ContextShift: Timer, K, A](
     system: ActorSystem,
     contactPoints: Set[String],
