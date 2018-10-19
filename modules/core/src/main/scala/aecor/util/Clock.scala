@@ -4,7 +4,7 @@ import java.time._
 
 import cats.Apply
 
-trait ClockT[F[_]] {
+trait Clock[F[_]] {
   def zone: F[ZoneId]
   def instant: F[Instant]
   def zonedDateTime(implicit F: Apply[F]): F[ZonedDateTime] =

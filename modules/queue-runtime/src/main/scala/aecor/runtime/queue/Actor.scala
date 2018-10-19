@@ -1,7 +1,7 @@
 package aecor.runtime.queue
 
 import cats.effect.implicits._
-import cats.effect.{ Concurrent, Resource, Timer }
+import cats.effect.{ Concurrent, Fiber, Resource, Timer }
 import cats.implicits._
 import fs2.concurrent.Queue
 import _root_.io.aecor.liberator.ReifiedInvocations
@@ -115,12 +115,13 @@ private[queue] object Actor {
     Actor.resource[F, A] { _ =>
       Resource[F, Receive[F, A]] {
         for {
-          timeoutCancellation <- Ref[F].of(().pure[F])
+          cancellationFiber <- Ref[F].of(Fiber(().pure[F], ().pure[F]))
           receive = Receive[A] { a =>
             actor.send(a) >> (timer.sleep(duration) >> onTimeout).start
-              .flatMap(f => timeoutCancellation.getAndSet(f.cancel).flatten)
+              .flatMap(cancellationFiber.getAndSet)
+              .flatMap(_.cancel)
           }
-        } yield (receive, timeoutCancellation.get.flatten >> actor.terminateAndWatch)
+        } yield (receive, cancellationFiber.get.flatMap(_.cancel) >> actor.terminateAndWatch)
       }
     }
 }

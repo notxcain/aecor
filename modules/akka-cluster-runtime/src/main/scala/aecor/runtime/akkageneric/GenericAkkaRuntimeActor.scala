@@ -4,20 +4,21 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import aecor.encoding.{KeyDecoder, WireProtocol}
-import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{Command, CommandResult}
+import aecor.encoding.{ KeyDecoder, WireProtocol }
+import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
 import aecor.runtime.akkageneric.serialization.Message
-import akka.actor.{Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status}
+import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
-import cats.effect.Effect
+import cats.effect.{ Effect, IO }
 import cats.effect.syntax.effect._
 import io.aecor.liberator.Invocation
+import scodec.{ Attempt, Encoder }
 import scodec.bits.BitVector
-
+import aecor.encoding.syntax._
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
-import scala.util.{Failure, Success, Try}
+import scala.util.{ Failure, Success, Try }
 
 private[aecor] object GenericAkkaRuntimeActor {
   def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
@@ -69,10 +70,11 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
   private def withActions(actions: M[F]): Receive = {
     case Command(opBytes) =>
       M.decoder
-        .decode(opBytes) match {
-        case Right(pair) =>
+        .decodeValue(opBytes) match {
+        case Attempt.Successful(pair) =>
           performInvocation(actions, pair.first, pair.second)
-        case Left(decodingError) =>
+        case Attempt.Failure(cause) =>
+          val decodingError = new IllegalArgumentException(cause.messageWithContext)
           log.error(decodingError, "Failed to decode invocation")
           sender() ! Status.Failure(decodingError)
       }
@@ -88,14 +90,14 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
 
   def performInvocation[A](actions: M[F],
                            invocation: Invocation[M, A],
-                           resultEncoder: WireProtocol.Encoder[A]): Unit = {
+                           resultEncoder: Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
-    invocation.invoke(actions)
+    invocation
+      .invoke(actions)
       .toIO
-      .map(resultEncoder.encode)
-      .map {
-        responseBytes =>
-          Result(opId, Success(responseBytes))
+      .flatMap(a => resultEncoder.encode(a).lift[IO])
+      .map { responseBytes =>
+        Result(opId, Success(responseBytes))
       }
       .unsafeToFuture()
       .recover {

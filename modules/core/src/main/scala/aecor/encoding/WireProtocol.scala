@@ -1,11 +1,11 @@
 package aecor.encoding
 
 import aecor.data.PairE
-import io.aecor.liberator.{ Invocation, ReifiedInvocations }
-import scodec.{ Decoder, Encoder }
+import io.aecor.liberator.Invocation
 import scodec.bits.BitVector
+import scodec.{ Decoder, Encoder }
 
-trait WireProtocol[M[_[_]]] extends ReifiedInvocations[M] {
+trait WireProtocol[M[_[_]]] {
   def decoder: Decoder[PairE[Invocation[M, ?], Encoder]]
   def encoder: M[WireProtocol.Encoded]
 }

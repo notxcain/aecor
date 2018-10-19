@@ -3,8 +3,9 @@ import java.net.InetSocketAddress
 
 import aecor.runtime.queue.Runtime.{ CommandEnvelope, CommandId, CommandResult }
 import aecor.runtime.queue._
+import aecor.runtime.queue.impl.HelixPartitionedQueue.{ ClusterName, InstanceHost, ZookeeperHost }
 import aecor.runtime.queue.impl.KafkaPartitionedQueue.Serialization
-import aecor.runtime.queue.impl.{ Http4sClientServer, KafkaPartitionedQueue }
+import aecor.runtime.queue.impl.{ HelixPartitionedQueue, Http4sClientServer, KafkaPartitionedQueue }
 import akka.actor.ActorSystem
 import cats.effect.{ ExitCode, IO, IOApp }
 import fs2._
@@ -14,6 +15,8 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.server.blaze.BlazeBuilder
 import scodec._
 import codecs._
+import cats.implicits._
+
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
@@ -34,7 +37,7 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
     Serialization
       .scodec(utf8_32, commandEnvelopeCodec(I, utf8_32))
 
-  override def run(args: List[String]): IO[ExitCode] =
+  def runOO(args: List[String]): IO[ExitCode] =
     for {
       system <- IO.delay(ActorSystem())
       runtimePort = args.head.toInt
@@ -86,5 +89,20 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
             }
       } yield ()
       _ <- stream.evalMap(_ => IO.never).compile.drain
+    } yield ExitCode.Success
+
+  override def run(args: List[String]): IO[ExitCode] =
+    for {
+      _ <- IO.unit
+      httpPort = args.tail.head.toInt
+//      isController = args.tail.tail.headOption.contains("controller")
+      helix = new HelixPartitionedQueue[IO, Int](
+        Set(ZookeeperHost.local),
+        ClusterName("Test13"),
+        InstanceHost("localhost", httpPort)
+      )
+
+      _ <- helix.setup
+      _ <- helix.connect.use(_.evalMap(x => IO(println(x)) >> x.complete).compile.drain)
     } yield ExitCode.Success
 }

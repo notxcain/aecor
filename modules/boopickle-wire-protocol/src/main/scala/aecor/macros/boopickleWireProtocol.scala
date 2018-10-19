@@ -58,8 +58,8 @@ object BoopickleWireProtocolMacro {
 
     val companionStats: Seq[Stat] = Seq(
       q"""
-        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.io.aecor.liberator.ReifiedInvocations[$unifiedBase]  =
-         new aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.FunctorK[$unifiedBase] with _root_.io.aecor.liberator.ReifiedInvocations[$unifiedBase]{
+        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.ReifiedInvocations[$unifiedBase]  =
+         new aecor.encoding.WireProtocol[$unifiedBase] with _root_.io.aecor.liberator.ReifiedInvocations[$unifiedBase]{
             final def mapK[F[_], G[_]](mf: $typeName[..$abstractTypes, F], fg: _root_.cats.arrow.FunctionK[F, G]): $typeName[..$abstractTypes, G] =
               new ${Ctor.Name(typeName.value)}[..$abstractTypes, G] {
                 ..${

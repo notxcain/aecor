@@ -1,7 +1,7 @@
 package aecor.macros.boopickle
 import boopickle.Pickler
 import scodec.bits.BitVector
-import scodec.{ Attempt, DecodeResult, Decoder, Encoder, Err, SizeBound }
+import scodec.{ Attempt, Codec, DecodeResult, Decoder, Encoder, Err, SizeBound }
 import _root_.boopickle.Default._
 
 import scala.util.Try
@@ -22,6 +22,8 @@ object BoopickleCodec {
           a => Attempt.successful(DecodeResult(a, BitVector.empty))
         )
   }
+
+  def codec[A](implicit pickler: Pickler[A]): Codec[A] = Codec(encoder[A], decoder[A])
 
   def attemptFromTry[A](ta: Try[A]): Attempt[DecodeResult[A]] = ta.fold(
     s => Attempt.failure(Err(s.getMessage)),

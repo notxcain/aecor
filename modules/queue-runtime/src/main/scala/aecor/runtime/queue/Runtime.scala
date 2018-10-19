@@ -8,6 +8,7 @@ import aecor.encoding.WireProtocol
 import aecor.runtime.queue.Actor.Receive
 import aecor.runtime.queue.Runtime._
 import aecor.runtime.queue.impl.ConcurrentHashMapDeferredRegistry
+import _root_.io.aecor.liberator.ReifiedInvocations
 import cats.effect._
 import cats.effect.implicits._
 import cats.implicits._
@@ -17,7 +18,8 @@ import fs2._
 import org.http4s.booPickle._
 import org.http4s.{ EntityDecoder, EntityEncoder }
 import scodec.bits.BitVector
-import scodec.{ Attempt, Encoder }
+import scodec.Encoder
+import aecor.encoding.syntax._
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -32,10 +34,7 @@ class Runtime[F[_]] private[queue] (
     create: K => F[M[F]],
     clientServer: ClientServer[F, I, CommandResult],
     commandQueue: PartitionedQueue[F, CommandEnvelope[I, K]]
-  )(implicit M: WireProtocol[M]): Resource[F, K => M[F]] = {
-
-    def fromAttempt[A](f: Attempt[A]): F[A] =
-      f.fold(e => F.raiseError(new IllegalArgumentException(e.messageWithContext)), F.pure)
+  )(implicit M: WireProtocol[M], MI: ReifiedInvocations[M]): Resource[F, K => M[F]] = {
 
     def startCommandProcessor(selfMemberId: I,
                               create: K => F[M[F]],
@@ -51,13 +50,17 @@ class Runtime[F[_]] private[queue] (
                     Receive[(CommandId, I, PairE[Invocation[M, ?], Encoder])] {
                       case (commandId, replyTo, pair) =>
                         val (inv, enc) = (pair.first, pair.second)
-                        inv.invoke(mf).map(enc.encode).flatMap(fromAttempt).flatMap { bytes =>
-                          if (replyTo == selfMemberId) {
-                            registry.fulfill(commandId, bytes)
-                          } else {
-                            sendResponse(replyTo, CommandResult(commandId, bytes))
+                        inv
+                          .invoke(mf)
+                          .map(enc.encode)
+                          .flatMap(_.lift[F])
+                          .flatMap { bytes =>
+                            if (replyTo == selfMemberId) {
+                              registry.fulfill(commandId, bytes)
+                            } else {
+                              sendResponse(replyTo, CommandResult(commandId, bytes))
+                            }
                           }
-                        }
                     }
                   }
                 }
@@ -67,7 +70,7 @@ class Runtime[F[_]] private[queue] (
               .flatMap { shard =>
                 commands.evalMap {
                   case CommandEnvelope(commandId, replyTo, key, bytes) =>
-                    fromAttempt(M.decoder.decodeValue(bytes)).flatMap { pair =>
+                    M.decoder.decodeValue(bytes).lift[F].flatMap { pair =>
                       shard.send((key, (commandId, replyTo, pair)))
                     }
                 }
@@ -87,20 +90,20 @@ class Runtime[F[_]] private[queue] (
         .Instance(selfId, responseSender) <- clientServer.start(
                                               body => registry.fulfill(body.commandId, body.bytes)
                                             )
-      PartitionedQueue.Instance(commands, commandPartitions) <- commandQueue.start
+      PartitionedQueue.Instance(enqueue, commandPartitions) <- commandQueue.start
       _ <- startCommandProcessor(selfId, create, commandPartitions, responseSender)
       encoder = M.encoder
     } yield { key: K =>
-      M.mapInvocations(new (Invocation[M, ?] ~> F) {
+      MI.mapInvocations(new (Invocation[M, ?] ~> F) {
         override def apply[A](invocation: Invocation[M, A]): F[A] = {
           val (bytes, decoder) = invocation.invoke(encoder)
           for {
             commandId <- F.delay(CommandId(UUID.randomUUID()))
             waitForResult <- registry.defer(commandId)
             envelope = CommandEnvelope(commandId, selfId, key, bytes)
-            _ <- commands.enqueue1(envelope)
+            _ <- enqueue(envelope)
             responseBytes <- waitForResult
-            out <- fromAttempt(decoder.decodeValue(responseBytes))
+            out <- decoder.decodeValue(responseBytes).lift[F]
           } yield out
         }
       })

@@ -1,20 +1,18 @@
 package aecor.example
 
-import java.time.Clock
-
 import aecor.data._
 import aecor.distributedprocessing.DistributedProcessing
-import aecor.example.account.{AccountRoute, Accounts}
+import aecor.example.account.{ AccountRoute, Accounts }
 import aecor.example.common.Timestamp
-import aecor.example.process.{FS2QueueProcess, TransactionProcessor}
+import aecor.example.process.{ FS2QueueProcess, TransactionProcessor }
 import aecor.example.transaction.transaction.Transactions
-import aecor.example.transaction.{TransactionEvent, TransactionId, TransactionRoute}
+import aecor.example.transaction.{ TransactionEvent, TransactionId, TransactionRoute }
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
-import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import aecor.util.JavaTimeClock
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.DefaultJournalCassandraSession
-import akka.stream.{ActorMaterializer, Materializer}
+import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
 import com.typesafe.config.ConfigFactory
 import streamz.converter._
@@ -35,7 +33,7 @@ object App extends IOApp {
     }
     implicit val materializer: Materializer = ActorMaterializer()
 
-    val taskClock = JavaTimeClock[IO](Clock.systemUTC())
+    val taskClock = JavaTimeClock.systemUTC[IO]
 
     val offsetStoreConfig =
       CassandraOffsetStore.Queries(config.getString("cassandra-journal.keyspace"))
@@ -92,26 +90,25 @@ object App extends IOApp {
       }
 
     def startHttpServer(accounts: Accounts[IO],
-                        transactions: Transactions[IO]): IO[Server[IO]] = {
+                        transactions: Transactions[IO]): Resource[IO, Server[IO]] = {
       val transactionService: transaction.TransactionService[IO] =
         transaction.DefaultTransactionService(transactions)
       val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
-
 
       BlazeBuilder[IO]
         .bindHttp(config.getInt("http.port"), config.getString("http.interface"))
         .mountService(TransactionRoute(transactionService), "/")
         .mountService(AccountRoute(accountService), "/")
-        .start
+        .resource
     }
 
     for {
       transactions <- transaction.deployment.deploy[IO](runtime, taskClock)
       accounts <- account.deployment.deploy[IO](runtime, taskClock)
       _ <- startTransactionProcessing(accounts, transactions)
-      bindResult <- startHttpServer(accounts, transactions)
-      _ = system.log.info("Bind result [{}]", bindResult)
-      _ <- IO.fromFuture(IO(system.whenTerminated))
+      _ <- startHttpServer(accounts, transactions).use { _ =>
+            IO.fromFuture(IO(system.whenTerminated))
+          }
     } yield ExitCode.Success
   }
 

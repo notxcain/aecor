@@ -3,12 +3,12 @@ package aecor.testkit
 import java.time.temporal.TemporalAmount
 import java.time.{ Instant, ZoneId }
 
-import aecor.util.ClockT
+import aecor.util.Clock
 import cats.mtl.MonadState
 import monocle.Lens
 
 class StateClock[F[_]: MonadState[?[_], S], S](zoneId: ZoneId, S: Lens[S, Instant])
-    extends ClockT[F] {
+    extends Clock[F] {
   private val F = S.transformMonadState(MonadState[F, S])
   override def zone: F[ZoneId] = F.monad.pure(zoneId)
   override def instant: F[Instant] = F.get

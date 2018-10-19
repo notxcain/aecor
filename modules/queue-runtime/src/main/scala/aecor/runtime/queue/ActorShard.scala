@@ -30,12 +30,7 @@ private[queue] object ActorShard {
                     case None =>
                       create(key)
                         .flatMap(
-                          Actor.withIdleTimeout(
-                            idleTimeout,
-                            F.delay(println(s"Sending terminate to $key")) >> self
-                              .send((key, TerminateWorker)),
-                            _
-                          )
+                          Actor.withIdleTimeout(idleTimeout, self.send((key, TerminateWorker)), _)
                         )
                         .flatTap { a =>
                           F.delay(workers.update(key, a))
@@ -59,4 +54,3 @@ private[queue] object ActorShard {
       }
       .map(_.contramap[(K, A)](x => x._1 -> Message.Handle(x._2)))
 }
-

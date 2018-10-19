@@ -15,7 +15,7 @@ import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
 import cats.effect.concurrent.Deferred
 import cats.implicits._
-import fs2.concurrent.{ Enqueue, Queue }
+import fs2.concurrent.Queue
 import org.apache.kafka.clients.producer._
 import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
 import scodec.Codec
@@ -59,7 +59,6 @@ class KafkaPartitionedQueue[F[_], K, A](
             )
             .evalMap {
               case (i, partition) =>
-                println(s"Assigned partition $i")
                 Queue.unbounded[F, CommittableOffset].map { commits =>
                   partition
                     .toStream()
@@ -73,7 +72,6 @@ class KafkaPartitionedQueue[F[_], K, A](
                         .groupWithin(commitGrouping._1, commitGrouping._2)
                         .evalMap(_.last.traverse_(o => F.fromFuture(o.commitScaladsl())))
                     )
-                    .onFinalize(F.delay(println(s"Partition revoked $i")))
                 }
             }
             .onFinalize(deferredComplete.complete(()))
@@ -87,16 +85,13 @@ class KafkaPartitionedQueue[F[_], K, A](
       }
     }
 
-  def startProducer: Resource[F, Enqueue[F, A]] = Resource[F, Enqueue[F, A]] {
+  def startProducer: Resource[F, A => F[Unit]] = Resource[F, A => F[Unit]] {
     F.suspend {
       val defaults =
         Map(
           ProducerConfig.BOOTSTRAP_SERVERS_CONFIG -> contactPoints
             .mkString(","),
-          ProducerConfig.ACKS_CONFIG -> "0",
-          ProducerConfig.BATCH_SIZE_CONFIG -> "32000",
-          ProducerConfig.LINGER_MS_CONFIG -> "10",
-          ProducerConfig.COMPRESSION_TYPE_CONFIG -> "snappy"
+          ProducerConfig.ACKS_CONFIG -> "0"
         )
 
       val javaProps =
@@ -107,26 +102,23 @@ class KafkaPartitionedQueue[F[_], K, A](
           new KafkaProducer(javaProps, serialization.keySerializer, serialization.valueSerializer)
         )
         .map { underlying =>
-          val out = new Enqueue[F, A] {
-            override def enqueue1(a: A): F[Unit] =
-              F.async[Unit] { callback =>
-                underlying.send(
-                  new ProducerRecord(topicName, extractKey(a), a),
-                  new Callback {
-                    override def onCompletion(metadata: RecordMetadata,
-                                              exception: Exception): Unit =
-                      if (exception eq null) {
-                        callback(Right(()))
-                      } else {
-                        callback(Left(exception))
-                      }
-                  }
-                )
-                ()
-              }
-            override def offer1(a: A): F[Boolean] = enqueue1(a).as(true)
+          val enqueue = { a: A =>
+            F.async[Unit] { callback =>
+              underlying.send(
+                new ProducerRecord(topicName, extractKey(a), a),
+                new Callback {
+                  override def onCompletion(metadata: RecordMetadata, exception: Exception): Unit =
+                    if (exception eq null) {
+                      callback(Right(()))
+                    } else {
+                      callback(Left(exception))
+                    }
+                }
+              )
+              ()
+            }
           }
-          (out, F.delay(underlying.close()))
+          (enqueue, F.delay(underlying.close()))
         }
     }
   }
@@ -179,7 +171,7 @@ object KafkaPartitionedQueue {
     serialization: Serialization[K, A],
     producerProperties: Map[String, String] = Map.empty,
     consumerProperties: Map[String, String] = Map.empty,
-    commitGrouping: (Int, FiniteDuration) = (100, 1.second)
+    commitGrouping: (Int, FiniteDuration) = (1000, 1.second)
   ): PartitionedQueue[F, A] =
     new KafkaPartitionedQueue(
       system,

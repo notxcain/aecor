@@ -192,6 +192,7 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
   resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
   libraryDependencies ++= Seq(
     "co.fs2" %% "fs2-core" % fs2Version,
+    ("org.apache.helix" % "helix-core" % "0.8.2") exclude("org.slf4j", "slf4j-log4j12"),
     "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
     "com.spinoco" %% "fs2-kafka" % "0.4.0-M2",
     "com.typesafe.akka" %% "akka-stream-kafka" % "0.22",
@@ -200,6 +201,7 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
     "org.http4s" %% "http4s-dsl" % http4sVersion,
     "org.http4s" %% "http4s-blaze-client" % http4sVersion,
     "org.http4s" %% "http4s-boopickle" % http4sVersion,
+    "ch.qos.logback" % "logback-classic" % logbackVersion % Test,
     "org.http4s" %% "http4s-circe" % http4sVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test
   )
@@ -226,9 +228,9 @@ lazy val exampleSettings = {
     resolvers += Resolver.sonatypeRepo("releases"),
     libraryDependencies ++=
       Seq(
-        "com.github.krasserm" %% "streamz-converter" % "0.10-SNAPSHOT",
-        "co.fs2" %% "fs2-core" % "1.0.0-M5",
-        "org.typelevel" %% "cats-mtl-core" % "0.3.0",
+        "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
+        "co.fs2" %% "fs2-core" % "1.0.0",
+        "org.typelevel" %% "cats-mtl-core" % "0.4.0",
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "org.http4s" %% "http4s-dsl" % http4sVersion,
         "org.http4s" %% "http4s-blaze-server" % http4sVersion,
@@ -244,7 +246,7 @@ lazy val exampleSettings = {
 
 lazy val testKitSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-mtl-core" % "0.2.3",
+    "org.typelevel" %% "cats-mtl-core" % "0.4.0",
     "com.github.julien-truffaut" %% "monocle-core" % monocleVersion,
     "com.github.julien-truffaut" %% "monocle-macro" % monocleVersion
   )

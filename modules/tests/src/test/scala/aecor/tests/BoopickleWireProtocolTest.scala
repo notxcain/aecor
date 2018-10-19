@@ -1,17 +1,17 @@
 package aecor.tests
 
-
 import aecor.encoding.WireProtocol
-import aecor.encoding.WireProtocol.Decoder.DecodingResult
 import aecor.macros.boopickleWireProtocol
-import cats.{Applicative, Functor, Id, ~>}
+import cats.{ Applicative, Functor, Id, ~> }
 import cats.implicits._
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.{ FunSuite, Matchers }
 import io.aecor.liberator.syntax._
 import java.util.UUID
 
 import BoopickleWireProtocolTest._
 import boopickle.Default._
+import io.aecor.liberator.FunctorK
+import scodec.{ Attempt, Decoder }
 import scodec.bits.BitVector
 
 object BoopickleWireProtocolTest {
@@ -27,31 +27,29 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
     def id: F[FooId]
   }
 
-  val protocol = WireProtocol[Foo]
-
   def server[M[_[_]], F[_]: Applicative](
     actions: M[F]
-  )(implicit M: WireProtocol[M]): BitVector => F[DecodingResult[BitVector]] = { in =>
+  )(implicit M: WireProtocol[M]): BitVector => F[Attempt[BitVector]] = { in =>
     M.decoder
-      .decode(in) match {
-      case Right(p) =>
+      .decodeValue(in) match {
+      case Attempt.Successful(p) =>
         val r: F[p.A] = p.first.invoke(actions)
-        r.map(a => Right(p.second.encode(a)))
-      case Left(e) =>
-        (Left(e): DecodingResult[BitVector]).pure[F]
+        r.map(a => p.second.encode(a))
+      case Attempt.Failure(cause) =>
+        Attempt.failure[BitVector](cause).pure[F]
     }
 
   }
 
-  type DecodingResultT[F[_], A] = F[DecodingResult[A]]
+  type DecodingResultT[F[_], A] = F[Attempt[A]]
 
   def client[M[_[_]], F[_]: Functor](
-    server: BitVector => F[DecodingResult[BitVector]]
-  )(implicit M: WireProtocol[M]): M[DecodingResultT[F, ?]] =
+    server: BitVector => F[Attempt[BitVector]]
+  )(implicit M: WireProtocol[M], MI: FunctorK[M]): M[DecodingResultT[F, ?]] =
     M.encoder
       .mapK[DecodingResultT[F, ?]](new (WireProtocol.Encoded ~> DecodingResultT[F, ?]) {
-        override def apply[A](fa: (BitVector, WireProtocol.Decoder[A])): F[DecodingResult[A]] =
-          server(fa._1).map(_.right.flatMap(fa._2.decode))
+        override def apply[A](fa: (BitVector, Decoder[A])): F[Attempt[A]] =
+          server(fa._1).map(_.flatMap(fa._2.decodeValue))
       })
 
   test("encdec") {
@@ -66,8 +64,8 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
 
     val fooClient = client[Foo, Id](fooServer)
 
-    fooClient.include(1) shouldBe Right(())
-    fooClient.scdsc("1234") shouldBe Right(4)
-    fooClient.id shouldBe Right(FooId(uuid))
+    fooClient.include(1).toEither shouldBe Right(())
+    fooClient.scdsc("1234").toEither shouldBe Right(4)
+    fooClient.id.toEither shouldBe Right(FooId(uuid))
   }
 }

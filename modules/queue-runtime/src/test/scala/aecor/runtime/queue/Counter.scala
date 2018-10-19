@@ -1,10 +1,10 @@
 package aecor.runtime.queue
 
-import aecor.encoding.{KeyDecoder, KeyEncoder}
 import aecor.macros.boopickleWireProtocol
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import cats.implicits._
+import boopickle.Default._
 
 @boopickleWireProtocol
 trait Counter[F[_]] {
@@ -14,7 +14,6 @@ trait Counter[F[_]] {
 }
 
 object Counter {
-  import boopickle.Default._
   def inmem[F[_]: Sync]: F[Counter[F]] =
     Ref[F].of(0L).map { ref =>
       new Counter[F] {
@@ -26,7 +25,3 @@ object Counter {
 }
 
 final case class CounterId(value: String) extends AnyVal
-object CounterId {
-  implicit val keyEncoder: KeyEncoder[CounterId] = KeyEncoder.anyVal
-  implicit val keyDecoder: KeyDecoder[CounterId] = KeyDecoder.anyVal
-}

@@ -1,8 +1,13 @@
 package aecor.example.account
 
-import aecor.encoding.WireProtocol.{Decoder, Encoder}
-import aecor.example.account.Rejection.{AccountDoesNotExist, AccountExists, HoldNotFound, InsufficientFunds}
-
+import aecor.example.account.Rejection.{
+  AccountDoesNotExist,
+  AccountExists,
+  HoldNotFound,
+  InsufficientFunds
+}
+import aecor.macros.boopickle.BoopickleCodec._
+import scodec.Codec
 
 sealed abstract class Rejection extends Product with Serializable
 
@@ -21,9 +26,6 @@ trait RejectionInstances {
     .addConcreteType[AccountExists.type]
     .addConcreteType[HoldNotFound.type]
 
-  implicit val rejectionEncoder: Encoder[Rejection] =
-    Encoder.instance[Rejection](Pickle.intoBytes)
-
-  implicit val rejectionDecoder: Decoder[Rejection] =
-    Decoder.fromTry(Unpickle[Rejection].tryFromBytes)
+  implicit val rejectionCodec: Codec[Rejection] =
+    codec[Rejection]
 }

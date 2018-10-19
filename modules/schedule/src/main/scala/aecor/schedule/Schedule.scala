@@ -1,14 +1,18 @@
 package aecor.schedule
 
-import java.time.{Clock => _, _}
+import java.time.{ Clock => _, _ }
 import java.util.UUID
 
 import aecor.data._
 import aecor.runtime.KeyValueStore
 import aecor.runtime.akkapersistence._
 import aecor.runtime.akkapersistence.readside.JournalEntry
-import aecor.schedule.process.{DefaultScheduleEventJournal, PeriodicProcessRuntime, ScheduleProcess}
-import aecor.util.ClockT
+import aecor.schedule.process.{
+  DefaultScheduleEventJournal,
+  PeriodicProcessRuntime,
+  ScheduleProcess
+}
+import aecor.util.Clock
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
@@ -39,7 +43,7 @@ object Schedule {
   def start[F[_]: Effect](
     entityName: String,
     dayZero: LocalDate,
-    clock: ClockT[F],
+    clock: Clock[F],
     repository: ScheduleEntryRepository[F],
     offsetStore: KeyValueStore[F, TagConsumer, UUID],
     settings: ScheduleSettings = ScheduleSettings(

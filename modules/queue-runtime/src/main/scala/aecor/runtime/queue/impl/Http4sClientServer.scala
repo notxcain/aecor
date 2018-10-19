@@ -4,16 +4,17 @@ import java.net.InetSocketAddress
 
 import aecor.runtime.queue.ClientServer
 import aecor.runtime.queue.ClientServer.Instance
-import cats.effect.{ConcurrentEffect, Resource}
+import cats.effect.implicits._
+import cats.effect.{ ConcurrentEffect, Resource }
 import cats.implicits._
-import org.http4s.Uri.{Authority, Scheme}
+import org.http4s.Uri.{ Authority, Scheme }
 import org.http4s.client.Client
 import org.http4s.client.blaze.BlazeClientBuilder
 import org.http4s.dsl.Http4sDsl
 import org.http4s.server.Server
 import org.http4s.server.blaze.BlazeBuilder
-import org.http4s.{EntityDecoder, EntityEncoder, HttpRoutes, Method, Request, Uri}
-import cats.effect.implicits._
+import org.http4s.{ EntityDecoder, EntityEncoder, HttpRoutes, Method, Request, Uri }
+
 import scala.concurrent.ExecutionContext
 
 final class Http4sClientServer[F[_], A: EntityDecoder[F, ?]: EntityEncoder[F, ?]](
@@ -24,9 +25,7 @@ final class Http4sClientServer[F[_], A: EntityDecoder[F, ?]: EntityEncoder[F, ?]
     extends ClientServer[F, InetSocketAddress, A]
     with Http4sDsl[F] {
 
-  override def start(
-    f: A => F[Unit]
-  ): Resource[F, Instance[F, InetSocketAddress, A]] =
+  override def start(f: A => F[Unit]): Resource[F, Instance[F, InetSocketAddress, A]] =
     for {
       _ <- startServer(f)
       s <- startClient

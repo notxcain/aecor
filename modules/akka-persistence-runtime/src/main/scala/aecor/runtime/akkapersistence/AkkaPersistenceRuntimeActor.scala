@@ -2,29 +2,35 @@ package aecor.runtime.akkapersistence
 
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
-import java.time.{Duration, Instant}
+import java.time.{ Duration, Instant }
 import java.util.UUID
 
-import aecor.data.Folded.{Impossible, Next}
+import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
-import aecor.encoding.{KeyDecoder, WireProtocol}
-import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{CommandResult, HandleCommand}
-import aecor.runtime.akkapersistence.SnapshotPolicy.{EachNumberOfEvents, Never}
-import aecor.runtime.akkapersistence.serialization.{Message, PersistentDecoder, PersistentEncoder, PersistentRepr}
+import aecor.encoding.{ KeyDecoder, WireProtocol }
+import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{ CommandResult, HandleCommand }
+import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
+import aecor.runtime.akkapersistence.serialization.{
+  Message,
+  PersistentDecoder,
+  PersistentEncoder,
+  PersistentRepr
+}
 import aecor.util.effect._
-import akka.actor.{ActorLogging, Props, ReceiveTimeout, Stash, Status}
+import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import akka.persistence.journal.Tagged
-import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
+import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.data.Chain
 import cats.effect.Effect
 import cats.implicits._
 import io.aecor.liberator.Invocation
+import scodec.{ Attempt, Encoder }
 import scodec.bits.BitVector
-
+import aecor.encoding.syntax._
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Left, Right}
+import scala.util.{ Left, Right }
 
 private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
@@ -168,35 +174,42 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
   }
 
   private def handleCommand(commandBytes: BitVector): Unit =
-    M.decoder.decode(commandBytes) match {
-      case Right(pair) =>
+    M.decoder
+      .decodeValue(commandBytes) match {
+      case Attempt.Successful(pair) =>
         performInvocation(pair.first, pair.second)
-      case Left(decodingFailure) =>
-        log.error(new IllegalArgumentException(decodingFailure.getMessage, decodingFailure), "Failed to decode command")
-        sender() ! Status.Failure(decodingFailure)
+      case Attempt.Failure(cause) =>
+        val decodingError = new IllegalArgumentException(cause.messageWithContext)
+        log.error(decodingError, "Failed to decode invocation")
+        sender() ! Status.Failure(decodingError)
     }
 
-  def performInvocation[A](invocation: Invocation[M, A],
-                           resultEncoder: WireProtocol.Encoder[A]): Unit = {
+  def performInvocation[A](invocation: Invocation[M, A], resultEncoder: Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
     invocation
-      .invoke(actions).run(state, updateState)
+      .invoke(actions)
+      .run(state, updateState)
       .flatMap {
         case Next((events, result)) =>
-          F.delay(log.info(
-            "[{}] Command [{}] produced reply [{}] and events [{}]",
-            persistenceId,
-            invocation,
-            result,
-            events
-          )) as ActionResult(opId, events, resultEncoder.encode(result))
+          F.delay(
+            log.info(
+              "[{}] Command [{}] produced reply [{}] and events [{}]",
+              persistenceId,
+              invocation,
+              result,
+              events
+            )
+          ) >> resultEncoder
+            .encode(result)
+            .map(a => ActionResult(opId, events, a))
+            .lift[F]
         case Impossible =>
-          val error = new IllegalStateException(s"[$persistenceId] Command [$invocation] produced illegal fold")
-          F.delay(log.error(error,
-            "[{}] Command [{}] produced illegal fold",
-            persistenceId,
-            invocation
-          )) >>
+          val error = new IllegalStateException(
+            s"[$persistenceId] Command [$invocation] produced illegal fold"
+          )
+          F.delay(
+            log.error(error, "[{}] Command [{}] produced illegal fold", persistenceId, invocation)
+          ) >>
             F.raiseError[ActionResult](error)
       }
       .unsafeToFuture()

@@ -4,10 +4,11 @@ import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.Encoded
 import cats.data.EitherT
 import cats.~>
-import io.aecor.liberator.{ FunctorK, Invocation }
+import io.aecor.liberator.{ FunctorK, Invocation, ReifiedInvocations }
 import cats.implicits._
 import scodec.{ Codec, Decoder, Encoder }
 import scodec.codecs._
+import io.aecor.liberator.syntax._
 
 /**
   * Higher-kinded transformer for EitherT
@@ -30,66 +31,80 @@ final case class EitherK[M[_[_]], F[_], A](value: M[EitherT[F, A, ?]]) {
 }
 
 object EitherK {
-  implicit def wireProtocol[M[_[_]], F[_], R](implicit M: WireProtocol[M],
-                                              R: Codec[R]): WireProtocol[EitherK[M, ?[_], R]] =
+  implicit def reifiedInvocations[M[_[_]], F[_], R](
+    implicit M: ReifiedInvocations[M]
+  ): ReifiedInvocations[EitherK[M, ?[_], R]] = new ReifiedInvocations[EitherK[M, ?[_], R]] {
+    final override def mapK[G[_], H[_]](mf: EitherK[M, G, R], fg: ~>[G, H]): EitherK[M, H, R] =
+      mf.mapK(fg)
+
+    final override def invocations: EitherK[M, Invocation[EitherK[M, ?[_], R], ?], R] =
+      EitherK {
+        M.mapInvocations(
+          new (Invocation[M, ?] ~> EitherT[Invocation[EitherK[M, ?[_], R], ?], R, ?]) {
+            override def apply[A](
+              fa: Invocation[M, A]
+            ): EitherT[Invocation[EitherK[M, ?[_], R], ?], R, A] =
+              EitherT {
+                new Invocation[EitherK[M, ?[_], R], Either[R, A]] {
+                  override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
+                    fa.invoke(target.value).value
+                  override def toString: String = fa.toString
+                }
+              }
+          }
+        )
+      }
+  }
+  implicit def wireProtocol[M[_[_]]: FunctorK, F[_], R](
+    implicit M: WireProtocol[M],
+    rejectionCodec: Codec[R]
+  ): WireProtocol[EitherK[M, ?[_], R]] =
     new WireProtocol[EitherK[M, ?[_], R]] {
 
-      override def mapK[G[_], H[_]](mf: EitherK[M, G, R], fg: ~>[G, H]): EitherK[M, H, R] =
-        mf.mapK(fg)
-
-      override def invocations: EitherK[M, Invocation[EitherK[M, ?[_], R], ?], R] =
-        EitherK {
-          M.mapInvocations(
-            new (Invocation[M, ?] ~> EitherT[Invocation[EitherK[M, ?[_], R], ?], R, ?]) {
-              override def apply[A](
-                fa: Invocation[M, A]
-              ): EitherT[Invocation[EitherK[M, ?[_], R], ?], R, A] =
-                EitherT {
-                  new Invocation[EitherK[M, ?[_], R], Either[R, A]] {
-                    override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
-                      fa.invoke(target.value).value
-                    override def toString: String = fa.toString
-                  }
-                }
-            }
-          )
-        }
-
-      override val encoder: EitherK[M, Encoded, R] =
+      final override val encoder: EitherK[M, Encoded, R] =
         EitherK[M, Encoded, R] {
-          M.mapInvocations(new (Invocation[M, ?] ~> EitherT[Encoded, R, ?]) {
-            override def apply[A](ma: Invocation[M, A]): EitherT[Encoded, R, A] =
+          M.encoder.mapK(new (Encoded ~> EitherT[Encoded, R, ?]) {
+            override def apply[A](ma: Encoded[A]): EitherT[Encoded, R, A] =
               EitherT[Encoded, R, A] {
-                val (bytes, decM) = ma.invoke(M.encoder)
+                val (bytes, resultDecoder) = ma
                 val dec = bool.flatMap {
-                  case true  => decM.map(_.asRight[R])
-                  case false => R.map(_.asLeft[A])
+                  case true  => resultDecoder.map(_.asRight[R])
+                  case false => rejectionCodec.map(_.asLeft[A])
                 }
                 (bytes, dec)
               }
           })
         }
 
-      override def decoder: Decoder[PairE[Invocation[EitherK[M, ?[_], R], ?], Encoder]] =
+      final override val decoder: Decoder[PairE[Invocation[EitherK[M, ?[_], R], ?], Encoder]] =
         M.decoder.map { p =>
           val (invocation, encoder) = (p.first, p.second)
-          val invocationR =
+          val eitherKInvocation =
             new Invocation[EitherK[M, ?[_], R], Either[R, p.A]] {
               override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, p.A]] =
                 invocation.invoke(target.value).value
               override def toString: String = invocation.toString
             }
 
-          val encoderR = Encoder { m: Either[R, p.A] =>
+          val eitherEncoder = Encoder { m: Either[R, p.A] =>
             m match {
               case Right(a) =>
                 Encoder.encodeBoth(bool, encoder)(true, a)
               case Left(r) =>
-                Encoder.encodeBoth(bool, R)(false, r)
+                Encoder.encodeBoth(bool, rejectionCodec)(false, r)
             }
           }
 
-          PairE(invocationR, encoderR)
+          PairE(eitherKInvocation, eitherEncoder)
         }
+    }
+
+  def wrapInvocation[M[_[_]], R, A](
+    inner: Invocation[M, A]
+  ): Invocation[EitherK[M, ?[_], R], Either[R, A]] =
+    new Invocation[EitherK[M, ?[_], R], Either[R, A]] {
+      override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
+        inner.invoke(target.value).value
+      override def toString: String = inner.toString
     }
 }

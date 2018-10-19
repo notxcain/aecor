@@ -1,19 +1,20 @@
 package aecor.runtime.akkageneric
 
-import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
+import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
 import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
 import aecor.runtime.akkageneric.serialization.Message
 import aecor.util.effect._
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ClusterSharding, ShardRegion}
+import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 import cats.~>
-import io.aecor.liberator.Invocation
+import io.aecor.liberator.{ Invocation, ReifiedInvocations }
 import scodec.bits.BitVector
+import aecor.encoding.syntax._
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =
@@ -26,7 +27,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
     typeName: String,
     createBehavior: K => F[M[F]],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], MI: ReifiedInvocations[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
       val props = GenericAkkaRuntimeActor.props[K, M, F](createBehavior, settings.idleTimeout)
 
@@ -54,7 +55,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
       val keyEncoder = KeyEncoder[K]
 
       key =>
-        M.mapInvocations(new (Invocation[M, ?] ~> F) {
+        MI.mapInvocations(new (Invocation[M, ?] ~> F) {
 
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
@@ -65,9 +66,11 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
               }
               .flatMap {
                 case result: CommandResult =>
-                  F.fromEither(decoder.decode(result.bytes))
+                  decoder.decodeValue(result.bytes).lift[F]
                 case other =>
-                  F.raiseError(new IllegalArgumentException(s"Unexpected response [$other] from shard region"))
+                  F.raiseError(
+                    new IllegalArgumentException(s"Unexpected response [$other] from shard region")
+                  )
               }
           }
         })

@@ -1,21 +1,22 @@
 package aecor.runtime.akkapersistence
 
-import aecor.data.{EventsourcedBehavior, Tagging}
-import aecor.encoding.{KeyDecoder, KeyEncoder, WireProtocol}
+import aecor.data.{ EventsourcedBehavior, Tagging }
+import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.CommandResult
-import aecor.runtime.akkapersistence.readside.{AkkaPersistenceEventJournalQuery, JournalQuery}
-import aecor.runtime.akkapersistence.serialization.{Message, PersistentDecoder, PersistentEncoder}
+import aecor.runtime.akkapersistence.readside.{ AkkaPersistenceEventJournalQuery, JournalQuery }
+import aecor.runtime.akkapersistence.serialization.{ Message, PersistentDecoder, PersistentEncoder }
 import aecor.util.effect._
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ClusterSharding, ShardRegion}
+import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 import cats.~>
-import io.aecor.liberator.Invocation
+import io.aecor.liberator.{ Invocation, ReifiedInvocations }
 import scodec.bits.BitVector
+import aecor.encoding.syntax._
 
 object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
@@ -34,7 +35,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
     tagging: Tagging[Key],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Effect[F]): F[Key => M[F]] =
+  )(implicit M: WireProtocol[M], MI: ReifiedInvocations[M], F: Effect[F]): F[Key => M[F]] =
     F.delay {
       val props =
         AkkaPersistenceRuntimeActor.props(
@@ -73,7 +74,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
       val keyEncoder = KeyEncoder[Key]
 
       key =>
-        M.mapInvocations(new (Invocation[M, ?] ~> F) {
+        MI.mapInvocations(new (Invocation[M, ?] ~> F) {
 
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
@@ -84,7 +85,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
               }
               .flatMap {
                 case CommandResult(resultBytes) =>
-                  F.fromEither(decoder.decode(resultBytes))
+                  decoder.decodeValue(resultBytes).lift[F]
                 case other =>
                   F.raiseError(
                     new IllegalArgumentException(s"Unexpected response [$other] from shard region")

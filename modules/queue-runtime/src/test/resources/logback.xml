@@ -1,0 +1,18 @@
+<configuration>
+    <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <charset>utf-8</charset>
+            <pattern>%-20d{dd/MM/YYYY HH:mm:ss.SSS} %-5level %logger - %msg %X{JoinedMdc}%n</pattern>
+        </encoder>
+    </appender>
+
+    <root level="WARN">
+        <appender-ref ref="STDOUT" />
+    </root>
+    <logger name="org.apache.kafka" level="INFO" />
+    <logger name="akka.kafka.internal" level="INFO" />
+    <logger name="akka.actor.LocalActorRefProvider(akka://aecor-example)" level="OFF" />
+    <logger name="org.apache.zookeeper.ClientCnxn" level="INFO" />
+    <logger name="org.apache.helix.manager.zk.zookeeper" level="INFO" />
+    <logger name="org.apache.helix.examples" level="DEBUG" />
+</configuration>
