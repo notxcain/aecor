@@ -7,6 +7,8 @@ import java.util.UUID
 
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
+import aecor.encoding.WireProtocol.Invocation
+import aecor.encoding.syntax._
 import aecor.encoding.{ KeyDecoder, WireProtocol }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.{ CommandResult, HandleCommand }
 import aecor.runtime.akkapersistence.SnapshotPolicy.{ EachNumberOfEvents, Never }
@@ -25,10 +27,9 @@ import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.data.Chain
 import cats.effect.Effect
 import cats.implicits._
-import io.aecor.liberator.Invocation
-import scodec.{ Attempt, Encoder }
 import scodec.bits.BitVector
-import aecor.encoding.syntax._
+import scodec.{ Attempt, Encoder }
+
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
 

@@ -3,10 +3,16 @@ import java.net.InetSocketAddress
 
 import aecor.runtime.queue.Runtime.{ CommandEnvelope, CommandId, CommandResult }
 import aecor.runtime.queue._
-import aecor.runtime.queue.impl.HelixPartitionedQueue.{ ClusterName, InstanceHost, ZookeeperHost }
 import aecor.runtime.queue.impl.KafkaPartitionedQueue.Serialization
-import aecor.runtime.queue.impl.{ HelixPartitionedQueue, Http4sClientServer, KafkaPartitionedQueue }
+import aecor.runtime.queue.impl.helix.HelixPartitionedQueue
+import aecor.runtime.queue.impl.helix.HelixPartitionedQueue.{
+  ClusterName,
+  InstanceHost,
+  ZookeeperHost
+}
+import aecor.runtime.queue.impl.{ Http4sClientServer, KafkaPartitionedQueue }
 import akka.actor.ActorSystem
+import boopickle.Default.transformPickler
 import cats.effect.{ ExitCode, IO, IOApp }
 import fs2._
 import org.http4s.HttpRoutes
@@ -15,6 +21,7 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.server.blaze.BlazeBuilder
 import scodec._
 import codecs._
+import scodec.codecs.implicits._
 import cats.implicits._
 
 import scala.concurrent.ExecutionContext
@@ -37,16 +44,18 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
     Serialization
       .scodec(utf8_32, commandEnvelopeCodec(I, utf8_32))
 
-  def runOO(args: List[String]): IO[ExitCode] =
+  def run(args: List[String]): IO[ExitCode] =
     for {
       system <- IO.delay(ActorSystem())
       runtimePort = args.head.toInt
       httpPort = args.tail.head.toInt
       _ = println(httpPort)
+      _ = println(runtimePort)
       runtime <- Runtime.create[IO](10.seconds, 15.seconds)
       stream = for {
         counters <- {
-          val queue = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](
+          implicit val ec: ExecutionContext = system.dispatcher
+          val _ = KafkaPartitionedQueue[IO, String, CommandEnvelope[InetSocketAddress, String]](
             system,
             Set("localhost:9092"),
             "counter-commands-40",
@@ -54,14 +63,31 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
             _.key,
             serialization
           )
-          val clientServer = {
-            implicit val ec: ExecutionContext = system.dispatcher
+
+          val queue = {
+            import boopickle.Default._
+            implicit val inetSocketAddressPickler = {
+              transformPickler(
+                (b: (String, Int)) => InetSocketAddress.createUnresolved(b._1, b._2)
+              )(x => (x.getHostString, x.getPort))
+            }
+            new HelixPartitionedQueue[IO, CommandEnvelope[InetSocketAddress, String]](
+              Set(ZookeeperHost.local),
+              ClusterName("Test13"),
+              InstanceHost("localhost", runtimePort + 10),
+              40,
+              _.key.hashCode % 40,
+              new InetSocketAddress("localhost", runtimePort + 10),
+              "counter/commands"
+            )
+          }
+          val clientServer =
             Http4sClientServer[IO, CommandResult](
               new InetSocketAddress("localhost", runtimePort),
               new InetSocketAddress("localhost", runtimePort),
-              "counter"
+              "counter/responses"
             )
-          }
+
           Stream.resource(runtime.run((_: String) => Counter.inmem[IO], clientServer, queue))
         }
         _ <- Stream.resource {
@@ -89,20 +115,5 @@ object Main extends IOApp with Http4sDsl[IO] with CirceEntityEncoder {
             }
       } yield ()
       _ <- stream.evalMap(_ => IO.never).compile.drain
-    } yield ExitCode.Success
-
-  override def run(args: List[String]): IO[ExitCode] =
-    for {
-      _ <- IO.unit
-      httpPort = args.tail.head.toInt
-//      isController = args.tail.tail.headOption.contains("controller")
-      helix = new HelixPartitionedQueue[IO, Int](
-        Set(ZookeeperHost.local),
-        ClusterName("Test13"),
-        InstanceHost("localhost", httpPort)
-      )
-
-      _ <- helix.setup
-      _ <- helix.connect.use(_.evalMap(x => IO(println(x)) >> x.complete).compile.drain)
     } yield ExitCode.Success
 }

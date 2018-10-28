@@ -1,6 +1,8 @@
 package aecor.runtime.akkapersistence
 
 import aecor.data.{ EventsourcedBehavior, Tagging }
+import aecor.encoding.WireProtocol.Encoded
+import aecor.encoding.syntax._
 import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime._
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntimeActor.CommandResult
@@ -13,10 +15,10 @@ import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
+import cats.tagless.FunctorK
 import cats.~>
-import io.aecor.liberator.{ Invocation, ReifiedInvocations }
+import cats.tagless.syntax.functorK._
 import scodec.bits.BitVector
-import aecor.encoding.syntax._
 
 object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
@@ -29,13 +31,13 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]], F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]]: FunctorK, F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
     typeName: String,
     behavior: EventsourcedBehavior[M, F, State, Event],
     tagging: Tagging[Key],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], MI: ReifiedInvocations[M], F: Effect[F]): F[Key => M[F]] =
+  )(implicit M: WireProtocol[M], F: Effect[F]): F[Key => M[F]] =
     F.delay {
       val props =
         AkkaPersistenceRuntimeActor.props(
@@ -74,12 +76,12 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
       val keyEncoder = KeyEncoder[Key]
 
       key =>
-        MI.mapInvocations(new (Invocation[M, ?] ~> F) {
+        M.encoder.mapK(new (Encoded ~> F) {
 
           implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
-          override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
-            val (bytes, decoder) = fa.invoke(M.encoder)
+          override def apply[A](fa: Encoded[A]): F[A] = F.suspend {
+            val (bytes, decoder) = fa
             F.fromFuture {
                 shardRegion ? EntityCommand(keyEncoder(key), bytes)
               }

@@ -1,24 +1,37 @@
 package aecor.data
 
-import aecor.{Has, data}
+import aecor.{ Has, data }
 import cats.Monad
-import io.aecor.liberator.FunctorK
+import cats.data.EitherT
+import cats.tagless.FunctorK
 
-final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F, S, E, ?]], initial: S, update: (S, E) => Folded[S]) {
-  def enrich[Env](f: F[Env])(implicit M: FunctorK[M], F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E]] =
+final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F, S, E, ?]],
+                                                           initial: S,
+                                                           update: (S, E) => Folded[S]) {
+  def enrich[Env](f: F[Env])(implicit M: FunctorK[M],
+                             F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E]] =
     EventsourcedBehavior(
-      actions = M.mapK(actions, ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
+      actions =
+        M.mapK(actions)(ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
       initial = initial,
       update = (s, e) => update(s, e.event)
     )
 }
 
 object EventsourcedBehavior {
-  def optional[M[_[_]], F[_], State, Event](
-                                       actions: M[ActionT[F, Option[State], Event, ?]],
-                                       init: Event => Folded[State],
-                                       applyEvent: (State, Event) => Folded[State]
-                                     ): EventsourcedBehavior[M, F, Option[State], Event] =
+  def singularRejectable[M[_[_]], F[_], State, Event, Rejection](
+    actions: M[EitherT[ActionT[F, Option[State], Event, ?], Rejection, ?]],
+    init: Event => Folded[State],
+    applyEvent: (State, Event) => Folded[State]
+  ): EventsourcedBehavior[EitherK[M, ?[_], Rejection], F, Option[State], Event] =
+    EventsourcedBehavior
+      .singular[EitherK[M, ?[_], Rejection], F, State, Event](EitherK(actions), init, applyEvent)
+
+  def singular[M[_[_]], F[_], State, Event](
+    actions: M[ActionT[F, Option[State], Event, ?]],
+    init: Event => Folded[State],
+    applyEvent: (State, Event) => Folded[State]
+  ): EventsourcedBehavior[M, F, Option[State], Event] =
     data.EventsourcedBehavior(
       actions,
       Option.empty[State],

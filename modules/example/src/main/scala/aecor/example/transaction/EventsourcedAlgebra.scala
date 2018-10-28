@@ -6,7 +6,12 @@ import aecor.example.account.AccountId
 import aecor.example.common.Amount
 import aecor.example.transaction.Algebra.TransactionInfo
 import aecor.example.transaction.EventsourcedAlgebra.State
-import aecor.example.transaction.EventsourcedAlgebra.TransactionStatus.{Authorized, Failed, Requested, Succeeded}
+import aecor.example.transaction.EventsourcedAlgebra.TransactionStatus.{
+  Authorized,
+  Failed,
+  Requested,
+  Succeeded
+}
 import aecor.example.transaction.TransactionEvent._
 import cats.Monad
 import cats.data.EitherT
@@ -83,14 +88,18 @@ object EventsourcedAlgebra {
     implicit F: MonadActionReject[F, Option[State], TransactionEvent, String]
   ): Algebra[F] = new EventsourcedAlgebra
 
-  def actions[F[_]: Monad]: EitherK[Algebra, ActionT[F, Option[State], TransactionEvent, ?], String] =
-    EitherK(
-      EventsourcedAlgebra[EitherT[ActionT[F, Option[State], TransactionEvent, ?], String, ?]])
+  def actions[F[_]: Monad]
+    : EitherK[Algebra, ActionT[F, Option[State], TransactionEvent, ?], String] =
+    EitherK(EventsourcedAlgebra[EitherT[ActionT[F, Option[State], TransactionEvent, ?], String, ?]])
 
-  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], String], F, Option[State], TransactionEvent] =
+  def behavior[F[_]: Monad]
+    : EventsourcedBehavior[EitherK[Algebra, ?[_], String], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
-      .optional[EitherK[Algebra, ?[_], String], F, State, TransactionEvent](
-        actions[F], State.fromEvent, _.applyEvent(_))
+      .singular[EitherK[Algebra, ?[_], String], F, State, TransactionEvent](
+        actions[F],
+        State.fromEvent,
+        _.applyEvent(_)
+      )
 
   def tagging: Tagging[TransactionId] =
     Tagging.partitioned(20)(EventTag("Transaction"))
@@ -103,9 +112,9 @@ object EventsourcedAlgebra {
     case object Succeeded extends TransactionStatus
   }
   final case class State(status: TransactionStatus,
-                               from: From[AccountId],
-                               to: To[AccountId],
-                               amount: Amount) {
+                         from: From[AccountId],
+                         to: To[AccountId],
+                         amount: Amount) {
     def applyEvent(event: TransactionEvent): Folded[State] = event match {
       case TransactionCreated(_, _, _) => impossible
       case TransactionAuthorized       => copy(status = TransactionStatus.Authorized).next

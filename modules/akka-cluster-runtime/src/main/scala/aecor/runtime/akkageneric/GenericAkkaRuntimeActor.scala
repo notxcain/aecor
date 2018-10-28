@@ -4,6 +4,7 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
+import aecor.encoding.WireProtocol.Invocation
 import aecor.encoding.{ KeyDecoder, WireProtocol }
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
 import aecor.runtime.akkageneric.serialization.Message
@@ -12,10 +13,10 @@ import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import cats.effect.{ Effect, IO }
 import cats.effect.syntax.effect._
-import io.aecor.liberator.Invocation
 import scodec.{ Attempt, Encoder }
 import scodec.bits.BitVector
 import aecor.encoding.syntax._
+
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }

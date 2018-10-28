@@ -36,7 +36,7 @@ lazy val circeVersion = "0.9.3"
 lazy val http4sVersion = "0.19.0-M4"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
-lazy val liberatorVersion = "0.8.0"
+lazy val catsTaglessVersion = "0.1.0"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
@@ -148,7 +148,7 @@ lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "io.aecor" %% "liberator" % liberatorVersion,
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
@@ -209,6 +209,7 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
+    "co.fs2" %% "fs2-core" % fs2Version,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,

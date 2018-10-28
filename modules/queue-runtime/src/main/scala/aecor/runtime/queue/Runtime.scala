@@ -5,21 +5,22 @@ import java.util.UUID
 
 import aecor.data.PairE
 import aecor.encoding.WireProtocol
+import aecor.encoding.WireProtocol.{ Encoded, Invocation }
+import aecor.encoding.syntax._
 import aecor.runtime.queue.Actor.Receive
 import aecor.runtime.queue.Runtime._
 import aecor.runtime.queue.impl.ConcurrentHashMapDeferredRegistry
-import _root_.io.aecor.liberator.ReifiedInvocations
 import cats.effect._
 import cats.effect.implicits._
 import cats.implicits._
+import cats.tagless.FunctorK
+import cats.tagless.syntax.functorK._
 import cats.{ Applicative, ~> }
-import io.aecor.liberator.Invocation
 import fs2._
 import org.http4s.booPickle._
 import org.http4s.{ EntityDecoder, EntityEncoder }
-import scodec.bits.BitVector
 import scodec.Encoder
-import aecor.encoding.syntax._
+import scodec.bits.BitVector
 
 import scala.concurrent.duration.FiniteDuration
 
@@ -30,11 +31,11 @@ class Runtime[F[_]] private[queue] (
   F: ConcurrentEffect[F],
   timer: Timer[F]) {
 
-  def run[K, I, M[_[_]]](
+  def run[K, I, M[_[_]]: FunctorK](
     create: K => F[M[F]],
     clientServer: ClientServer[F, I, CommandResult],
     commandQueue: PartitionedQueue[F, CommandEnvelope[I, K]]
-  )(implicit M: WireProtocol[M], MI: ReifiedInvocations[M]): Resource[F, K => M[F]] = {
+  )(implicit M: WireProtocol[M]): Resource[F, K => M[F]] = {
 
     def startCommandProcessor(selfMemberId: I,
                               create: K => F[M[F]],
@@ -92,11 +93,10 @@ class Runtime[F[_]] private[queue] (
                                             )
       PartitionedQueue.Instance(enqueue, commandPartitions) <- commandQueue.start
       _ <- startCommandProcessor(selfId, create, commandPartitions, responseSender)
-      encoder = M.encoder
     } yield { key: K =>
-      MI.mapInvocations(new (Invocation[M, ?] ~> F) {
-        override def apply[A](invocation: Invocation[M, A]): F[A] = {
-          val (bytes, decoder) = invocation.invoke(encoder)
+      M.encoder.mapK(new (Encoded ~> F) {
+        override def apply[A](encoded: Encoded[A]): F[A] = {
+          val (bytes, decoder) = encoded
           for {
             commandId <- F.delay(CommandId(UUID.randomUUID()))
             waitForResult <- registry.defer(commandId)
@@ -124,6 +124,17 @@ object Runtime {
   }
   final case class CommandId(value: UUID) extends AnyVal
   final case class CommandEnvelope[I, K](commandId: CommandId, replyTo: I, key: K, bytes: BitVector)
+  object CommandEnvelope {
+    import boopickle.Default._
+    implicit val bitVectorPickler =
+      transformPickler((b: ByteBuffer) => BitVector(b))(_.toByteBuffer)
+    implicit def entityDecoder[F[_]: Sync, I: Pickler, K: Pickler]
+      : EntityDecoder[F, CommandEnvelope[I, K]] =
+      booOf[F, CommandEnvelope[I, K]]
+    implicit def entityEncoder[F[_]: Applicative, I: Pickler, K: Pickler]
+      : EntityEncoder[F, CommandEnvelope[I, K]] =
+      booEncoderOf[F, CommandEnvelope[I, K]]
+  }
   private[queue] final case class ResponseEnvelope[K](commandId: CommandId, bytes: BitVector)
 
   def create[F[_]: ConcurrentEffect: ContextShift: Timer](

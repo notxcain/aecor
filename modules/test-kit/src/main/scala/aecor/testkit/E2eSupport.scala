@@ -1,16 +1,19 @@
 package aecor.testkit
 
-import io.aecor.liberator.Invocation
-import aecor.data.{EventsourcedBehavior, _}
-import aecor.runtime.{EventJournal, Eventsourced}
+import aecor.data.{ EventsourcedBehavior, _ }
+import aecor.encoding.WireProtocol.Invocation
 import aecor.runtime.Eventsourced._
-import cats.data.{EitherT, StateT}
-import cats.effect.{IO, Sync}
-import cats.mtl.MonadState
-import cats.{FlatMap, Monad, ~>}
-import io.aecor.liberator.{FunctorK, ReifiedInvocations}
-import monocle.Lens
+import aecor.runtime.{ EventJournal, Eventsourced }
+import cats.data.{ EitherT, StateT }
+import cats.effect.concurrent.{ MVar }
+import cats.effect.{ Concurrent, IO, Sync }
 import cats.implicits._
+import cats.mtl.MonadState
+import cats.tagless.FunctorK
+import cats.tagless.syntax.functorK._
+import cats.{ Monad, ~> }
+import monocle.Lens
+
 import scala.collection.immutable._
 
 object E2eSupport {
@@ -18,19 +21,41 @@ object E2eSupport {
   final def behavior[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E]
-  )(implicit M: ReifiedInvocations[M]): K => F[M[F]] =
+  ): K => F[M[F]] =
     Eventsourced[M, F, S, E, K](behavior, journal)
 
-  final class Runtime[F[_]: FlatMap] {
-    def deploy[K, M[_[_]]: FunctorK: ReifiedInvocations](f: K => F[M[F]]): K => M[F] = { key =>
-      val fmf = f(key)
-      ReifiedInvocations[M].mapInvocations {
-        new (Invocation[M, ?] ~> F) {
-          final override def apply[A](invocation: Invocation[M, A]): F[A] =
-            fmf.flatMap(me => invocation.invoke(me))
+  trait ReifiedInvocations[M[_[_]]] {
+    def invocations: M[Invocation[M, ?]]
+  }
+
+  object ReifiedInvocations {
+    def apply[M[_[_]]](implicit M: ReifiedInvocations[M]): ReifiedInvocations[M] = M
+  }
+
+  final class Runtime[F[_]] {
+    def deploy[K, M[_[_]]: ReifiedInvocations: FunctorK](
+      load: K => F[M[F]]
+    )(implicit F: Concurrent[F]): F[K => M[F]] =
+      MVar[F](F).of(Map.empty[K, M[F]]).map { instancesVar: MVar[F, Map[K, M[F]]] =>
+        { key: K =>
+          ReifiedInvocations[M].invocations.mapK {
+            new (Invocation[M, ?] ~> F) {
+              final override def apply[A](invocation: Invocation[M, A]): F[A] =
+                for {
+                  instances <- instancesVar.take
+                  mf <- instances.get(key) match {
+                         case Some(mf) => instancesVar.put(instances) >> mf.pure[F]
+                         case None =>
+                           load(key).flatMap { mf =>
+                             instancesVar.put(instances.updated(key, mf)).as(mf)
+                           }
+                       }
+                  a <- invocation.invoke(mf)
+                } yield a
+            }
+          }
         }
       }
-    }
   }
 
   abstract class Processes[F[_]](items: Vector[F[Unit]]) {
@@ -53,7 +78,7 @@ object E2eSupport {
 
     final def wiredK[I, M[_[_]]](behavior: I => M[F])(implicit M: FunctorK[M]): I => M[F] =
       i =>
-        M.mapK(behavior(i), new (F ~> F) {
+        behavior(i).mapK(new (F ~> F) {
           override def apply[A](fa: F[A]): F[A] =
             fa <* runProcesses
         })

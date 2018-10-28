@@ -1,8 +1,8 @@
 package aecor.runtime
 
-import cats.{Contravariant, Functor, Invariant, Monad, ~>}
-import io.aecor.liberator.FunctorK
 import cats.implicits._
+import cats.tagless.FunctorK
+import cats.{ Contravariant, Functor, Invariant, Monad, ~> }
 
 trait KeyValueStore[F[_], K, A] { self =>
   def setValue(key: K, value: A): F[Unit]
@@ -33,8 +33,9 @@ trait KeyValueStore[F[_], K, A] { self =>
 object KeyValueStore {
   implicit def liberatorFunctorKInstance[K, A]: FunctorK[KeyValueStore[?[_], K, A]] =
     new FunctorK[KeyValueStore[?[_], K, A]] {
-      override def mapK[F[_], G[_]](mf: KeyValueStore[F, K, A],
-                                    fg: F ~> G): KeyValueStore[G, K, A] =
+      override def mapK[F[_], G[_]](
+        mf: KeyValueStore[F, K, A]
+      )(fg: F ~> G): KeyValueStore[G, K, A] =
         mf.mapK(fg)
     }
 

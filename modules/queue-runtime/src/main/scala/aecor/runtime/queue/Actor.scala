@@ -4,12 +4,11 @@ import cats.effect.implicits._
 import cats.effect.{ Concurrent, Fiber, Resource, Timer }
 import cats.implicits._
 import fs2.concurrent.Queue
-import _root_.io.aecor.liberator.ReifiedInvocations
-import _root_.io.aecor.liberator.Invocation
 import aecor.data.PairE
 import cats.effect.concurrent.{ Deferred, Ref }
+import cats.tagless.FunctorK
 import cats.{ Applicative, ~> }
-
+import cats.tagless.syntax.functorK._
 import scala.concurrent.duration.FiniteDuration
 
 private[queue] trait Actor[F[_], A] { outer =>
@@ -46,7 +45,7 @@ private[queue] object Actor {
     init: Context[F, A] => Resource[F, A => F[Unit]]
   )(implicit F: Concurrent[F]): F[Actor[F, A]] =
     for {
-      mailbox <- Queue.unbounded[F, Option[A]]
+      mailbox <- Queue.noneTerminated[F, A]
 
       actorContext = new Context[F, A] {
         override def send(a: A): F[Unit] =
@@ -60,7 +59,7 @@ private[queue] object Actor {
         def run: F[Unit] =
           init(actorContext)
             .use { handle =>
-              mailbox.dequeue.unNoneTerminate.evalMap(handle).compile.drain
+              mailbox.dequeue.evalMap(handle).compile.drain
             }
             .handleErrorWith(_ => run)
         run.start
@@ -83,29 +82,25 @@ private[queue] object Actor {
   def void[F[_]: Concurrent, A]: F[Actor[F, A]] =
     resource[F, A](_ => Resource.pure(Receive.void[F, A]))
 
-  def wrap[F[_], M[_[_]]](load: M[F] => F[M[F]])(implicit F: Concurrent[F],
-                                                 M: ReifiedInvocations[M]): F[M[F]] =
+  def wrap[F[_]: Concurrent, M[_[_]]: FunctorK](load: F[M[F]]): F[M[F]] =
     for {
-      self <- Deferred[F, M[F]]
-      actor <- Actor.create[F, PairE[Invocation[M, ?], Deferred[F, ?]]] { _ =>
-                self.get.flatMap(load).map { mf =>
-                  Receive[PairE[Invocation[M, ?], Deferred[F, ?]]] { pair =>
-                    pair.first.invoke(mf).flatMap(pair.second.complete)
-                  }
-                }
+      actor <- Actor.create[F, PairE[F, Deferred[F, ?]]] { _ =>
+                Receive[PairE[F, Deferred[F, ?]]] { pair =>
+                  pair.first.flatMap(pair.second.complete)
+                }.pure[F]
               }
-      out = M.mapInvocations {
-        new (Invocation[M, ?] ~> F) {
-          override def apply[A](invocation: Invocation[M, A]): F[A] =
+      mf <- load
+    } yield
+      mf.mapK {
+        new (F ~> F) {
+          override def apply[A](fa: F[A]): F[A] =
             for {
               deferred <- Deferred[F, A]
-              _ <- actor.send(PairE(invocation, deferred))
+              _ <- actor.send(PairE(fa, deferred))
               out <- deferred.get
             } yield out
         }
       }
-      _ <- self.complete(out)
-    } yield out
 
   def withIdleTimeout[F[_]: Concurrent, A](
     duration: FiniteDuration,

@@ -5,12 +5,12 @@ import aecor.macros.boopickleWireProtocol
 import cats.{ Applicative, Functor, Id, ~> }
 import cats.implicits._
 import org.scalatest.{ FunSuite, Matchers }
-import io.aecor.liberator.syntax._
 import java.util.UUID
 
 import BoopickleWireProtocolTest._
 import boopickle.Default._
-import io.aecor.liberator.FunctorK
+import cats.tagless.FunctorK
+import cats.tagless.syntax.functorK._
 import scodec.{ Attempt, Decoder }
 import scodec.bits.BitVector
 

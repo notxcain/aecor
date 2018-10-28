@@ -4,33 +4,29 @@ import aecor.data.Folded.syntax._
 import aecor.data._
 import aecor.example.account.AccountEvent._
 import aecor.example.account.EventsourcedAlgebra.AccountState
-import Rejection._
+import aecor.example.account.Rejection._
 import aecor.example.common.Amount
 import cats.Monad
-import cats.data.EitherT
 import cats.implicits._
 
-final class EventsourcedAlgebra[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]) extends Algebra[F] {
+final class EventsourcedAlgebra[F[_]](
+  implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]
+) extends Algebra[F] {
 
   import F._
 
-  override def open(
-    checkBalance: Boolean
-  ): F[Unit] =
+  override def open(checkBalance: Boolean): F[Unit] =
     read.flatMap {
       case None =>
         append(AccountOpened(checkBalance))
       case Some(_) =>
-        reject(AccountExists)
+        ().pure[F]
     }
 
-  override def credit(
-    transactionId: AccountTransactionId,
-    amount: Amount
-  ): F[Unit] =
+  override def credit(transactionId: AccountTransactionId, amount: Amount): F[Unit] =
     read.flatMap {
       case Some(account) =>
-        if (account.processedTransactions.contains(transactionId)) {
+        if (account.hasProcessedTransaction(transactionId)) {
           ().pure[F]
         } else {
           append(AccountCredited(transactionId, amount))
@@ -39,13 +35,10 @@ final class EventsourcedAlgebra[F[_]](implicit F: MonadActionReject[F, Option[Ac
         reject(AccountDoesNotExist)
     }
 
-  override def debit(
-    transactionId: AccountTransactionId,
-    amount: Amount
-  ): F[Unit] =
+  override def debit(transactionId: AccountTransactionId, amount: Amount): F[Unit] =
     read.flatMap {
       case Some(account) =>
-        if (account.processedTransactions.contains(transactionId)) {
+        if (account.hasProcessedTransaction(transactionId)) {
           ().pure[F]
         } else {
           if (account.hasFunds(amount)) {
@@ -61,16 +54,15 @@ final class EventsourcedAlgebra[F[_]](implicit F: MonadActionReject[F, Option[Ac
 
 object EventsourcedAlgebra {
 
-  def apply[F[_]](implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]): Algebra[F] = new EventsourcedAlgebra
+  def apply[F[_]](
+    implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]
+  ): Algebra[F] = new EventsourcedAlgebra
 
-  def actions[F[_]: Monad]: EitherK[Algebra, ActionT[F, Option[AccountState], AccountEvent, ?], Rejection] =
-    EitherK(
-      EventsourcedAlgebra[EitherT[ActionT[F, Option[AccountState], AccountEvent, ?], Rejection, ?]])
-
-  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], Rejection], F, Option[AccountState], AccountEvent] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], Rejection], F, Option[
+    AccountState
+  ], AccountEvent] =
     EventsourcedBehavior
-      .optional[EitherK[Algebra, ?[_], Rejection], F, AccountState, AccountEvent](
-        actions[F], AccountState.fromEvent, _.applyEvent(_))
+      .singularRejectable(EventsourcedAlgebra.apply, AccountState.fromEvent, _.applyEvent(_))
 
   val tagging: Tagging[AccountId] = Tagging.const[AccountId](EventTag("Account"))
 
@@ -78,6 +70,8 @@ object EventsourcedAlgebra {
   final case class AccountState(balance: Amount,
                                 processedTransactions: Set[AccountTransactionId],
                                 checkBalance: Boolean) {
+    def hasProcessedTransaction(transactionId: AccountTransactionId): Boolean =
+      processedTransactions.contains(transactionId)
     def hasFunds(amount: Amount): Boolean =
       !checkBalance || balance >= amount
     def applyEvent(event: AccountEvent): Folded[AccountState] = event match {

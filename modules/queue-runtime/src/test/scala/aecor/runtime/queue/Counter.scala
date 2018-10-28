@@ -5,8 +5,10 @@ import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import boopickle.Default._
+import cats.tagless.autoFunctorK
 
 @boopickleWireProtocol
+@autoFunctorK
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
