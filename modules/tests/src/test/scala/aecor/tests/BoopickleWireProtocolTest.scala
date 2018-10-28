@@ -9,7 +9,7 @@ import java.util.UUID
 
 import BoopickleWireProtocolTest._
 import boopickle.Default._
-import cats.tagless.FunctorK
+import cats.tagless.{ FunctorK, autoFunctorK }
 import cats.tagless.syntax.functorK._
 import scodec.{ Attempt, Decoder }
 import scodec.bits.BitVector
@@ -21,6 +21,7 @@ object BoopickleWireProtocolTest {
 class BoopickleWireProtocolTest extends FunSuite with Matchers {
 
   @boopickleWireProtocol
+  @autoFunctorK
   trait Foo[F[_]] {
     def include(i: Int): F[Unit]
     def scdsc(s: String): F[Int]

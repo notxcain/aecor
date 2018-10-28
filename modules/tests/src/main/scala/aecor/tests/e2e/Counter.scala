@@ -3,15 +3,17 @@ package aecor.tests.e2e
 import aecor.data._
 import aecor.data.Folded.syntax._
 import aecor.macros.boopickleWireProtocol
-import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
+import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
-import aecor.tests.e2e.CounterEvent.{CounterDecremented, CounterIncremented}
+import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import io.circe.generic.auto._
 import cats.implicits._
 import boopickle.Default._
-import cats.{Eq, Monad}
+import cats.tagless.autoFunctorK
+import cats.{ Eq, Monad }
 
 @boopickleWireProtocol
+@autoFunctorK
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
@@ -43,10 +45,15 @@ case class CounterState(value: Long) {
 
 object CounterBehavior {
   def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent] =
-    EventsourcedBehavior(CounterActions[ActionT[F, CounterState, CounterEvent, ?]], CounterState(0), _.applyEvent(_))
+    EventsourcedBehavior(
+      CounterActions[ActionT[F, CounterState, CounterEvent, ?]],
+      CounterState(0),
+      _.applyEvent(_)
+    )
 }
 
-final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]) extends Counter[F] {
+final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent])
+    extends Counter[F] {
 
   import F._
 
@@ -59,5 +66,6 @@ final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, Co
 }
 
 object CounterActions {
-  def apply[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]): Counter[F] = new CounterActions[F]
+  def apply[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]): Counter[F] =
+    new CounterActions[F]
 }

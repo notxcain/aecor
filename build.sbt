@@ -192,7 +192,6 @@ lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
   resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
   libraryDependencies ++= Seq(
     "co.fs2" %% "fs2-core" % fs2Version,
-    ("org.apache.helix" % "helix-core" % "0.8.2") exclude("org.slf4j", "slf4j-log4j12"),
     "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
     "com.spinoco" %% "fs2-kafka" % "0.4.0-M2",
     "com.typesafe.akka" %% "akka-stream-kafka" % "0.22",

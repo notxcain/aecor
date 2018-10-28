@@ -1,18 +1,19 @@
 package aecor.testkit
 
 import aecor.data.{ EventsourcedBehavior, _ }
-import aecor.encoding.WireProtocol.Invocation
+import aecor.encoding.WireProtocol
+import aecor.encoding.WireProtocol.{ Encoded, Invocation }
 import aecor.runtime.Eventsourced._
 import aecor.runtime.{ EventJournal, Eventsourced }
 import cats.data.{ EitherT, StateT }
-import cats.effect.concurrent.{ MVar }
-import cats.effect.{ Concurrent, IO, Sync }
+import cats.effect.{ IO, Sync }
 import cats.implicits._
 import cats.mtl.MonadState
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
-import cats.{ Monad, ~> }
+import cats.{ Monad, MonadError, ~> }
 import monocle.Lens
+import aecor.encoding.syntax._
 
 import scala.collection.immutable._
 
@@ -33,29 +34,23 @@ object E2eSupport {
   }
 
   final class Runtime[F[_]] {
-    def deploy[K, M[_[_]]: ReifiedInvocations: FunctorK](
+    def deploy[K, M[_[_]]: FunctorK](
       load: K => F[M[F]]
-    )(implicit F: Concurrent[F]): F[K => M[F]] =
-      MVar[F](F).of(Map.empty[K, M[F]]).map { instancesVar: MVar[F, Map[K, M[F]]] =>
-        { key: K =>
-          ReifiedInvocations[M].invocations.mapK {
-            new (Invocation[M, ?] ~> F) {
-              final override def apply[A](invocation: Invocation[M, A]): F[A] =
-                for {
-                  instances <- instancesVar.take
-                  mf <- instances.get(key) match {
-                         case Some(mf) => instancesVar.put(instances) >> mf.pure[F]
-                         case None =>
-                           load(key).flatMap { mf =>
-                             instancesVar.put(instances.updated(key, mf)).as(mf)
-                           }
-                       }
-                  a <- invocation.invoke(mf)
-                } yield a
-            }
-          }
+    )(implicit F: MonadError[F, Throwable], M: WireProtocol[M]): K => M[F] = { key: K =>
+      M.encoder.mapK {
+        new (Encoded ~> F) {
+          final override def apply[A](encoded: Encoded[A]): F[A] =
+            for {
+              mf <- load(key)
+              pair <- M.decoder.decodeValue(encoded._1).lift[F]
+              a <- pair.first
+                    .invoke(mf)
+                    .flatMap(ea => pair.second.encode(ea).lift[F])
+                    .flatMap(b => encoded._2.decodeValue(b).lift[F])
+            } yield a
         }
       }
+    }
   }
 
   abstract class Processes[F[_]](items: Vector[F[Unit]]) {
