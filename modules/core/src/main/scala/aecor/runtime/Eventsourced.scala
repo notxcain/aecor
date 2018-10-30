@@ -46,14 +46,16 @@ object Eventsourced {
     final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
   }
 
-  trait FailureHandler[F[_]] {
-    def fail[A](e: BehaviorFailure): F[A]
+  trait RaiseError[F[_]] {
+    def raiseError[A](e: BehaviorFailure): F[A]
   }
 
-  object FailureHandler {
-    implicit def monadErrorFailure[F[_]](implicit F: MonadError[F, Throwable]): FailureHandler[F] =
-      new FailureHandler[F] {
-        override def fail[A](e: BehaviorFailure): F[A] = F.raiseError(e)
+  object RaiseError {
+    implicit def monadErrorThrowableRaiseError[F[_]](
+      implicit F: MonadError[F, Throwable]
+    ): RaiseError[F] =
+      new RaiseError[F] {
+        override def raiseError[A](e: BehaviorFailure): F[A] = F.raiseError(e)
       }
   }
 
@@ -61,7 +63,7 @@ object Eventsourced {
     entityBehavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
     snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
-  )(implicit F: FailureHandler[F]): K => F[M[F]] = { key =>
+  )(implicit F: RaiseError[F]): K => F[M[F]] = { key =>
     val effectiveActions =
       entityBehavior.actions.mapK(
         ActionT.xmapState[F, S, InternalState[S], E](
@@ -99,7 +101,7 @@ object Eventsourced {
                 .flatMap {
                   case Next(x) => x.pure[F]
                   case Impossible =>
-                    F.fail[InternalState[S]](
+                    F.raiseError[InternalState[S]](
                       BehaviorFailure
                         .illegalFold(key.toString)
                     )
@@ -125,7 +127,7 @@ object Eventsourced {
           }
           (appendEvents, snapshotIfNeeded).mapN((_, _) => nextState)
         case Impossible =>
-          F.fail[InternalState[S]](
+          F.raiseError[InternalState[S]](
             BehaviorFailure
               .illegalFold(key.toString)
           )
@@ -150,7 +152,7 @@ object Eventsourced {
                         .traverse_(updateState(current, _).flatMap(ref.set))
                         .as(a)
                     case Impossible =>
-                      F.fail[A](BehaviorFailure.illegalFold(key.toString))
+                      F.raiseError[A](BehaviorFailure.illegalFold(key.toString))
                   }
           } yield out
       })
