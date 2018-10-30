@@ -2,6 +2,7 @@ package aecor.runtime
 
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.data._
+import cats.arrow.FunctionK
 import cats.data.{ EitherT, NonEmptyChain }
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
@@ -11,6 +12,108 @@ import cats.tagless.syntax.functorK._
 import cats.{ MonadError, ~> }
 
 object Eventsourced {
+
+  type ActionRunner[F[_], S, E] = FunctionK[ActionT[F, S, E, ?], F]
+
+  final class DefaultActionRunner[F[_], K, S, E](
+    key: K,
+    initial: S,
+    update: (S, E) => Folded[S],
+    journal: EventJournal[F, K, E],
+    snapshotting: Option[Snapshotting[F, K, S]],
+    ref: Ref[F, Option[InternalState[S]]]
+  )(implicit F: MonadError[F, Throwable])
+      extends ActionRunner[F, S, E] {
+
+    private val effectiveUpdate = (s: InternalState[S], e: E) =>
+      update(s.entityState, e)
+        .map(InternalState(_, s.version + 1))
+
+    private val needsSnapshot: Long => Boolean = snapshotting match {
+      case Some(Snapshotting(x, _)) =>
+        version =>
+          version % x == 0
+      case None =>
+        Function.const(false)
+    }
+
+    private val snapshotStore =
+      snapshotting.map(_.store).getOrElse(NoopKeyValueStore[F, K, InternalState[S]])
+
+    override def apply[A](action: ActionT[F, S, E, A]): F[A] =
+      getInternal.flatMap(runCurrent(_, action))
+
+    private def getInternal: F[InternalState[S]] =
+      ref.get.flatMap {
+        case Some(s) => s.pure[F]
+        case None    => loadState.flatTap(s => ref.set(s.some))
+      }
+
+    private def loadState: F[InternalState[S]] =
+      for {
+        effectiveInitial <- snapshotStore.getValue(key).map(_.getOrElse(InternalState(initial, 0)))
+        out <- journal
+                .foldById(key, effectiveInitial.version + 1, effectiveInitial)(effectiveUpdate)
+                .flatMap {
+                  case Next(x) => x.pure[F]
+                  case Impossible =>
+                    F.raiseError[InternalState[S]](
+                      BehaviorFailure
+                        .illegalFold(key.toString)
+                    )
+                }
+      } yield out
+
+    private def runCurrent[A](current: InternalState[S], action: ActionT[F, S, E, A]): F[A] = {
+      def appendEvents(es: NonEmptyChain[E]) =
+        journal.append(key, current.version + 1, es)
+
+      def snapshotIfNeeded(next: InternalState[S]) =
+        if ((current.version to next.version).exists(needsSnapshot))
+          snapshotStore.setValue(key, next)
+        else
+          ().pure[F]
+
+      for {
+        result <- action
+                   .xmapState[InternalState[S]](_.withEntityState(_))(_.entityState)
+                   .product(ActionT.read)
+                   .run(current, effectiveUpdate)
+        out <- result match {
+                case Next((events, (a, next))) =>
+                  NonEmptyChain.fromChain(events) match {
+                    case Some(es) =>
+                      for {
+                        _ <- appendEvents(es)
+                        _ <- snapshotIfNeeded(next)
+                        _ <- setInternal(next)
+                      } yield a
+                    case None =>
+                      a.pure[F]
+                  }
+                case Impossible =>
+                  F.raiseError[A](BehaviorFailure.illegalFold(key.toString))
+              }
+      } yield out
+    }
+
+    private def setInternal(s: InternalState[S]): F[Unit] =
+      ref.set(s.some)
+  }
+
+  object DefaultActionRunner {
+    def create[F[_]: Sync, K, S, E](
+      key: K,
+      initial: S,
+      update: (S, E) => Folded[S],
+      journal: EventJournal[F, K, E],
+      snapshotting: Option[Snapshotting[F, K, S]]
+    ): F[ActionRunner[F, S, E]] =
+      Ref[F]
+        .of(none[InternalState[S]])
+        .map(ref => new DefaultActionRunner(key, initial, update, journal, snapshotting, ref))
+  }
+
   sealed abstract class Entity[K, M[_[_]], F[_], R] {
     def apply(k: K): M[λ[x => F[Either[R, x]]]]
   }
@@ -32,129 +135,34 @@ object Eventsourced {
       new Entity[K, M, F, R] {
         override def apply(k: K): M[λ[x => F[Either[R, x]]]] = mfr(k).unwrap
       }
-
   }
 
   final case class Snapshotting[F[_], K, S](snapshotEach: Long,
                                             store: KeyValueStore[F, K, InternalState[S]])
-  type EntityId = String
-  final case class InternalState[S](entityState: S, version: Long)
+  type EntityKey = String
+  final case class InternalState[S](entityState: S, version: Long) {
+    def withEntityState(s: S): InternalState[S] = copy(entityState = s)
+  }
 
-  sealed abstract class BehaviorFailure extends Throwable
+  sealed abstract class BehaviorFailure extends Throwable with Product with Serializable
   object BehaviorFailure {
-    def illegalFold(entityId: EntityId): BehaviorFailure = IllegalFold(entityId)
-    final case class IllegalFold(entityId: EntityId) extends BehaviorFailure
-  }
-
-  trait RaiseError[F[_]] {
-    def raiseError[A](e: BehaviorFailure): F[A]
-  }
-
-  object RaiseError {
-    implicit def monadErrorThrowableRaiseError[F[_]](
-      implicit F: MonadError[F, Throwable]
-    ): RaiseError[F] =
-      new RaiseError[F] {
-        override def raiseError[A](e: BehaviorFailure): F[A] = F.raiseError(e)
-      }
+    def illegalFold(entityId: EntityKey): BehaviorFailure = IllegalFold(entityId)
+    final case class IllegalFold(entityKey: EntityKey) extends BehaviorFailure
   }
 
   def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     entityBehavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
     snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
-  )(implicit F: RaiseError[F]): K => F[M[F]] = { key =>
-    val effectiveActions =
-      entityBehavior.actions.mapK(
-        ActionT.xmapState[F, S, InternalState[S], E](
-          (is: InternalState[S], s: S) => is.copy(entityState = s)
-        )(_.entityState)
-      )
-
-    val initialState = InternalState(entityBehavior.initial, 0)
-
-    val effectiveUpdate = (s: InternalState[S], e: E) =>
-      entityBehavior
-        .update(s.entityState, e)
-        .map(InternalState(_, s.version + 1))
-
-    val needsSnapshot: Long => Boolean = snapshotting match {
-      case Some(Snapshotting(x, _)) =>
-        version =>
-          version % x == 0
-      case None =>
-        _ =>
-          false
-    }
-
-    val snapshotStore =
-      snapshotting.map(_.store).getOrElse(NoopKeyValueStore[F, K, InternalState[S]])
-
-    def loadState: F[InternalState[S]] =
-      for {
-        snapshot <- snapshotStore.getValue(key)
-        effectiveInitialState = snapshot.getOrElse(initialState)
-        out <- journal
-                .foldById(key, effectiveInitialState.version + 1, effectiveInitialState)(
-                  effectiveUpdate
-                )
-                .flatMap {
-                  case Next(x) => x.pure[F]
-                  case Impossible =>
-                    F.raiseError[InternalState[S]](
-                      BehaviorFailure
-                        .illegalFold(key.toString)
-                    )
-                }
-      } yield out
-
-    def updateState(state: InternalState[S], events: NonEmptyChain[E]) = {
-      val folded: Folded[(Boolean, InternalState[S])] =
-        events.foldM((false, state)) {
-          case ((snapshotPending, s), e) =>
-            effectiveUpdate(s, e).map { next =>
-              (snapshotPending || needsSnapshot(next.version), next)
-            }
-        }
-      folded match {
-        case Next((snapshotNeeded, nextState)) =>
-          val appendEvents = journal
-            .append(key, state.version + 1, events)
-          val snapshotIfNeeded = if (snapshotNeeded) {
-            snapshotStore.setValue(key, nextState)
-          } else {
-            ().pure[F]
-          }
-          (appendEvents, snapshotIfNeeded).mapN((_, _) => nextState)
-        case Impossible =>
-          F.raiseError[InternalState[S]](
-            BehaviorFailure
-              .illegalFold(key.toString)
-          )
-      }
-    }
-
+  ): K => F[M[F]] = { key =>
     for {
-      initialState <- loadState
-      ref <- Ref[F].of(initialState)
-    } yield
-      effectiveActions.mapK(new (ActionT[F, InternalState[S], E, ?] ~> F) {
-        override def apply[A](action: ActionT[F, InternalState[S], E, A]): F[A] =
-          for {
-            current <- ref.get
-            result <- action
-                       .flatMap(a => ActionT.read[F, InternalState[S], E].map(s => (s, a)))
-                       .run(current, effectiveUpdate)
-            out <- result match {
-                    case Next((es, (next, a))) =>
-                      NonEmptyChain
-                        .fromChain(es)
-                        .traverse_(updateState(current, _).flatMap(ref.set))
-                        .as(a)
-                    case Impossible =>
-                      F.raiseError[A](BehaviorFailure.illegalFold(key.toString))
-                  }
-          } yield out
-      })
+      actionRunner <- DefaultActionRunner.create(
+                       key,
+                       entityBehavior.initial,
+                       entityBehavior.update,
+                       journal,
+                       snapshotting
+                     )
+    } yield entityBehavior.actions.mapK(actionRunner)
   }
 }

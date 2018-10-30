@@ -49,13 +49,15 @@ final class ActionT[F[_], S, E, A] private (
     ActionT { (s2, u2, es) =>
       unsafeRun(extract(s2), (s, e) => u2(update(s2, s), e).map(extract), es)
     }
+
+  def product[B](that: ActionT[F, S, E, B])(implicit F: Monad[F]): ActionT[F, S, E, (A, B)] =
+    flatMap(a => that.map(b => (a, b)))
 }
 
 object ActionT extends ActionTFunctions with ActionTInstances {
   private[data] def apply[F[_], S, E, A](
     unsafeRun: (S, (S, E) => Folded[S], Chain[E]) => F[Folded[(Chain[E], A)]]
   ): ActionT[F, S, E, A] = new ActionT(unsafeRun)
-
 }
 
 trait ActionTFunctions {

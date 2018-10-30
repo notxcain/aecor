@@ -54,6 +54,7 @@ object EitherK {
       final override val decoder: Decoder[PairE[Invocation[EitherK[M, ?[_], A], ?], Encoder]] =
         M.decoder.map { p =>
           val (invocation, encoder) = (p.first, p.second)
+
           val eitherKInvocation =
             new Invocation[EitherK[M, ?[_], A], Either[A, p.A]] {
               override def run[G[_]](target: EitherK[M, G, A]): G[Either[A, p.A]] =
