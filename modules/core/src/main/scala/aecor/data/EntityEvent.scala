@@ -7,9 +7,8 @@ final case class EntityEvent[K, A](entityKey: K, sequenceNr: Long, payload: A) {
 }
 
 object EntityEvent {
-  implicit def aecorHasInstanceForKey[X, K, A](implicit I: Has[K, X]): Has[EntityEvent[K, A], X] =
-    Has.instance[EntityEvent[K, A]](x => I.get(x.entityKey))
-  implicit def aecorHasInstanceForValue[X, I, A](implicit A: Has[A, X]): Has[EntityEvent[I, A], X] =
-    Has.instance[EntityEvent[I, A]](x => A.get(x.payload))
+  implicit def aecorHasInstanceForKey[X, K, A](implicit K: Has[K, X]): Has[EntityEvent[K, A], X] =
+    Has.instance[EntityEvent[K, A]](x => K.get(x.entityKey))
+  implicit def aecorHasInstanceForValue[X, K, A](implicit A: Has[A, X]): Has[EntityEvent[K, A], X] =
+    Has.instance[EntityEvent[K, A]](x => A.get(x.payload))
 }
-

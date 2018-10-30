@@ -13,7 +13,7 @@ import cats.tagless.syntax.functorK._
 /**
   * Higher-kinded transformer for EitherT
   */
-final case class EitherK[M[_[_]], F[_], A](value: M[EitherT[F, A, ?]]) {
+final case class EitherK[M[_[_]], F[_], A](value: M[EitherT[F, A, ?]]) extends AnyVal {
   def run[B](f: M[EitherT[F, A, ?]] => EitherT[F, A, B]): F[Either[A, B]] =
     f(value).value
   def unwrap(implicit M: FunctorK[M]): M[λ[B => F[Either[A, B]]]] =
