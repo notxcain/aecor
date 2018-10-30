@@ -44,7 +44,7 @@ object E2eSupport {
               mf <- load(key)
               pair <- M.decoder.decodeValue(encoded._1).lift[F]
               a <- pair.first
-                    .invoke(mf)
+                    .run(mf)
                     .flatMap(ea => pair.second.encode(ea).lift[F])
                     .flatMap(b => encoded._2.decodeValue(b).lift[F])
             } yield a

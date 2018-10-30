@@ -94,7 +94,7 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
                            resultEncoder: Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
     invocation
-      .invoke(actions)
+      .run(actions)
       .toIO
       .flatMap(a => resultEncoder.encode(a).lift[IO])
       .map { responseBytes =>

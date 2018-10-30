@@ -56,8 +56,8 @@ object EitherK {
           val (invocation, encoder) = (p.first, p.second)
           val eitherKInvocation =
             new Invocation[EitherK[M, ?[_], A], Either[A, p.A]] {
-              override def invoke[G[_]](target: EitherK[M, G, A]): G[Either[A, p.A]] =
-                invocation.invoke(target.value).value
+              override def run[G[_]](target: EitherK[M, G, A]): G[Either[A, p.A]] =
+                invocation.run(target.value).value
               override def toString: String = invocation.toString
             }
 
@@ -84,8 +84,8 @@ object EitherK {
     inner: Invocation[M, A]
   ): Invocation[EitherK[M, ?[_], R], Either[R, A]] =
     new Invocation[EitherK[M, ?[_], R], Either[R, A]] {
-      override def invoke[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
-        inner.invoke(target.value).value
+      override def run[G[_]](target: EitherK[M, G, R]): G[Either[R, A]] =
+        inner.run(target.value).value
       override def toString: String = inner.toString
     }
   object syntax {

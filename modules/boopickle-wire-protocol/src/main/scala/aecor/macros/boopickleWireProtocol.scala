@@ -91,7 +91,7 @@ object BoopickleWireProtocolMacro {
             p"""case $nameLit =>
                   val args = state.unpickle[$tupleTpeBase[..${params.map { case param"$n:${Some(tpe)}" => toType(tpe) }}]]
                   val invocation = new aecor.encoding.WireProtocol.Invocation[$unifiedBase, $out] {
-                    final override def invoke[F[_]](mf: $unifiedBase[F]): F[$out] =
+                    final override def run[F[_]](mf: $unifiedBase[F]): F[$out] =
                       mf.$name(..$arglist)
                     final override def toString: String = {
                       val name = $nameLit
@@ -104,7 +104,7 @@ object BoopickleWireProtocolMacro {
             val nameLit =  Lit.String(name.value)
             p"""case $nameLit =>
                   val invocation = new aecor.encoding.WireProtocol.Invocation[$unifiedBase, $out] {
-                    final override def invoke[F[_]](mf: $unifiedBase[F]): F[$out] = mf.$name
+                    final override def run[F[_]](mf: $unifiedBase[F]): F[$out] = mf.$name
                     final override def toString: String = $nameLit
                   }
                   aecor.data.PairE(invocation, _root_.aecor.macros.boopickle.BoopickleCodec.encoder[$out])

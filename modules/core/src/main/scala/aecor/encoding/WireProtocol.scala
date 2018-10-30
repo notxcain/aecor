@@ -14,6 +14,6 @@ object WireProtocol {
   def apply[M[_[_]]](implicit M: WireProtocol[M]): WireProtocol[M] = M
   type Encoded[A] = (BitVector, Decoder[A])
   trait Invocation[M[_[_]], A] {
-    def invoke[F[_]](mf: M[F]): F[A]
+    def run[F[_]](mf: M[F]): F[A]
   }
 }

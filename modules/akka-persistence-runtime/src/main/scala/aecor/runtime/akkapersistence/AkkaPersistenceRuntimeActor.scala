@@ -188,7 +188,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
   def performInvocation[A](invocation: Invocation[M, A], resultEncoder: Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
     invocation
-      .invoke(actions)
+      .run(actions)
       .run(state, updateState)
       .flatMap {
         case Next((events, result)) =>

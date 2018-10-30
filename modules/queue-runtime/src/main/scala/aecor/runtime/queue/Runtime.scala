@@ -52,7 +52,7 @@ class Runtime[F[_]] private[queue] (
                       case (commandId, replyTo, pair) =>
                         val (inv, enc) = (pair.first, pair.second)
                         inv
-                          .invoke(mf)
+                          .run(mf)
                           .map(enc.encode)
                           .flatMap(_.lift[F])
                           .flatMap { bytes =>

@@ -34,7 +34,7 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
     M.decoder
       .decodeValue(in) match {
       case Attempt.Successful(p) =>
-        val r: F[p.A] = p.first.invoke(actions)
+        val r: F[p.A] = p.first.run(actions)
         r.map(a => p.second.encode(a))
       case Attempt.Failure(cause) =>
         Attempt.failure[BitVector](cause).pure[F]
