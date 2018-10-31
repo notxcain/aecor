@@ -1,35 +1,29 @@
 package aecor.example
 
-import java.time.{Clock, LocalDate}
+import java.time.{ Clock, LocalDate }
 import java.util.UUID
 
 import aecor.data.ConsumerId
-import aecor.distributedprocessing.{AkkaStreamProcess, DistributedProcessing}
+import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
-import aecor.schedule.{CassandraScheduleEntryRepository, Schedule}
+import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.util.JavaTimeClock
 import aecor.util.effect._
 import akka.actor.ActorSystem
+import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
-import akka.persistence.cassandra.{CassandraSessionInitSerialization, DefaultJournalCassandraSession}
 import akka.stream.ActorMaterializer
-import akka.stream.scaladsl.{Sink, Source}
+import akka.stream.scaladsl.{ Sink, Source }
 import cats.effect._
 import cats.implicits._
 
 import scala.concurrent.duration._
 
-
 object ScheduleApp extends IOApp {
 
-
-
-  override def run(
-    args: List[String]
-  ): IO[ExitCode] = IO.suspend {
+  override def run(args: List[String]): IO[ExitCode] = IO.suspend {
     implicit val system = ActorSystem("test")
     implicit val materializer = ActorMaterializer()
-
 
     def clock[F[_]: Sync] = JavaTimeClock[F](Clock.systemUTC())
 
@@ -39,10 +33,8 @@ object ScheduleApp extends IOApp {
     def createCassandraSession[F[_]: Effect] = DefaultJournalCassandraSession[F](
       system,
       "App",
-      CassandraSessionInitSerialization.serialize(
-        CassandraOffsetStore[F].createTable(offsetStoreConfig),
+      CassandraOffsetStore[F].createTable(offsetStoreConfig) >>
         CassandraScheduleEntryRepository.init[F](scheduleEntryRepositoryQueries)
-      )
     )
 
     def runSchedule[F[_]: Effect](cassandraSession: CassandraSession) =
@@ -62,12 +54,8 @@ object ScheduleApp extends IOApp {
           .mapAsync(1) { _ =>
             clock[F].localDateTime
               .flatMap { now =>
-                schedule.addScheduleEntry(
-                  "Test",
-                  UUID.randomUUID().toString,
-                  "test",
-                  now.plusSeconds(20)
-                )
+                schedule
+                  .addScheduleEntry("Test", UUID.randomUUID().toString, "test", now.plusSeconds(20))
               }
               .unsafeToFuture()
 
@@ -115,6 +103,5 @@ object ScheduleApp extends IOApp {
       }
     } yield ExitCode.Success
   }
-
 
 }

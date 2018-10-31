@@ -3,6 +3,7 @@ package akka.persistence.cassandra
 import akka.Done
 import akka.actor.{ ActorSystem, ExtendedActorSystem }
 import akka.event.Logging
+import akka.persistence.cassandra.Session.Init
 import akka.persistence.cassandra.session.CassandraSessionSettings
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.effect.Effect
@@ -14,7 +15,7 @@ object DefaultJournalCassandraSession {
     * Creates CassandraSession using settings of default cassandra journal.
     *
     */
-  def apply[F[_]](system: ActorSystem, metricsCategory: String, init: Session[F] => F[Unit])(
+  def apply[F[_]](system: ActorSystem, metricsCategory: String, init: Init[F])(
     implicit F: Effect[F]
   ): F[CassandraSession] = F.delay {
     val log = Logging(system, classOf[CassandraSession])

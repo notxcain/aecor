@@ -5,9 +5,10 @@ import java.util.UUID
 import aecor.data.TagConsumer
 import aecor.runtime.KeyValueStore
 import aecor.util.effect._
-import akka.persistence.cassandra._
+import akka.persistence.cassandra.Session.Init
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.Functor
+import cats.data.Kleisli
 import cats.effect.Effect
 import cats.implicits._
 
@@ -28,10 +29,12 @@ object CassandraOffsetStore {
   private val builderInstance = new Builder[Any]()
 
   final class Builder[F[_]] private[CassandraOffsetStore] () {
-    def createTable(config: Queries)(implicit F: Functor[F]): Session[F] => F[Unit] = _.execute(config.createTableQuery).void
+    def createTable(config: Queries)(implicit F: Functor[F]): Init[F] =
+      Kleisli(_.execute(config.createTableQuery).void)
 
-    def apply(session: CassandraSession,
-                            config: CassandraOffsetStore.Queries)(implicit F: Effect[F]): CassandraOffsetStore[F] =
+    def apply(session: CassandraSession, config: CassandraOffsetStore.Queries)(
+      implicit F: Effect[F]
+    ): CassandraOffsetStore[F] =
       new CassandraOffsetStore(session, config)
   }
 
@@ -75,8 +78,8 @@ class CassandraOffsetStore[F[_]] private[akkapersistence] (
       .map(_.map(_.getUUID("offset")))
   override def deleteValue(key: TagConsumer): F[Unit] =
     F.fromFuture {
-      deleteOffsetStatement
-    }
+        deleteOffsetStatement
+      }
       .map(_.bind(key.consumerId.value, key.tag.value))
       .flatMap(x => F.fromFuture(session.executeWrite(x)))
       .void

@@ -1,8 +1,9 @@
 package akka.persistence.cassandra
 import java.util.concurrent.Executor
 
+import cats.data.Kleisli
 import cats.effect.Async
-import com.datastax.driver.core.{ResultSet, TypeCodec, Session => DatastaxSession}
+import com.datastax.driver.core.{ ResultSet, TypeCodec, Session => DatastaxSession }
 
 import scala.util.control.NonFatal
 
@@ -12,6 +13,7 @@ trait Session[F[_]] {
 }
 
 object Session {
+  type Init[F[_]] = Kleisli[F, Session[F], Unit]
   private val immediateExecutor = new Executor {
     override def execute(command: Runnable): Unit =
       command.run()
