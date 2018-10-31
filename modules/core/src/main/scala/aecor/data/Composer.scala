@@ -4,7 +4,7 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 object Composer {
-  class WithSeparator(separator: Char) {
+  final class WithSeparator(separator: Char) {
     private val escapeChar = '\\'
 
     def apply(firstComponent: String, secondComponent: String, otherComponents: String*): String =
@@ -53,13 +53,12 @@ object Composer {
     def apply(separator: Char): WithSeparator = new WithSeparator(separator)
   }
 
-  class WithLengthHint(lengthSeparator: Char) {
-    private val lengthSeparatorString = s"$lengthSeparator"
+  final class WithLengthHint(lengthSeparator: Char) {
+    private val lengthSeparatorString = String.valueOf(lengthSeparator)
 
     def apply(firstComponent: String, secondComponent: String, otherComponents: String*): String =
       apply(firstComponent :: secondComponent :: otherComponents.toList)
 
-    // thrpt   10  7787.881 ± 849.125  ops/ms
     def apply(components: List[String]): String = {
       val builder = new java.lang.StringBuilder
       components.foreach { x =>

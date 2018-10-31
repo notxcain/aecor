@@ -9,6 +9,7 @@ sealed class NoopKeyValueStore[F[_]: Applicative, K, V] extends KeyValueStore[F,
 
   override def getValue(key: K): F[Option[V]] =
     none[V].pure[F]
+  override def deleteValue(key: K): F[Unit] = ().pure[F]
 }
 
 object NoopKeyValueStore {

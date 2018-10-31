@@ -1,44 +1,44 @@
 package aecor.runtime.akkageneric
 
-import java.nio.ByteBuffer
-
-import io.aecor.liberator.Invocation
-import aecor.data.Behavior
-import aecor.encoding.{ KeyDecoder, KeyEncoder }
-import aecor.encoding.WireProtocol
+import aecor.encoding.WireProtocol.Encoded
+import aecor.encoding.syntax._
+import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
 import aecor.runtime.akkageneric.GenericAkkaRuntime.KeyedCommand
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.CommandResult
 import aecor.runtime.akkageneric.serialization.Message
+import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
 import cats.effect.Effect
-import cats.~>
-import aecor.util.effect._
+import cats.tagless.syntax.functorK._
 import cats.implicits._
-
-import scala.concurrent.Future
+import cats.tagless.FunctorK
+import cats.~>
+import scodec.bits.BitVector
 
 object GenericAkkaRuntime {
   def apply(system: ActorSystem): GenericAkkaRuntime =
     new GenericAkkaRuntime(system)
-  private[akkageneric] final case class KeyedCommand(key: String, bytes: ByteBuffer) extends Message
+  private[akkageneric] final case class KeyedCommand(key: String, bytes: BitVector) extends Message
 }
 
 final class GenericAkkaRuntime private (system: ActorSystem) {
-  def deploy[K: KeyEncoder: KeyDecoder, M[_[_]], F[_]](
+  def runBehavior[K: KeyEncoder: KeyDecoder, M[_[_]]: FunctorK, F[_]](
     typeName: String,
-    createBehavior: K => Behavior[M, F],
+    createBehavior: K => F[M[F]],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
   )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
-      val numberOfShards = settings.numberOfShards
+      val props = GenericAkkaRuntimeActor.props[K, M, F](createBehavior, settings.idleTimeout)
 
       val extractEntityId: ShardRegion.ExtractEntityId = {
         case KeyedCommand(entityId, c) =>
           (entityId, GenericAkkaRuntimeActor.Command(c))
       }
+
+      val numberOfShards = settings.numberOfShards
 
       val extractShardId: ShardRegion.ExtractShardId = {
         case KeyedCommand(key, _) =>
@@ -46,9 +46,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
         case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
       }
 
-      val props = GenericAkkaRuntimeActor.props(createBehavior, settings.idleTimeout)
-
-      val shardRegionRef = ClusterSharding(system).start(
+      val shardRegion = ClusterSharding(system).start(
         typeName = typeName,
         entityProps = props,
         settings = settings.clusterShardingSettings,
@@ -56,24 +54,27 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
         extractShardId = extractShardId
       )
 
-      implicit val timeout = Timeout(settings.askTimeout)
-
       val keyEncoder = KeyEncoder[K]
 
       key =>
-        M.mapInvocations {
-          new (Invocation[M, ?] ~> F) {
-            override def apply[A](fa: Invocation[M, A]): F[A] = F.suspend {
-              val (bytes, decoder) = fa.invoke(M.encoder)
-              F.fromFuture {
-                  (shardRegionRef ? KeyedCommand(keyEncoder(key), bytes.asReadOnlyBuffer()))
-                    .asInstanceOf[Future[CommandResult]]
-                }
-                .flatMap { result =>
-                  F.fromEither(decoder.decode(result.bytes))
-                }
-            }
+        M.encoder.mapK(new (Encoded ~> F) {
+
+          implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
+
+          override def apply[A](fa: Encoded[A]): F[A] = F.suspend {
+            val (bytes, decoder) = fa
+            F.fromFuture {
+                shardRegion ? KeyedCommand(keyEncoder(key), bytes)
+              }
+              .flatMap {
+                case result: CommandResult =>
+                  decoder.decodeValue(result.bytes).lift[F]
+                case other =>
+                  F.raiseError(
+                    new IllegalArgumentException(s"Unexpected response [$other] from shard region")
+                  )
+              }
           }
-        }
+        })
     }
 }

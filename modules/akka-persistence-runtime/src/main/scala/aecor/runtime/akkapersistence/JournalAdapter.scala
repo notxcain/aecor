@@ -4,7 +4,6 @@ import akka.persistence.query.Offset
 import akka.persistence.query.scaladsl.{ CurrentEventsByTagQuery, EventsByTagQuery }
 
 abstract class JournalAdapter[A] {
-
   abstract class OffsetAdapter {
     def unapply(arg: Offset): Option[A]
     def apply(value: Option[A]): Offset

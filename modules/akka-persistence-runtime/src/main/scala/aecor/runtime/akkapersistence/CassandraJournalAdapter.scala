@@ -27,8 +27,9 @@ final class CassandraJournalAdapter(system: ActorSystem,
 }
 
 object CassandraJournalAdapter {
+  val DefaultWriteJournalIdentifier: String = "cassandra-journal"
   def apply(system: ActorSystem,
-            writeJournalId: String = "cassandra-journal",
+            writeJournalId: String = DefaultWriteJournalIdentifier,
             readJournalId: String = CassandraReadJournal.Identifier): CassandraJournalAdapter =
     new CassandraJournalAdapter(system, writeJournalId, readJournalId)
 }

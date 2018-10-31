@@ -3,14 +3,14 @@ package aecor.testkit
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
-import cats.data.NonEmptyVector
+import cats.data.{Chain, NonEmptyChain}
 import cats.implicits._
 import cats.mtl.MonadState
 import monocle.Lens
 
 object StateEventJournal {
-  case class State[K, E](eventsByKey: Map[K, Vector[E]],
-                         eventsByTag: Map[EventTag, Vector[EntityEvent[K, E]]],
+  final case class State[K, E](eventsByKey: Map[K, Chain[E]],
+                         eventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]],
                          consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
     def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
@@ -18,27 +18,28 @@ object StateEventJournal {
     def setConsumerOffset(tag: EventTag, consumerId: ConsumerId, offset: Int): State[K, E] =
       copy(consumerOffsets = consumerOffsets.updated(tag -> consumerId, offset))
 
-    def getEventsByTag(tag: EventTag, offset: Int): Vector[(Int, EntityEvent[K, E])] =
-      Stream
+    def getEventsByTag(tag: EventTag, offset: Int): Chain[(Int, EntityEvent[K, E])] = {
+      val stream = Stream
         .from(1)
         .zip(
           eventsByTag
-            .getOrElse(tag, Vector.empty)
+            .getOrElse(tag, Chain.empty).toList
         )
         .drop(offset - 1)
-        .toVector
+      Chain.fromSeq(stream)
+    }
 
-    def appendEvents(key: K, offset: Long, events: NonEmptyVector[TaggedEvent[E]]): State[K, E] = {
+    def appendEvents(key: K, offset: Long, events: NonEmptyChain[TaggedEvent[E]]): State[K, E] = {
       val updatedEventsById = eventsByKey
-        .updated(key, eventsByKey.getOrElse(key, Vector.empty) ++ events.map(_.event).toVector)
+        .updated(key, eventsByKey.getOrElse(key, Chain.empty) ++ events.map(_.event).toChain)
 
-      val newEventsByTag: Map[EventTag, Vector[EntityEvent[K, E]]] = events.toVector.zipWithIndex
+      val newEventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]] = events.toChain.zipWithIndex
         .flatMap {
           case (e, idx) =>
-            e.tags.toVector.map(t => t -> EntityEvent(key, idx + offset, e.event))
+            Chain.fromSeq(e.tags.toSeq).map(t => t -> EntityEvent(key, idx + offset, e.event))
         }
         .groupBy(_._1)
-        .mapValues(_.map(_._2))
+        .mapValues(_.map(_._2).toChain)
       copy(
         eventsByKey = updatedEventsById,
         eventsByTag =
@@ -65,14 +66,14 @@ final class StateEventJournal[F[_], K, S, E](lens: Lens[S, State[K, E]], tagging
   private final implicit val monad = MS.monad
   private final val F = lens.transformMonadState(MonadState[F, S])
 
-  override def append(key: K, sequenceNr: Long, events: NonEmptyVector[E]): F[Unit] =
+  override def append(key: K, sequenceNr: Long, events: NonEmptyChain[E]): F[Unit] =
     F.modify(_.appendEvents(key, sequenceNr, events.map(e => TaggedEvent(e, tagging.tag(key)))))
 
   override def foldById[A](id: K, sequenceNr: Long, zero: A)(f: (A, E) => Folded[A]): F[Folded[A]] =
     F.inspect(
         _.eventsByKey
           .get(id)
-          .map(_.drop(sequenceNr.toInt - 1))
+          .map(_.toVector.drop(sequenceNr.toInt - 1))
           .getOrElse(Vector.empty)
       )
       .map(_.foldM(zero)(f))

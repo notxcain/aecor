@@ -76,3 +76,5 @@ project/plugins/project/
 # Ensime
 .ensime
 .ensime_cache/
+
+.DS_Store

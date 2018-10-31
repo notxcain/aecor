@@ -1,6 +1,6 @@
 package aecor.runtime.akkapersistence.serialization
 
-import scala.util.{ Failure, Success }
+import scala.util.Try
 
 trait PersistentDecoder[A] {
   def decode(repr: PersistentRepr): PersistentDecoder.DecodingResult[A]
@@ -14,16 +14,13 @@ object PersistentDecoder {
       override def decode(repr: PersistentRepr): DecodingResult[A] = f(repr)
     }
 
-  implicit def fromCodec[A](implicit codec: Codec[A]): PersistentDecoder[A] =
-    new PersistentDecoder[A] {
-      override def decode(repr: PersistentRepr): DecodingResult[A] =
-        codec.decode(repr.payload, repr.manifest) match {
-          case Failure(exception) => Left(DecodingFailure(exception.getMessage, Some(exception)))
-          case Success(value)     => Right(value)
-        }
-    }
-
   type DecodingResult[A] = Either[DecodingFailure, A]
+  object DecodingResult {
+    def fromTry[A](value: Try[A]): DecodingResult[A] = value match {
+      case scala.util.Success(a) => Right(a)
+      case scala.util.Failure(e) => Left(DecodingFailure(e.getMessage, Some(e)))
+    }
+  }
 
   implicit val persistentReprInstance: PersistentDecoder[PersistentRepr] =
     new PersistentDecoder[PersistentRepr] {

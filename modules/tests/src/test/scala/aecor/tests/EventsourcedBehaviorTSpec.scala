@@ -1,34 +1,45 @@
 package aecor.tests
 
-import aecor.data.{ Action, EventsourcedBehavior }
+import aecor.data._
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.{ Counter, CounterEvent, CounterState }
+import cats.Id
 import org.scalatest.{ FlatSpec, Matchers }
 import cats.implicits._
 
 class EventsourcedBehaviorTSpec extends FlatSpec with Matchers {
 
-  object CounterOptionalActions extends Counter[Action[Option[CounterState], CounterEvent, ?]] {
+  class CounterOptionalActions[F[_]](
+    implicit F: MonadActionBase[F, Option[CounterState], CounterEvent]
+  ) extends Counter[F] {
 
-    def increment: Action[Option[CounterState], CounterEvent, Long] = Action { x =>
-      List(CounterIncremented) -> (x.map(_.value).getOrElse(0L) + 1)
-    }
+    import F._
 
-    def decrement: Action[Option[CounterState], CounterEvent, Long] = Action { x =>
-      List(CounterDecremented) -> (x.map(_.value).getOrElse(0L) - 1)
-    }
+    def increment: F[Long] = append(CounterIncremented) >> value
 
-    def value: Action[Option[CounterState], CounterEvent, Long] =
-      Action(x => List.empty -> x.map(_.value).getOrElse(0))
+    def decrement: F[Long] = append(CounterDecremented) >> value
+
+    def value: F[Long] = read.map(_.fold(0l)(_.value))
+  }
+
+  object CounterOptionalActions {
+    def apply[F[_]](
+      implicit F: MonadActionBase[F, Option[CounterState], CounterEvent]
+    ): Counter[F] =
+      new CounterOptionalActions[F]
   }
 
   "EventsourcedBehavior.optional" should "correctly use init function applying events" in {
-    val behavior: EventsourcedBehavior[Counter, Option[CounterState], CounterEvent] =
+    val behavior: EventsourcedBehavior[Counter, Id, Option[CounterState], CounterEvent] =
       EventsourcedBehavior
-        .optional(CounterOptionalActions, (e) => CounterState(0L).applyEvent(e), _.applyEvent(_))
+        .optional(
+          CounterOptionalActions[ActionT[Id, Option[CounterState], CounterEvent, ?]],
+          e => CounterState(0L).applyEvent(e),
+          _.applyEvent(_)
+        )
 
     behavior
-      .applyEvent(behavior.initialState, CounterEvent.CounterIncremented)
+      .update(behavior.create, CounterEvent.CounterIncremented)
       .toOption
       .flatten shouldEqual CounterState(1).some
   }

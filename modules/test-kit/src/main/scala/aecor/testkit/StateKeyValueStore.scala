@@ -20,5 +20,6 @@ class StateKeyValueStore[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K
 
   override def getValue(key: K): F[Option[A]] =
     F.inspect(_.get(key))
-
+  override def deleteValue(key: K): F[Unit] =
+    F.modify(_ - key)
 }

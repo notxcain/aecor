@@ -12,7 +12,7 @@ import aecor.schedule.process.{
   PeriodicProcessRuntime,
   ScheduleProcess
 }
-import aecor.util.ClockT
+import aecor.util.Clock
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
@@ -43,7 +43,7 @@ object Schedule {
   def start[F[_]: Effect](
     entityName: String,
     dayZero: LocalDate,
-    clock: ClockT[F],
+    clock: Clock[F],
     repository: ScheduleEntryRepository[F],
     offsetStore: KeyValueStore[F, TagConsumer, UUID],
     settings: ScheduleSettings = ScheduleSettings(

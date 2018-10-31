@@ -2,6 +2,7 @@ package aecor.data
 
 sealed abstract class Tagging[-A] {
   def tag(a: A): Set[EventTag]
+  def tags: List[EventTag]
 }
 
 object Tagging {
@@ -13,6 +14,7 @@ object Tagging {
   }
   final case class Const[-A](tag: EventTag) extends Tagging[A] {
     override def tag(a: A): Set[EventTag] = Set(tag)
+    override def tags: List[EventTag] = List(tag)
   }
 
   def const[A](tag: EventTag): Const[A] = Const(tag)

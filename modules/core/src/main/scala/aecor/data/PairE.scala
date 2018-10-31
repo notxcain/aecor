@@ -1,9 +1,13 @@
 package aecor.data
 
+/**
+  * Existential pair of type constructors.
+  */
+
 sealed abstract class PairE[F[_], G[_]] {
   type A
-  def left: F[A]
-  def right: G[A]
+  def first: F[A]
+  def second: G[A]
 }
 
 object PairE {
@@ -11,8 +15,9 @@ object PairE {
     type A0 = A
     new PairE[F, G] {
       final override type A = A0
-      final override def left: F[A0] = fa
-      final override def right: G[A0] = ga
+      final override def first: F[A0] = fa
+      final override def second: G[A0] = ga
+      override def toString: String = s"Pair($first, $second)"
     }
   }
 }
