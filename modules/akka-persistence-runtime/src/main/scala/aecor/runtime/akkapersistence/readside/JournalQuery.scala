@@ -1,7 +1,7 @@
 package aecor.runtime.akkapersistence.readside
 
 import aecor.Has
-import aecor.data.{EntityEvent, EventTag, TagConsumer}
+import aecor.data.{ EntityEvent, EventTag, TagConsumer }
 import aecor.runtime.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Source
@@ -26,8 +26,6 @@ object JournalEntry {
 trait JournalQuery[Offset, I, E] {
   def eventsByTag(tag: EventTag,
                   offset: Option[Offset]): Source[JournalEntry[Offset, I, E], NotUsed]
-
-  def ss: Source[E, Unit] = null
 
   def currentEventsByTag(tag: EventTag,
                          offset: Option[Offset]): Source[JournalEntry[Offset, I, E], NotUsed]
