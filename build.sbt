@@ -197,6 +197,7 @@ lazy val exampleSettings = {
       "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
     ),
     resolvers += Resolver.sonatypeRepo("releases"),
+    resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
     libraryDependencies ++=
       Seq(
         "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
