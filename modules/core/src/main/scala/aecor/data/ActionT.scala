@@ -67,9 +67,6 @@ trait ActionTFunctions {
   def append[F[_]: Applicative, S, E](e: NonEmptyChain[E]): ActionT[F, S, E, Unit] =
     ActionT((_, _, es0) => (es0 ++ e.toChain, ()).next.pure[F])
 
-  def reset[F[_]: Applicative, S, E]: ActionT[F, S, E, Unit] =
-    ActionT((_, _, _) => (Chain.empty[E], ()).next.pure[F])
-
   def liftF[F[_]: Functor, S, E, A](fa: F[A]): ActionT[F, S, E, A] =
     ActionT((_, _, es) => fa.map(a => (es, a).next))
 
