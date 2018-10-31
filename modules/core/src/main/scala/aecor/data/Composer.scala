@@ -59,7 +59,6 @@ object Composer {
     def apply(firstComponent: String, secondComponent: String, otherComponents: String*): String =
       apply(firstComponent :: secondComponent :: otherComponents.toList)
 
-    // thrpt   10  7787.881 ± 849.125  ops/ms
     def apply(components: List[String]): String = {
       val builder = new java.lang.StringBuilder
       components.foreach { x =>

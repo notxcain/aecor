@@ -43,7 +43,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
         AkkaPersistenceRuntimeActor.props(
           typeName,
           behavior.actions,
-          behavior.initial,
+          behavior.create,
           behavior.update,
           snapshotPolicy,
           tagging,

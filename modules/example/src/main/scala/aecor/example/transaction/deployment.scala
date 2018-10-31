@@ -19,5 +19,5 @@ object deployment {
         EventsourcedAlgebra.behavior[F].enrich(clock.instant.map(Timestamp(_))),
         EventsourcedAlgebra.tagging
       )
-      .map(Eventsourced.Entity.fromEitherK(_))
+      .map(Eventsourced.Entities.fromEitherK(_))
 }

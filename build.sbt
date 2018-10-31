@@ -33,7 +33,7 @@ lazy val scalametaVersion = "1.8.0"
 // Example dependencies
 
 lazy val circeVersion = "0.9.3"
-lazy val http4sVersion = "0.20.0-M4"
+lazy val http4sVersion = "0.20.0-M1"
 lazy val scalametaParadiseVersion = "3.0.0-M10"
 
 lazy val catsTaglessVersion = "0.1.0"

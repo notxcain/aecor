@@ -1,6 +1,6 @@
 package aecor.example.transaction
-import aecor.runtime.Eventsourced.Entity
+import aecor.runtime.Eventsourced.Entities
 
 package object transaction {
-  type Transactions[F[_]] = Entity[TransactionId, Algebra, F, String]
+  type Transactions[F[_]] = Entities.Rejectable[TransactionId, Algebra, F, String]
 }

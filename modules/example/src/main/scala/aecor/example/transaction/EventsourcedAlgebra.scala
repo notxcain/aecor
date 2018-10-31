@@ -14,7 +14,6 @@ import aecor.example.transaction.EventsourcedAlgebra.TransactionStatus.{
 }
 import aecor.example.transaction.TransactionEvent._
 import cats.Monad
-import cats.data.EitherT
 import cats.implicits._
 
 class EventsourcedAlgebra[F[_]](
@@ -84,19 +83,14 @@ class EventsourcedAlgebra[F[_]](
 }
 
 object EventsourcedAlgebra {
-  def apply[F[_]](
-    implicit F: MonadActionReject[F, Option[State], TransactionEvent, String]
-  ): Algebra[F] = new EventsourcedAlgebra
-
-  def actions[F[_]: Monad]
-    : EitherK[Algebra, ActionT[F, Option[State], TransactionEvent, ?], String] =
-    EitherK(EventsourcedAlgebra[EitherT[ActionT[F, Option[State], TransactionEvent, ?], String, ?]])
+  def apply[F[_]: MonadActionReject[?[_], Option[State], TransactionEvent, String]]: Algebra[F] =
+    new EventsourcedAlgebra
 
   def behavior[F[_]: Monad]
-    : EventsourcedBehavior[EitherK[Algebra, ?[_], String], F, Option[State], TransactionEvent] =
+    : EventsourcedBehavior[EitherK[Algebra, String, ?[_]], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
-      .singular[EitherK[Algebra, ?[_], String], F, State, TransactionEvent](
-        actions[F],
+      .optionalRejectable[Algebra, F, State, TransactionEvent, String](
+        apply,
         State.fromEvent,
         _.applyEvent(_)
       )

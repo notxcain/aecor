@@ -1,41 +1,41 @@
 package aecor.data
 
-import aecor.{ Has, data }
+import aecor.Has
 import cats.Monad
 import cats.data.EitherT
 import cats.tagless.FunctorK
+import cats.tagless.syntax.functorK._
 
 final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F, S, E, ?]],
-                                                           initial: S,
+                                                           create: S,
                                                            update: (S, E) => Folded[S]) {
   def enrich[Env](f: F[Env])(implicit M: FunctorK[M],
                              F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E]] =
     EventsourcedBehavior(
-      actions =
-        M.mapK(actions)(ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
-      initial = initial,
-      update = (s, e) => update(s, e.event)
+      actions.mapK(ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
+      create,
+      (s, e) => update(s, e.event)
     )
 }
 
 object EventsourcedBehavior {
-  def singularRejectable[M[_[_]], F[_], State, Event, Rejection](
+  def optionalRejectable[M[_[_]], F[_], State, Event, Rejection](
     actions: M[EitherT[ActionT[F, Option[State], Event, ?], Rejection, ?]],
-    init: Event => Folded[State],
-    applyEvent: (State, Event) => Folded[State]
-  ): EventsourcedBehavior[EitherK[M, ?[_], Rejection], F, Option[State], Event] =
+    create: Event => Folded[State],
+    update: (State, Event) => Folded[State]
+  ): EventsourcedBehavior[EitherK[M, Rejection, ?[_]], F, Option[State], Event] =
     EventsourcedBehavior
-      .singular[EitherK[M, ?[_], Rejection], F, State, Event](EitherK(actions), init, applyEvent)
+      .optional[EitherK[M, Rejection, ?[_]], F, State, Event](EitherK(actions), create, update)
 
-  def singular[M[_[_]], F[_], State, Event](
+  def optional[M[_[_]], F[_], State, Event](
     actions: M[ActionT[F, Option[State], Event, ?]],
-    init: Event => Folded[State],
-    applyEvent: (State, Event) => Folded[State]
+    create: Event => Folded[State],
+    update: (State, Event) => Folded[State]
   ): EventsourcedBehavior[M, F, Option[State], Event] =
-    data.EventsourcedBehavior(
+    EventsourcedBehavior(
       actions,
       Option.empty[State],
-      (os, e) => os.map(s => applyEvent(s, e)).getOrElse(init(e)).map(Some(_))
+      (os, e) => os.map(s => update(s, e)).getOrElse(create(e)).map(Some(_))
     )
 }
 

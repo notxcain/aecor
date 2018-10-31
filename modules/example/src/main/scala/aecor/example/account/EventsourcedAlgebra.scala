@@ -58,11 +58,11 @@ object EventsourcedAlgebra {
     implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]
   ): Algebra[F] = new EventsourcedAlgebra
 
-  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, ?[_], Rejection], F, Option[
+  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, Rejection, ?[_]], F, Option[
     AccountState
   ], AccountEvent] =
     EventsourcedBehavior
-      .singularRejectable(EventsourcedAlgebra.apply, AccountState.fromEvent, _.applyEvent(_))
+      .optionalRejectable(EventsourcedAlgebra.apply, AccountState.fromEvent, _.applyEvent(_))
 
   val tagging: Tagging[AccountId] = Tagging.const[AccountId](EventTag("Account"))
 
