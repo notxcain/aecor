@@ -20,34 +20,34 @@ object MonadActionReject {
     MonadAction.eitherTMonadActionInstance[M, F, S, E, R]
 }
 
-trait MonadActionLift[M[_], F[_], S, E] extends MonadActionBase[M, S, E] {
-  def liftF[A](fa: F[A]): M[A]
+trait MonadActionLift[I[_], F[_], S, E] extends MonadActionBase[I, S, E] {
+  def liftF[A](fa: F[A]): I[A]
 }
 
-trait MonadAction[M[_], F[_], S, E, R]
-    extends MonadActionReject[M, S, E, R]
-    with MonadActionLift[M, F, S, E]
+trait MonadAction[I[_], F[_], S, E, R]
+    extends MonadActionReject[I, S, E, R]
+    with MonadActionLift[I, F, S, E]
 
 object MonadAction {
-  implicit def eitherTMonadActionInstance[M[_], F[_], S, E, R](
-    implicit F: MonadActionLift[M, F, S, E]
-  ): MonadAction[EitherT[M, R, ?], F, S, E, R] =
-    new MonadAction[EitherT[M, R, ?], F, S, E, R] {
-      private val eitherTMonad = EitherT.catsDataMonadErrorForEitherT[M, R]
-      override def reject[A](r: R): EitherT[M, R, A] = EitherT.leftT(r)
+  implicit def eitherTMonadActionInstance[I[_], F[_], S, E, R](
+    implicit F: MonadActionLift[I, F, S, E],
+    eitherTMonad: Monad[EitherT[I, R, ?]]
+  ): MonadAction[EitherT[I, R, ?], F, S, E, R] =
+    new MonadAction[EitherT[I, R, ?], F, S, E, R] {
+      override def reject[A](r: R): EitherT[I, R, A] = EitherT.leftT(r)
 
-      override def handleErrorWith[A](fa: EitherT[M, R, A])(
-        f: R => EitherT[M, R, A]
-      ): EitherT[M, R, A] = fa.recoverWith { case r => f(r) }
-      override def liftF[A](fa: F[A]): EitherT[M, R, A] = EitherT.right(F.liftF(fa))
-      override def read: EitherT[M, R, S] = EitherT.right(F.read)
-      override def append(es: E, other: E*): EitherT[M, R, Unit] =
+      override def handleErrorWith[A](fa: EitherT[I, R, A])(
+        f: R => EitherT[I, R, A]
+      ): EitherT[I, R, A] = fa.recoverWith { case r => f(r) }
+      override def liftF[A](fa: F[A]): EitherT[I, R, A] = EitherT.right(F.liftF(fa))
+      override def read: EitherT[I, R, S] = EitherT.right(F.read)
+      override def append(es: E, other: E*): EitherT[I, R, Unit] =
         EitherT.right(F.append(es, other: _*))
-      override def pure[A](x: A): EitherT[M, R, A] = EitherT.pure[M, R](x)
-      override def map[A, B](fa: EitherT[M, R, A])(f: A => B): EitherT[M, R, B] = fa.map(f)
-      override def flatMap[A, B](fa: EitherT[M, R, A])(f: A => EitherT[M, R, B]): EitherT[M, R, B] =
+      override def pure[A](x: A): EitherT[I, R, A] = EitherT.pure[I, R](x)
+      override def map[A, B](fa: EitherT[I, R, A])(f: A => B): EitherT[I, R, B] = fa.map(f)
+      override def flatMap[A, B](fa: EitherT[I, R, A])(f: A => EitherT[I, R, B]): EitherT[I, R, B] =
         fa.flatMap(f)
-      override def tailRecM[A, B](a: A)(f: A => EitherT[M, R, Either[A, B]]): EitherT[M, R, B] =
+      override def tailRecM[A, B](a: A)(f: A => EitherT[I, R, Either[A, B]]): EitherT[I, R, B] =
         eitherTMonad.tailRecM(a)(f)
     }
 }

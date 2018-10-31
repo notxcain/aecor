@@ -1,49 +1,59 @@
 package aecor.schedule
 
-import java.time.{Instant, LocalDateTime, ZoneOffset, ZonedDateTime}
+import java.time.{ Instant, LocalDateTime, ZoneOffset, ZonedDateTime }
 
-import aecor.data.{ ActionT, EventsourcedBehavior, Folded, MonadActionLift}
+import aecor.data.{ ActionT, EventsourcedBehavior, Folded, MonadActionLift }
 import aecor.data.Folded.syntax._
 import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
-import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder, PersistentRepr}
-import aecor.schedule.ScheduleEvent.{ScheduleEntryAdded, ScheduleEntryFired}
+import aecor.runtime.akkapersistence.serialization.{
+  PersistentDecoder,
+  PersistentEncoder,
+  PersistentRepr
+}
+import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.ScheduleState._
 import aecor.schedule.serialization.protobuf.msg
 import cats.implicits._
 import cats.kernel.Eq
-import cats.{Functor, Monad}
+import cats.{ Functor, Monad }
 
-import scala.util.{Failure, Try}
+import scala.util.{ Failure, Try }
 
 object DefaultScheduleBucket {
 
-  def apply[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
-    implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent]
-  ): ScheduleBucket[F] =
+  def apply[I[_], F[_]: Functor](
+    clock: F[ZonedDateTime]
+  )(implicit F: MonadActionLift[I, F, ScheduleState, ScheduleEvent]): ScheduleBucket[I] =
     new DefaultScheduleBucket(clock)
 
   def behavior[F[_]: Monad](
     clock: F[ZonedDateTime]
   ): EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent] =
-    EventsourcedBehavior(DefaultScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?], F](clock)(Functor[F],
-      ActionT.monadActionLiftInstance[F, ScheduleState, ScheduleEvent]), ScheduleState.initial, _.update(_))
+    EventsourcedBehavior(
+      DefaultScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?], F](clock)(
+        Functor[F],
+        ActionT.monadActionLiftInstance[F, ScheduleState, ScheduleEvent]
+      ),
+      ScheduleState.initial,
+      _.update(_)
+    )
 }
 
-class DefaultScheduleBucket[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
-  implicit F: MonadActionLift[F, G, ScheduleState, ScheduleEvent]
-) extends ScheduleBucket[F] {
+class DefaultScheduleBucket[I[_], F[_]: Functor](clock: F[ZonedDateTime])(
+  implicit F: MonadActionLift[I, F, ScheduleState, ScheduleEvent]
+) extends ScheduleBucket[I] {
 
   import F._
 
   override def addScheduleEntry(entryId: String,
                                 correlationId: String,
-                                dueDate: LocalDateTime): F[Unit] =
+                                dueDate: LocalDateTime): I[Unit] =
     read.flatMap { state =>
       liftF(clock).flatMap { zdt =>
         val timestamp = zdt.toInstant
         val now = zdt.toLocalDateTime
         if (state.unfired.contains(entryId) || state.fired.contains(entryId)) {
-          ().pure[F]
+          ().pure[I]
         } else {
           append(ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp)) >>
             whenA(dueDate.isEqual(now) || dueDate.isBefore(now)) {
@@ -54,7 +64,7 @@ class DefaultScheduleBucket[F[_], G[_]: Functor](clock: G[ZonedDateTime])(
 
     }
 
-  override def fireEntry(entryId: String): F[Unit] =
+  override def fireEntry(entryId: String): I[Unit] =
     read.flatMap { state =>
       liftF(clock).map(_.toInstant).flatMap { timestamp =>
         state
@@ -83,7 +93,8 @@ object ScheduleEvent extends ScheduleEventInstances {
 }
 
 trait ScheduleEventInstances {
-  implicit val persistentEncoderDecoder: PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] =
+  implicit val persistentEncoderDecoder
+    : PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] =
     new PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] {
       val ScheduleEntryAddedManifest = "A"
       val ScheduleEntryFiredManifest = "B"
@@ -93,44 +104,51 @@ trait ScheduleEventInstances {
         case e: ScheduleEvent.ScheduleEntryFired => ScheduleEntryFiredManifest
       }
 
-      private def tryDecode(bytes: Array[Byte], manifest: String): Try[ScheduleEvent] = manifest match {
-        case ScheduleEntryAddedManifest =>
-          msg.ScheduleEntryAdded.validate(bytes).map {
-            case msg.ScheduleEntryAdded(entryId, correlationId, dueToInEpochMillisUTC, timestamp) =>
-              val dateTime =
-                LocalDateTime.ofInstant(Instant.ofEpochMilli(dueToInEpochMillisUTC), ZoneOffset.UTC)
-              ScheduleEvent
-                .ScheduleEntryAdded(entryId, correlationId, dateTime, Instant.ofEpochMilli(timestamp))
-          }
-        case ScheduleEntryFiredManifest =>
-          msg.ScheduleEntryFired.validate(bytes).map {
-            case msg.ScheduleEntryFired(entryId, correlationId, timestamp) =>
-              ScheduleEvent.ScheduleEntryFired(entryId, correlationId, Instant.ofEpochMilli(timestamp))
-          }
-        case other => Failure(new IllegalArgumentException(s"Unknown manifest [$other]"))
-      }
+      private def tryDecode(bytes: Array[Byte], manifest: String): Try[ScheduleEvent] =
+        manifest match {
+          case ScheduleEntryAddedManifest =>
+            msg.ScheduleEntryAdded.validate(bytes).map {
+              case msg
+                    .ScheduleEntryAdded(entryId, correlationId, dueToInEpochMillisUTC, timestamp) =>
+                val dateTime =
+                  LocalDateTime
+                    .ofInstant(Instant.ofEpochMilli(dueToInEpochMillisUTC), ZoneOffset.UTC)
+                ScheduleEvent
+                  .ScheduleEntryAdded(
+                    entryId,
+                    correlationId,
+                    dateTime,
+                    Instant.ofEpochMilli(timestamp)
+                  )
+            }
+          case ScheduleEntryFiredManifest =>
+            msg.ScheduleEntryFired.validate(bytes).map {
+              case msg.ScheduleEntryFired(entryId, correlationId, timestamp) =>
+                ScheduleEvent
+                  .ScheduleEntryFired(entryId, correlationId, Instant.ofEpochMilli(timestamp))
+            }
+          case other => Failure(new IllegalArgumentException(s"Unknown manifest [$other]"))
+        }
 
       private def encodeEvent(o: ScheduleEvent): Array[Byte] = o match {
         case ScheduleEvent
-        .ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp) =>
-          msg.ScheduleEntryAdded(
-            entryId,
-            correlationId,
-            dueDate.toInstant(ZoneOffset.UTC).toEpochMilli,
-            timestamp.toEpochMilli
-          ).toByteArray
+              .ScheduleEntryAdded(entryId, correlationId, dueDate, timestamp) =>
+          msg
+            .ScheduleEntryAdded(
+              entryId,
+              correlationId,
+              dueDate.toInstant(ZoneOffset.UTC).toEpochMilli,
+              timestamp.toEpochMilli
+            )
+            .toByteArray
         case ScheduleEvent
-        .ScheduleEntryFired(entryId, correlationId, timestamp) =>
+              .ScheduleEntryFired(entryId, correlationId, timestamp) =>
           msg.ScheduleEntryFired(entryId, correlationId, timestamp.toEpochMilli).toByteArray
       }
-      override def encode(
-        a: ScheduleEvent
-      ): PersistentRepr = PersistentRepr(manifest(a), encodeEvent(a))
-      override def decode(
-        repr: PersistentRepr
-      ): DecodingResult[
-        ScheduleEvent
-      ] = DecodingResult.fromTry(tryDecode(repr.payload, repr.manifest))
+      override def encode(a: ScheduleEvent): PersistentRepr =
+        PersistentRepr(manifest(a), encodeEvent(a))
+      override def decode(repr: PersistentRepr): DecodingResult[ScheduleEvent] =
+        DecodingResult.fromTry(tryDecode(repr.payload, repr.manifest))
     }
 }
 
