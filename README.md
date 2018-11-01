@@ -126,8 +126,8 @@ Now, the final part before we launch.'
 
 As I said earlier `Subscription[F[_]]` is polymorphic in its effect type.
 
-Our effect would be any `F[_]` with instance of `MonadActionBase[F, Option[Subscription], SubscriptionEvent]` which provides essential operations for eventsources command handler
-* `read: F[Option[Subscription]]` - reads current state
+Our effect would be any `F[_]` with instance of `MonadActionBase[F, Option[SubscriptionState], SubscriptionEvent]` which provides essential operations for eventsources command handler
+* `read: F[Option[SubscriptionState]]` - reads current state
 * `append(event: SubscriptionEvent, other: SubscriptionEvent*): F[Unit]` - append one or more events
 Other stuff like state recovery and event persistence is held by Akka Persistence Runtime.
 
@@ -189,16 +189,17 @@ val journalAdapter = CassandraJournalAdapter(system)
 
 val runtime = AkkaPersistenceRuntime(system, journalAdapter)
 
-val behavior = EventsourcedBehavior.optional(
-  new SubscriptionActions,
-  SubscriptionState.create,
-  _.update(_)
-)
+val behavior: EventsourcedBehavior[Subscription, IO, Option[SubscriptionState], SubscriptionEvent]  
+  EventsourcedBehavior.optional(
+    new SubscriptionActions,
+    SubscriptionState.create,
+    _.update(_)
+  )
 
 val deploySubscriptions: IO[SubscriptionId => Subscription[IO]] =
   runtime.deploy(
     "Subscription",
-    behavior.lifted[Task],
+    behavior,
     Tagging.const[SubscriptionId](EventTag("Subscription"))
   )
 ```
