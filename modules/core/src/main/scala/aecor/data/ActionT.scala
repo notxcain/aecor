@@ -116,19 +116,7 @@ trait ActionTInstances extends ActionTLowerPriorityInstances1 {
 
 trait ActionTLowerPriorityInstances1 {
   trait ActionTMonadActionLiftInstance[F[_], S, E]
-      extends ActionTMonadActionInstance[F, S, E]
-      with MonadActionLift[ActionT[F, S, E, ?], F, S, E] {
-    override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
-  }
-
-  implicit def monadActionLiftInstance[F[_], S, E](
-    implicit F0: Monad[F]
-  ): MonadActionLift[ActionT[F, S, E, ?], F, S, E] =
-    new ActionTMonadActionLiftInstance[F, S, E] {
-      override protected implicit def F: Monad[F] = F0
-    }
-
-  trait ActionTMonadActionInstance[F[_], S, E] extends MonadAction[ActionT[F, S, E, ?], S, E] {
+      extends MonadActionLift[ActionT[F, S, E, ?], F, S, E] {
     protected implicit def F: Monad[F]
     override def read: ActionT[F, S, E, S] = ActionT.read
     override def append(e: E, es: E*): ActionT[F, S, E, Unit] =
@@ -160,6 +148,14 @@ trait ActionTLowerPriorityInstances1 {
         }
       }
     override def pure[A](x: A): ActionT[F, S, E, A] = ActionT.pure(x)
+    override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
   }
+
+  implicit def monadActionLiftInstance[F[_], S, E](
+    implicit F0: Monad[F]
+  ): MonadActionLift[ActionT[F, S, E, ?], F, S, E] =
+    new ActionTMonadActionLiftInstance[F, S, E] {
+      override protected implicit def F: Monad[F] = F0
+    }
 
 }
