@@ -1,6 +1,6 @@
 
 [![Build Status](https://img.shields.io/travis/notxcain/aecor/master.svg)](https://travis-ci.org/notxcain/aecor)
-[![Maven Central](https://img.shields.io/maven-central/v/io.aecor/aecor-core_2.12.svg)](https://github.com/notxcain/aecor)
+[![Maven Central](https://img.shields.io/maven-central/v/io.aecor/core_2.12.svg)](https://search.maven.org/search?q=g:io.aecor%20AND%20a:core_2.12&core=gav)
 [![Join the chat at https://gitter.im/notxcain/aecor](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/notxcain/aecor)
 
 
