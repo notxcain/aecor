@@ -136,7 +136,9 @@ So lets define `SubscriptionActions`
 ```scala
 import cats.implicits._ // needed for syntax like flatMap and unit
 
-final class SubscriptionActions[F[_]](implicit F: MonadActionBase[F, Option[Subscription], SubscriptionEvent]) extends Subscription[F] {
+final class SubscriptionActions[F[_]](
+  implicit F: MonadActionBase[F, Option[SubscriptionState], SubscriptionEvent]
+  ) extends Subscription[F] {
 
   implicit F._ // import algebra functions
 
