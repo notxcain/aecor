@@ -6,6 +6,7 @@ import cats.{ Monad, MonadError }
 trait MonadActionBase[F[_], S, E] extends Monad[F] {
   def read: F[S]
   def append(es: E, other: E*): F[Unit]
+  def reset: F[Unit]
 }
 
 trait MonadActionReject[F[_], S, E, R] extends MonadActionBase[F, S, E] with MonadError[F, R] {
@@ -43,6 +44,7 @@ object MonadAction {
       override def read: EitherT[I, R, S] = EitherT.right(F.read)
       override def append(es: E, other: E*): EitherT[I, R, Unit] =
         EitherT.right(F.append(es, other: _*))
+      override def reset: EitherT[I, R, Unit] = EitherT.right(F.reset)
       override def pure[A](x: A): EitherT[I, R, A] = EitherT.pure[I, R](x)
       override def map[A, B](fa: EitherT[I, R, A])(f: A => B): EitherT[I, R, B] = fa.map(f)
       override def flatMap[A, B](fa: EitherT[I, R, A])(f: A => EitherT[I, R, B]): EitherT[I, R, B] =

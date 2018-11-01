@@ -67,6 +67,9 @@ trait ActionTFunctions {
   def append[F[_]: Applicative, S, E](e: NonEmptyChain[E]): ActionT[F, S, E, Unit] =
     ActionT((_, _, es0) => (es0 ++ e.toChain, ()).next.pure[F])
 
+  def reset[F[_]: Applicative, S, E]: ActionT[F, S, E, Unit] =
+    ActionT((_, _, _) => (Chain.empty[E], ()).next.pure[F])
+
   def liftF[F[_]: Functor, S, E, A](fa: F[A]): ActionT[F, S, E, A] =
     ActionT((_, _, es) => fa.map(a => (es, a).next))
 
@@ -122,6 +125,7 @@ trait ActionNLowerPriorityInstances {
     override def read: ActionT[F, S, E, S] = ActionT.read
     override def append(e: E, es: E*): ActionT[F, S, E, Unit] =
       ActionT.append(NonEmptyChain(e, es: _*))
+    override def reset: ActionT[F, S, E, Unit] = ActionT.reset
     override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
     override def map[A, B](fa: ActionT[F, S, E, A])(f: A => B): ActionT[F, S, E, B] =
       fa.map(f)
