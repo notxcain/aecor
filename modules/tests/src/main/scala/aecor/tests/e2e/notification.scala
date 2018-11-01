@@ -1,5 +1,6 @@
 package aecor.tests.e2e
 
+import aecor.MonadAction
 import aecor.data.Folded.syntax._
 import aecor.data._
 import aecor.data.EventsourcedBehavior
@@ -34,7 +35,7 @@ object notification {
   }
 
   def notificationActions[F[_]](
-    implicit F: MonadActionBase[F, NotificationState, NotificationEvent]
+    implicit F: MonadAction[F, NotificationState, NotificationEvent]
   ): Notification[F] = new Notification[F] {
     import F._
     override def create(counterId: CounterId): F[Unit] = append(NotificationCreated(counterId))

@@ -25,7 +25,7 @@ To start using Aecor Akka Persistence Runtime add the following to your `build.s
 scalaVersion := "2.12.4"
 scalacOptions += "-Ypartial-unification"
 addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M10" cross CrossVersion.full)
-libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "0.18.0-M1"
+libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "x.y.z" // See current version on the badge above
 ```
 
 ### Entity Behavior Definition
@@ -126,7 +126,7 @@ Now, the final part before we launch.'
 
 As I said earlier `Subscription[F[_]]` is polymorphic in its effect type.
 
-Our effect would be any `F[_]` with instance of `MonadActionBase[F, Option[SubscriptionState], SubscriptionEvent]` which provides essential operations for eventsources command handler
+Our effect would be any `F[_]` with instance of `MonadAction[F, Option[SubscriptionState], SubscriptionEvent]` which provides essential operations for eventsources command handler
 * `read: F[Option[SubscriptionState]]` - reads current state
 * `append(event: SubscriptionEvent, other: SubscriptionEvent*): F[Unit]` - append one or more events
 Other stuff like state recovery and event persistence is held by Akka Persistence Runtime.
@@ -137,7 +137,7 @@ So lets define `SubscriptionActions`
 import cats.implicits._ // needed for syntax like flatMap and unit
 
 final class SubscriptionActions[F[_]](
-  implicit F: MonadActionBase[F, Option[SubscriptionState], SubscriptionEvent]
+  implicit F: MonadAction[F, Option[SubscriptionState], SubscriptionEvent]
   ) extends Subscription[F] {
 
   implicit F._ // import algebra functions

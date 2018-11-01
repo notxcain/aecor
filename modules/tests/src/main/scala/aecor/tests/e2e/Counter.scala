@@ -1,5 +1,6 @@
 package aecor.tests.e2e
 
+import aecor.MonadAction
 import aecor.data._
 import aecor.data.Folded.syntax._
 import aecor.macros.boopickleWireProtocol
@@ -52,7 +53,7 @@ object CounterBehavior {
     )
 }
 
-final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent])
+final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent])
     extends Counter[F] {
 
   import F._
@@ -66,6 +67,6 @@ final class CounterActions[F[_]](implicit F: MonadActionBase[F, CounterState, Co
 }
 
 object CounterActions {
-  def apply[F[_]](implicit F: MonadActionBase[F, CounterState, CounterEvent]): Counter[F] =
+  def apply[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent]): Counter[F] =
     new CounterActions[F]
 }
