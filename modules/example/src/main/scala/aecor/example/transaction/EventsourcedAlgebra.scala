@@ -1,5 +1,6 @@
 package aecor.example.transaction
 
+import aecor.MonadActionReject
 import aecor.data.Folded.syntax._
 import aecor.data._
 import aecor.example.account.AccountId

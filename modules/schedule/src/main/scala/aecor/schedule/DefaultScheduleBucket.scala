@@ -2,7 +2,8 @@ package aecor.schedule
 
 import java.time.{ Instant, LocalDateTime, ZoneOffset, ZonedDateTime }
 
-import aecor.data.{ ActionT, EventsourcedBehavior, Folded, MonadActionLift }
+import aecor.MonadActionLift
+import aecor.data.{ ActionT, EventsourcedBehavior, Folded }
 import aecor.data.Folded.syntax._
 import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
 import aecor.runtime.akkapersistence.serialization.{

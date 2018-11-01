@@ -1,16 +1,17 @@
 package aecor.tests
 
+import aecor.MonadAction
 import aecor.data._
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import aecor.tests.e2e.{ Counter, CounterEvent, CounterState }
-import cats.Id
+import cats.{ Id, Monad }
 import org.scalatest.{ FlatSpec, Matchers }
 import cats.implicits._
 
-class EventsourcedBehaviorTSpec extends FlatSpec with Matchers {
+class EventsourcedBehaviorSpec extends FlatSpec with Matchers {
 
-  class CounterOptionalActions[F[_]](
-    implicit F: MonadActionBase[F, Option[CounterState], CounterEvent]
+  class CounterOptionalActions[F[_]: Monad](
+    implicit F: MonadAction[F, Option[CounterState], CounterEvent]
   ) extends Counter[F] {
 
     import F._
@@ -22,22 +23,10 @@ class EventsourcedBehaviorTSpec extends FlatSpec with Matchers {
     def value: F[Long] = read.map(_.fold(0l)(_.value))
   }
 
-  object CounterOptionalActions {
-    def apply[F[_]](
-      implicit F: MonadActionBase[F, Option[CounterState], CounterEvent]
-    ): Counter[F] =
-      new CounterOptionalActions[F]
-  }
-
   "EventsourcedBehavior.optional" should "correctly use init function applying events" in {
     val behavior: EventsourcedBehavior[Counter, Id, Option[CounterState], CounterEvent] =
       EventsourcedBehavior
-        .optional(
-          CounterOptionalActions[ActionT[Id, Option[CounterState], CounterEvent, ?]],
-          e => CounterState(0L).applyEvent(e),
-          _.applyEvent(_)
-        )
-
+        .optional(new CounterOptionalActions, e => CounterState(0L).applyEvent(e), _.applyEvent(_))
     behavior
       .update(behavior.create, CounterEvent.CounterIncremented)
       .toOption

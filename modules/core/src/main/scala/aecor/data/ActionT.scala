@@ -5,6 +5,7 @@ import cats.{ Applicative, Functor, Monad, MonadError, ~> }
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import Folded.syntax._
+import aecor.{ MonadAction, MonadActionLift, MonadActionLiftReject }
 
 final class ActionT[F[_], S, E, A] private (
   val unsafeRun: (S, (S, E) => Folded[S], Chain[E]) => F[Folded[(Chain[E], A)]]
@@ -102,31 +103,37 @@ trait ActionTFunctions {
     }
 }
 
-trait ActionTInstances extends ActionNLowerPriorityInstances {
-  implicit def monadActionInstance[F[_], S, E, R](
-    implicit F: MonadError[F, R]
-  ): MonadAction[ActionT[F, S, E, ?], F, S, E, R] =
-    new ActionNMonadActionLiftInstance[F, S, E]()
-    with MonadAction[ActionT[F, S, E, ?], F, S, E, R] {
-      override def reject[A](r: R): ActionT[F, S, E, A] = liftF(F.raiseError(r))
-      override def handleErrorWith[A](
-        fa: ActionT[F, S, E, A]
-      )(f: R => ActionT[F, S, E, A]): ActionT[F, S, E, A] = ActionT { (s, u, es) =>
-        F.handleErrorWith(fa.unsafeRun(s, u, es)) { r =>
-          f(r).unsafeRun(s, u, es)
-        }
-      }
+trait ActionTInstances extends ActionTLowerPriorityInstances1 {
+  implicit def monadActionLiftRejectInstance[F[_], S, E, R](
+    implicit F0: MonadError[F, R]
+  ): MonadActionLiftReject[ActionT[F, S, E, ?], F, S, E, R] =
+    new MonadActionLiftReject[ActionT[F, S, E, ?], F, S, E, R]
+    with ActionTMonadActionLiftInstance[F, S, E] {
+      override protected implicit def F: Monad[F] = F0
+      override def reject[A](r: R): ActionT[F, S, E, A] = ActionT.liftF(F0.raiseError[A](r))
     }
 }
 
-trait ActionNLowerPriorityInstances {
-  abstract class ActionNMonadActionLiftInstance[F[_], S, E](implicit F: Monad[F])
-      extends MonadActionLift[ActionT[F, S, E, ?], F, S, E] {
+trait ActionTLowerPriorityInstances1 {
+  trait ActionTMonadActionLiftInstance[F[_], S, E]
+      extends ActionTMonadActionInstance[F, S, E]
+      with MonadActionLift[ActionT[F, S, E, ?], F, S, E] {
+    override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
+  }
+
+  implicit def monadActionLiftInstance[F[_], S, E](
+    implicit F0: Monad[F]
+  ): MonadActionLift[ActionT[F, S, E, ?], F, S, E] =
+    new ActionTMonadActionLiftInstance[F, S, E] {
+      override protected implicit def F: Monad[F] = F0
+    }
+
+  trait ActionTMonadActionInstance[F[_], S, E] extends MonadAction[ActionT[F, S, E, ?], S, E] {
+    protected implicit def F: Monad[F]
     override def read: ActionT[F, S, E, S] = ActionT.read
     override def append(e: E, es: E*): ActionT[F, S, E, Unit] =
       ActionT.append(NonEmptyChain(e, es: _*))
     override def reset: ActionT[F, S, E, Unit] = ActionT.reset
-    override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
     override def map[A, B](fa: ActionT[F, S, E, A])(f: A => B): ActionT[F, S, E, B] =
       fa.map(f)
 
@@ -154,8 +161,5 @@ trait ActionNLowerPriorityInstances {
       }
     override def pure[A](x: A): ActionT[F, S, E, A] = ActionT.pure(x)
   }
-  implicit def monadActionLiftInstance[F[_], S, E](
-    implicit F: Monad[F]
-  ): MonadActionLift[ActionT[F, S, E, ?], F, S, E] =
-    new ActionNMonadActionLiftInstance[F, S, E] {}
+
 }
