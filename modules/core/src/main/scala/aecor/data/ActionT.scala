@@ -5,7 +5,7 @@ import cats.{ Applicative, Functor, Monad, MonadError, ~> }
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import Folded.syntax._
-import aecor.{ MonadAction, MonadActionLift, MonadActionLiftReject }
+import aecor.{ MonadActionLift, MonadActionLiftReject }
 
 final class ActionT[F[_], S, E, A] private (
   val unsafeRun: (S, (S, E) => Folded[S], Chain[E]) => F[Folded[(Chain[E], A)]]

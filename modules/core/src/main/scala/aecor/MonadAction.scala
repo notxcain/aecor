@@ -37,26 +37,6 @@ trait MonadActionLift[I[_], F[_], S, E] extends MonadAction[I, S, E] {
   def liftF[A](fa: F[A]): I[A]
 }
 
-object MonadActionLift {
-  implicit def eitherTMonadActionLiftInstance[I[_]: Applicative, F[_], S, E, R](
-    implicit F: MonadActionLift[I, F, S, E],
-    eitherTMonad: Monad[EitherT[I, R, ?]]
-  ): MonadActionLift[EitherT[I, R, ?], F, S, E] =
-    new MonadActionLift[EitherT[I, R, ?], F, S, E] {
-      override def liftF[A](fa: F[A]): EitherT[I, R, A] = EitherT.right(F.liftF(fa))
-      override def read: EitherT[I, R, S] = EitherT.right(F.read)
-      override def append(es: E, other: E*): EitherT[I, R, Unit] =
-        EitherT.right(F.append(es, other: _*))
-      override def reset: EitherT[I, R, Unit] = EitherT.right(F.reset)
-      override def pure[A](x: A): EitherT[I, R, A] = EitherT.pure[I, R](x)
-      override def map[A, B](fa: EitherT[I, R, A])(f: A => B): EitherT[I, R, B] = fa.map(f)
-      override def flatMap[A, B](fa: EitherT[I, R, A])(f: A => EitherT[I, R, B]): EitherT[I, R, B] =
-        fa.flatMap(f)
-      override def tailRecM[A, B](a: A)(f: A => EitherT[I, R, Either[A, B]]): EitherT[I, R, B] =
-        eitherTMonad.tailRecM(a)(f)
-    }
-}
-
 trait MonadActionLiftReject[I[_], F[_], S, E, R]
     extends MonadActionLift[I, F, S, E]
     with MonadActionReject[I, S, E, R]
