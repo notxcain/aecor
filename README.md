@@ -140,7 +140,7 @@ final class SubscriptionActions[F[_]](
   implicit F: MonadAction[F, Option[SubscriptionState], SubscriptionEvent]
   ) extends Subscription[F] {
 
-  implicit F._ // import algebra functions
+  import F._ // import algebra functions
 
   def createSubscription(userId: String, productId: String, planId: String): F[Unit] =
     read.flatMap {
