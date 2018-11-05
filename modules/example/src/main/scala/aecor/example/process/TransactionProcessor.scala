@@ -37,7 +37,7 @@ final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: 
                          )
           _ <- creditResult match {
                 case Left(rejection) =>
-                  accounts(txn.fromAccountId.value).debit(
+                  accounts(txn.fromAccountId.value).credit(
                     AccountTransactionId(transactionId, AccountTransactionKind.Revert),
                     txn.amount
                   ) >> transactions(transactionId).fail(rejection.toString)
