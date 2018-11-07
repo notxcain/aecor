@@ -89,6 +89,14 @@ lazy val akkaPersistence = aecorModule(
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
+lazy val queueRuntime = aecorModule(
+  "queue-runtime",
+  "Aecor Runtime based on Queueing"
+).dependsOn(core)
+  .dependsOn(boopickleWireProtocol % "test->compile")
+  .settings(aecorSettings)
+  .settings(queueRuntimeSettings)
+
 lazy val akkaGeneric =
   aecorModule("akka-cluster-runtime", "Aecor Runtime based on Akka Cluster Sharding")
     .dependsOn(core)
@@ -176,6 +184,27 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
 )
 
+lazy val queueRuntimeSettings = commonProtobufSettings ++ Seq(
+  addCompilerPlugin(
+    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
+  ),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % "0.2.4"),
+  resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
+  libraryDependencies ++= Seq(
+    "co.fs2" %% "fs2-core" % fs2Version,
+    "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
+    "com.spinoco" %% "fs2-kafka" % "0.4.0-M2",
+    "com.typesafe.akka" %% "akka-stream-kafka" % "0.22",
+    "io.chrisdavenport" %% "log4cats-slf4j" % log4catsVersion,
+    "org.http4s" %% "http4s-blaze-server" % http4sVersion,
+    "org.http4s" %% "http4s-dsl" % http4sVersion,
+    "org.http4s" %% "http4s-blaze-client" % http4sVersion,
+    "org.http4s" %% "http4s-boopickle" % http4sVersion,
+    "ch.qos.logback" % "logback-classic" % logbackVersion % Test,
+    "org.http4s" %% "http4s-circe" % http4sVersion % Test,
+    "org.scalatest" %% "scalatest" % scalaTestVersion % Test
+  )
+)
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
