@@ -62,7 +62,7 @@ lazy val aecor = project
     distributedProcessing,
     example,
     schedule,
-    testKit,
+    testKitJVM,
     tests,
     benchmarks
   )
@@ -121,16 +121,25 @@ lazy val schedule = aecorModule("schedule", "Aecor Schedule")
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
-lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
-  .dependsOn(coreJVM)
+lazy val testKit = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file(s"modules/test-kit"))
+  .settings(
+    moduleName := "test-kit",
+    name := "Aecor Test Kit"
+  )
+  .dependsOn(core)
   .settings(aecorSettings)
   .settings(testKitSettings)
+
+lazy val testKitJS = testKit.js
+lazy val testKitJVM = testKit.jvm
 
 lazy val tests = aecorModule("tests", "Aecor Tests")
   .dependsOn(
     coreJVM,
     schedule,
-    testKit,
+    testKitJVM,
     akkaPersistence,
     distributedProcessing,
     boopickleWireProtocolJVM
@@ -230,9 +239,9 @@ lazy val exampleSettings = {
 
 lazy val testKitSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-mtl-core" % "0.4.0",
-    "com.github.julien-truffaut" %% "monocle-core" % monocleVersion,
-    "com.github.julien-truffaut" %% "monocle-macro" % monocleVersion
+    "org.typelevel" %%% "cats-mtl-core" % "0.4.0",
+    "com.github.julien-truffaut" %%% "monocle-core" % monocleVersion,
+    "com.github.julien-truffaut" %%% "monocle-macro" % monocleVersion
   )
 )
 
