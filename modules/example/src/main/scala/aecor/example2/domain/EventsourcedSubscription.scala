@@ -2,6 +2,7 @@
 //
 //import aecor.data.Folded.syntax._
 //import aecor.data._
+//import aecor.example2.domain.Subscription
 //import aecor.example2.domain.SubscriptionEvent._
 //import cats.implicits._
 //
@@ -17,7 +18,7 @@
 //    case SubscriptionCreated(_, _, _) =>
 //      impossible
 //    case SubscriptionPaused =>
-//      copy(status = Status.Paused).next
+//      subscription.copy(status = Status.Paused).next
 //    case SubscriptionResumed =>
 //      copy(status = Status.Active).next
 //    case SubscriptionCancelled =>
