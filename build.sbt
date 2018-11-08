@@ -1,13 +1,10 @@
+import sbtcrossproject.CrossPlugin.autoImport.{ CrossType, crossProject }
 import ReleaseTransformations._
 import sbtrelease.Version.Bump
 import pl.project13.scala.sbt._
+import sbtcrossproject.CrossProject
 
-lazy val buildSettings = inThisBuild(
-  Seq(
-    organization := "io.aecor",
-    scalaVersion := "2.12.4"
-  )
-)
+lazy val buildSettings = inThisBuild(Seq(organization := "io.aecor", scalaVersion := "2.12.4"))
 
 lazy val akkaVersion = "2.5.15"
 lazy val akkaPersistenceCassandraVersion = "0.61"
@@ -56,14 +53,16 @@ lazy val aecor = project
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .aggregate(
-    core,
-    boopickleWireProtocol,
+    coreJVM,
+    coreJS,
+    boopickleWireProtocolJVM,
+    boopickleWireProtocolJS,
     akkaPersistence,
     akkaGeneric,
     distributedProcessing,
     example,
     schedule,
-    testKit,
+    testKitJVM,
     tests,
     benchmarks
   )
@@ -72,80 +71,103 @@ def aecorModule(id: String, description: String): Project =
   Project(id, file(s"modules/$id"))
     .settings(moduleName := id, name := description)
 
-lazy val core = aecorModule("core", "Aecor Core")
+lazy val core = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file(s"modules/core"))
+  .settings(moduleName := "core", name := "Aecor Core")
   .settings(aecorSettings)
   .settings(coreSettings)
 
-lazy val boopickleWireProtocol =
-  aecorModule("boopickle-wire-protocol", "Aecor Boopickle Wire Protocol derivation")
-    .dependsOn(core)
-    .settings(aecorSettings)
-    .settings(boopickleWireProtocolSettings)
+lazy val coreJS = core.js
+lazy val coreJVM = core.jvm
+
+lazy val boopickleWireProtocol = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file(s"modules/boopickle-wire-protocol"))
+  .settings(
+    moduleName := "boopickle-wire-protocol",
+    name := "Aecor Boopickle Wire Protocol derivation"
+  )
+  .dependsOn(core)
+  .settings(aecorSettings)
+  .settings(boopickleWireProtocolSettings)
+
+lazy val boopickleWireProtocolJS = boopickleWireProtocol.js
+lazy val boopickleWireProtocolJVM = boopickleWireProtocol.jvm
 
 lazy val akkaPersistence = aecorModule(
   "akka-persistence-runtime",
   "Aecor Runtime based on Akka Cluster Sharding and Persistence"
-).dependsOn(core)
+).dependsOn(coreJVM)
   .settings(aecorSettings)
   .settings(akkaPersistenceSettings)
 
 lazy val akkaGeneric =
   aecorModule("akka-cluster-runtime", "Aecor Runtime based on Akka Cluster Sharding")
-    .dependsOn(core)
-    .dependsOn(boopickleWireProtocol % "test->compile")
+    .dependsOn(coreJVM)
+    .dependsOn(boopickleWireProtocolJVM % "test->compile")
     .settings(aecorSettings)
     .settings(commonTestSettings)
     .settings(akkaGenericSettings)
 
 lazy val distributedProcessing =
   aecorModule("distributed-processing", "Aecor Distributed Processing")
-    .dependsOn(core)
+    .dependsOn(coreJVM)
     .settings(aecorSettings)
     .settings(distributedProcessingSettings)
 
 lazy val schedule = aecorModule("schedule", "Aecor Schedule")
-  .dependsOn(akkaPersistence, distributedProcessing, boopickleWireProtocol)
+  .dependsOn(akkaPersistence, distributedProcessing, boopickleWireProtocolJVM)
   .settings(aecorSettings)
   .settings(scheduleSettings)
 
-lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
+lazy val testKit = crossProject(JSPlatform, JVMPlatform)
+  .crossType(CrossType.Pure)
+  .in(file(s"modules/test-kit"))
+  .settings(
+    moduleName := "test-kit",
+    name := "Aecor Test Kit"
+  )
   .dependsOn(core)
   .settings(aecorSettings)
   .settings(testKitSettings)
 
+lazy val testKitJS = testKit.js
+lazy val testKitJVM = testKit.jvm
+
 lazy val tests = aecorModule("tests", "Aecor Tests")
   .dependsOn(
-    core,
+    coreJVM,
     schedule,
-    testKit,
+    testKitJVM,
     akkaPersistence,
     distributedProcessing,
-    boopickleWireProtocol
+    boopickleWireProtocolJVM
   )
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = aecorModule("example", "Aecor Example Application")
-  .dependsOn(core, schedule, distributedProcessing, boopickleWireProtocol)
+  .dependsOn(coreJVM, schedule, distributedProcessing, boopickleWireProtocolJVM)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
 
 lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
-  .dependsOn(core)
+  .dependsOn(coreJVM)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .enablePlugins(JmhPlugin)
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
-    "com.chuusai" %% "shapeless" % shapelessVersion,
-    "org.typelevel" %% "cats-core" % catsVersion,
-    "org.typelevel" %% "cats-effect" % catsEffectVersion,
-    "org.scodec" %% "scodec-bits" % "1.1.6",
-    "org.scodec" %% "scodec-core" % "1.10.3"
+    "org.typelevel" %%% "cats-tagless-macros" % catsTaglessVersion,
+    "com.chuusai" %%% "shapeless" % shapelessVersion,
+    "org.typelevel" %%% "cats-core" % catsVersion,
+    "org.typelevel" %%% "cats-effect" % catsEffectVersion,
+    "org.scodec" %%% "scodec-bits" % "1.1.6",
+    "org.scodec" %%% "scodec-core" % "1.10.3"
   )
 )
 
@@ -156,8 +178,8 @@ lazy val boopickleWireProtocolSettings = Seq(
   sources in (Compile, doc) := Nil,
   scalacOptions in (Compile, console) := Seq(),
   libraryDependencies ++= Seq(
-    "io.suzaku" %% "boopickle" % boopickleVersion,
-    "org.scalameta" %% "scalameta" % scalametaVersion
+    "io.suzaku" %%% "boopickle" % boopickleVersion,
+    "org.scalameta" %%% "scalameta" % scalametaVersion
   )
 )
 
@@ -175,7 +197,6 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
 )
-
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
@@ -218,9 +239,9 @@ lazy val exampleSettings = {
 
 lazy val testKitSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-mtl-core" % "0.4.0",
-    "com.github.julien-truffaut" %% "monocle-core" % monocleVersion,
-    "com.github.julien-truffaut" %% "monocle-macro" % monocleVersion
+    "org.typelevel" %%% "cats-mtl-core" % "0.4.0",
+    "com.github.julien-truffaut" %%% "monocle-core" % monocleVersion,
+    "com.github.julien-truffaut" %%% "monocle-macro" % monocleVersion
   )
 )
 
