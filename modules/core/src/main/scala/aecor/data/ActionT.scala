@@ -6,6 +6,7 @@ import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import Folded.syntax._
 import aecor.{ MonadActionLift, MonadActionLiftReject }
+import cats.tagless.FunctorK
 
 final class ActionT[F[_], S, E, A] private (
   val unsafeRun: (S, (S, E) => Folded[S], Chain[E]) => F[Folded[(Chain[E], A)]]
@@ -53,6 +54,11 @@ final class ActionT[F[_], S, E, A] private (
 
   def product[B](that: ActionT[F, S, E, B])(implicit F: Monad[F]): ActionT[F, S, E, (A, B)] =
     flatMap(a => that.map(b => (a, b)))
+
+  def mapK[G[_]](m: F ~> G): ActionT[G, S, E, A] =
+    ActionT { (s, u, es) =>
+      m(unsafeRun(s, u, es))
+    }
 }
 
 object ActionT extends ActionTFunctions with ActionTInstances {
@@ -111,6 +117,11 @@ trait ActionTInstances extends ActionTLowerPriorityInstances1 {
     with ActionTMonadActionLiftInstance[F, S, E] {
       override protected implicit def F: Monad[F] = F0
       override def reject[A](r: R): ActionT[F, S, E, A] = ActionT.liftF(F0.raiseError[A](r))
+    }
+
+  implicit def actionTFunctorKInstance[S, E, A]: FunctorK[ActionT[?[_], S, E, A]] =
+    new FunctorK[ActionT[?[_], S, E, A]] {
+      def mapK[F[_], G[_]](a: ActionT[F, S, E, A])(f: ~>[F, G]): ActionT[G, S, E, A] = a.mapK(f)
     }
 }
 
