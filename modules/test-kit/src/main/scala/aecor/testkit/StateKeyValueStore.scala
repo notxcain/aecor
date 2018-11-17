@@ -1,6 +1,6 @@
 package aecor.testkit
 
-import aecor.util.KeyValueStore
+import aecor.runtime.KeyValueStore
 import cats.mtl.MonadState
 import monocle.Lens
 
@@ -20,5 +20,6 @@ class StateKeyValueStore[F[_]: MonadState[?[_], S], S, K, A](lens: Lens[S, Map[K
 
   override def getValue(key: K): F[Option[A]] =
     F.inspect(_.get(key))
-
+  override def deleteValue(key: K): F[Unit] =
+    F.modify(_ - key)
 }

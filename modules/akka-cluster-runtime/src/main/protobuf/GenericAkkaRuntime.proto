@@ -1,0 +1,12 @@
+syntax = "proto2";
+
+package aecor.runtime.akkageneric.serialization;
+option java_package = "aecor.runtime.akkageneric.serialization.msg";
+option optimize_for = SPEED;
+
+message KeyedCommand {
+    required string key = 1;
+    required bytes bytes = 2;
+}
+
+

@@ -1,14 +1,20 @@
 package aecor.tests.e2e
 
-import aecor.data.Folded.syntax._
+import aecor.MonadAction
 import aecor.data._
+import aecor.data.Folded.syntax._
 import aecor.macros.boopickleWireProtocol
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
 import io.circe.generic.auto._
+import cats.implicits._
+import boopickle.Default._
+import cats.tagless.autoFunctorK
+import cats.{ Eq, Monad }
 
 @boopickleWireProtocol
+@autoFunctorK
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
@@ -19,11 +25,12 @@ object Counter
 
 final case class CounterId(value: String) extends AnyVal
 
-sealed trait CounterEvent
+sealed abstract class CounterEvent extends Product with Serializable
 object CounterEvent {
   case object CounterIncremented extends CounterEvent
   case object CounterDecremented extends CounterEvent
   val tag: EventTag = EventTag("Counter")
+  implicit val eq: Eq[CounterEvent] = Eq.fromUniversalEquals
   implicit def encoder: PersistentEncoder[CounterEvent] =
     PersistentEncoderCirce.circePersistentEncoder[CounterEvent]
   implicit def decoder: PersistentDecoder[CounterEvent] =
@@ -38,20 +45,28 @@ case class CounterState(value: Long) {
 }
 
 object CounterBehavior {
-  def instance: EventsourcedBehavior[Counter, CounterState, CounterEvent] =
-    EventsourcedBehavior(CounterActions, CounterState(0), _.applyEvent(_))
+  def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent] =
+    EventsourcedBehavior(
+      CounterActions[ActionT[F, CounterState, CounterEvent, ?]],
+      CounterState(0),
+      _.applyEvent(_)
+    )
 }
 
-object CounterActions extends Counter[Action[CounterState, CounterEvent, ?]] {
+final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent])
+    extends Counter[F] {
 
-  override def increment: Action[CounterState, CounterEvent, Long] = Action { x =>
-    List(CounterIncremented) -> (x.value + 1)
-  }
+  import F._
 
-  override def decrement: Action[CounterState, CounterEvent, Long] = Action { x =>
-    List(CounterDecremented) -> (x.value - 1)
-  }
+  override def increment: F[Long] = append(CounterIncremented) >> read.map(_.value)
 
-  override def value: Action[CounterState, CounterEvent, Long] = Action(x => List.empty -> x.value)
+  override def decrement: F[Long] = append(CounterDecremented) >> read.map(_.value)
 
+  override def value: F[Long] = read.map(_.value)
+
+}
+
+object CounterActions {
+  def apply[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent]): Counter[F] =
+    new CounterActions[F]
 }

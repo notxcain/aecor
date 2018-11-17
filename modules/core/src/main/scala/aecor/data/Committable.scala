@@ -1,5 +1,6 @@
 package aecor.data
 
+import aecor.Has
 import cats.implicits._
 import cats.{ Applicative, Eval, Functor, Monad, Traverse }
 
@@ -12,6 +13,9 @@ final case class Committable[F[_], +A](commit: F[Unit], value: A) {
 }
 
 object Committable {
+  implicit def aecorHasInstance[F[_], A, B](implicit B: Has[B, A]): Has[Committable[F, B], A] =
+    B.contramap(_.value)
+
   implicit def catsMonadAndTraversInstance[F[_]: Applicative]
     : Monad[Committable[F, ?]] with Traverse[Committable[F, ?]] =
     new Monad[Committable[F, ?]] with Traverse[Committable[F, ?]] {

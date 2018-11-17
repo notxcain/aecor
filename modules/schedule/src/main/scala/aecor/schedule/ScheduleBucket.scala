@@ -3,8 +3,10 @@ package aecor.schedule
 import java.time.{ LocalDateTime, ZoneOffset }
 
 import aecor.macros.boopickleWireProtocol
+import cats.tagless.autoFunctorK
 
 @boopickleWireProtocol
+@autoFunctorK(autoDerivation = false)
 private[aecor] trait ScheduleBucket[F[_]] {
   def addScheduleEntry(entryId: String, correlationId: String, dueDate: LocalDateTime): F[Unit]
 

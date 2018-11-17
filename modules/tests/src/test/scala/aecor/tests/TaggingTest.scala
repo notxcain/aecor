@@ -18,5 +18,7 @@ class TaggingTest extends FunSuite with Matchers with GeneratorDrivenPropertyChe
     forAll { x: Int =>
       tagging.tags should contain(tagging.tag(x).head)
     }
+
+    tagging.tags.size shouldBe 10
   }
 }

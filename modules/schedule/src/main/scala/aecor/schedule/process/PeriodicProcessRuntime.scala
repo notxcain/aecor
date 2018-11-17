@@ -5,7 +5,7 @@ import aecor.util.effect._
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import akka.stream.scaladsl.{ Flow, Source }
+import akka.stream.scaladsl.Source
 import cats.effect.Effect
 
 import scala.collection.immutable._
@@ -32,6 +32,6 @@ class PeriodicProcessRuntime[F[_]: Effect](
 
   def run(system: ActorSystem): F[DistributedProcessing.KillSwitch[F]] =
     DistributedProcessing(system)
-      .start[F](s"$name-Process", Seq(AkkaStreamProcess[F](source, Flow[Unit])))
+      .start[F](s"$name-Process", List(AkkaStreamProcess[F](source)))
 
 }

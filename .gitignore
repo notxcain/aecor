@@ -79,3 +79,5 @@ project/.sbtboot/
 # Ensime
 .ensime
 .ensime_cache/
+
+.DS_Store

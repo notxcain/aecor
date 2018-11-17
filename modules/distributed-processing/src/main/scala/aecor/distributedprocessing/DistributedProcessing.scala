@@ -12,7 +12,6 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 
-import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 import aecor.util.effect._
 final class DistributedProcessing private (system: ActorSystem) {
@@ -25,16 +24,8 @@ final class DistributedProcessing private (system: ActorSystem) {
     *
     */
   def start[F[_]: Effect](name: String,
-                          processes: Seq[Process[F]],
-                          settings: DistributedProcessingSettings = DistributedProcessingSettings(
-                            minBackoff = 3.seconds,
-                            maxBackoff = 10.seconds,
-                            randomFactor = 0.2,
-                            shutdownTimeout = 10.seconds,
-                            numberOfShards = 100,
-                            heartbeatInterval = 2.seconds,
-                            clusterShardingSettings = ClusterShardingSettings(system)
-                          )): F[KillSwitch[F]] =
+                          processes: List[Process[F]],
+                          settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
     Effect[F].delay {
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
         DistributedProcessingWorker.props(processes),
@@ -87,3 +78,19 @@ final case class DistributedProcessingSettings(minBackoff: FiniteDuration,
                                                numberOfShards: Int,
                                                heartbeatInterval: FiniteDuration,
                                                clusterShardingSettings: ClusterShardingSettings)
+
+object DistributedProcessingSettings {
+  def default(clusterShardingSettings: ClusterShardingSettings): DistributedProcessingSettings =
+    DistributedProcessingSettings(
+      minBackoff = 3.seconds,
+      maxBackoff = 10.seconds,
+      randomFactor = 0.2,
+      shutdownTimeout = 10.seconds,
+      numberOfShards = 100,
+      heartbeatInterval = 2.seconds,
+      clusterShardingSettings = clusterShardingSettings
+    )
+
+  def default(system: ActorSystem): DistributedProcessingSettings =
+    default(ClusterShardingSettings(system))
+}
