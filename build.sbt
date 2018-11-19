@@ -1,47 +1,19 @@
 import ReleaseTransformations._
 import sbtrelease.Version.Bump
 import pl.project13.scala.sbt._
+import Dependencies.versions
 
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    scalaVersion := "2.11.12"
+    scalaVersion := "2.12.4"
   )
 )
-
-lazy val akkaVersion = "2.5.15"
-lazy val akkaPersistenceCassandraVersion = "0.61"
-
-lazy val catsVersion = "1.4.0"
-lazy val catsEffectVersion = "1.0.0"
-lazy val scodecVersion = "1.10.4"
-lazy val logbackVersion = "1.1.7"
-lazy val cassandraDriverExtrasVersion = "3.1.0"
-lazy val jsr305Version = "3.0.1"
-lazy val boopickleVersion = "1.3.0"
-lazy val monocleVersion = "1.5.0-cats"
-lazy val fs2Version = "1.0.0"
-lazy val log4catsVersion = "0.2.0-M1"
-
-lazy val scalaCheckVersion = "1.13.4"
-lazy val scalaTestVersion = "3.0.5"
-lazy val scalaCheckShapelessVersion = "1.1.4"
-lazy val shapelessVersion = "2.3.3"
-lazy val kindProjectorVersion = "0.9.7"
-lazy val scalametaVersion = "1.8.0"
-
-// Example dependencies
-
-lazy val circeVersion = "0.9.3"
-lazy val http4sVersion = "0.20.0-M1"
-lazy val scalametaParadiseVersion = "3.0.0-M10"
-
-lazy val catsTaglessVersion = "0.1.0"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
   scalacOptions ++= commonScalacOptions,
-  addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("org.spire-math" %% "kind-projector" % versions.kindProjector),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
     .filter(_ != "-Xfatal-warnings")
@@ -61,7 +33,6 @@ lazy val aecor = project
     akkaPersistence,
     akkaGeneric,
     distributedProcessing,
-    example,
     schedule,
     testKit,
     tests,
@@ -126,12 +97,6 @@ lazy val tests = aecorModule("tests", "Aecor Tests")
   .settings(noPublishSettings)
   .settings(testingSettings)
 
-lazy val example = aecorModule("example", "Aecor Example Application")
-  .dependsOn(core, schedule, distributedProcessing, boopickleWireProtocol)
-  .settings(aecorSettings)
-  .settings(noPublishSettings)
-  .settings(exampleSettings)
-
 lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
   .dependsOn(core)
   .settings(aecorSettings)
@@ -140,10 +105,10 @@ lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
-    "com.chuusai" %% "shapeless" % shapelessVersion,
-    "org.typelevel" %% "cats-core" % catsVersion,
-    "org.typelevel" %% "cats-effect" % catsEffectVersion,
+    "org.typelevel" %% "cats-tagless-macros" % versions.catsTagless,
+    "com.chuusai" %% "shapeless" % versions.shapeless,
+    "org.typelevel" %% "cats-core" % versions.cats,
+    "org.typelevel" %% "cats-effect" % versions.catsEffect,
     "org.scodec" %% "scodec-bits" % "1.1.6",
     "org.scodec" %% "scodec-core" % "1.10.3"
   )
@@ -151,109 +116,84 @@ lazy val coreSettings = Seq(
 
 lazy val boopickleWireProtocolSettings = Seq(
   addCompilerPlugin(
-    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
+    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
   ),
   sources in (Compile, doc) := Nil,
   scalacOptions in (Compile, console) := Seq(),
   libraryDependencies ++= Seq(
-    "io.suzaku" %% "boopickle" % boopickleVersion,
-    "org.scalameta" %% "scalameta" % scalametaVersion
+    "io.suzaku" %% "boopickle" % versions.boopickle,
+    "org.scalameta" %% "scalameta" % versions.scalameta
   )
 )
 
 lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   sources in (Compile, doc) := Nil,
   addCompilerPlugin(
-    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
+    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
   ),
   libraryDependencies ++= Seq(
-    "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
-    "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
+    "com.datastax.cassandra" % "cassandra-driver-extras" % versions.cassandraDriverExtras,
+    "com.google.code.findbugs" % "jsr305" % versions.jsr305 % Compile
   )
 )
 
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
-  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % versions.akka)
 )
 
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
-    "co.fs2" %% "fs2-core" % fs2Version,
-    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion
+    "co.fs2" %% "fs2-core" % versions.fs2,
+    "com.typesafe.akka" %% "akka-cluster-sharding" % versions.akka,
+    "com.typesafe.akka" %% "akka-persistence" % versions.akka,
+    "com.typesafe.akka" %% "akka-persistence-query" % versions.akka,
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % versions.akkaPersistenceCassandra
   )
 )
 
 lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
-  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % versions.akka)
 )
-
-lazy val exampleSettings = {
-  Seq(
-    addCompilerPlugin(
-      "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
-    ),
-    resolvers += Resolver.sonatypeRepo("releases"),
-    resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
-    libraryDependencies ++=
-      Seq(
-        "com.github.krasserm" %% "streamz-converter" % "0.10-M1",
-        "co.fs2" %% "fs2-core" % "1.0.0",
-        "org.typelevel" %% "cats-mtl-core" % "0.4.0",
-        "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
-        "org.http4s" %% "http4s-dsl" % http4sVersion,
-        "org.http4s" %% "http4s-blaze-server" % http4sVersion,
-        "org.http4s" %% "http4s-circe" % http4sVersion,
-        "io.circe" %% "circe-core" % circeVersion,
-        "io.circe" %% "circe-generic" % circeVersion,
-        "io.circe" %% "circe-parser" % circeVersion,
-        "io.circe" %% "circe-java8" % circeVersion,
-        "ch.qos.logback" % "logback-classic" % logbackVersion
-      )
-  )
-}
 
 lazy val testKitSettings = Seq(
   libraryDependencies ++= Seq(
     "org.typelevel" %% "cats-mtl-core" % "0.4.0",
-    "com.github.julien-truffaut" %% "monocle-core" % monocleVersion,
-    "com.github.julien-truffaut" %% "monocle-macro" % monocleVersion
+    "com.github.julien-truffaut" %% "monocle-core" % versions.monocle,
+    "com.github.julien-truffaut" %% "monocle-macro" % versions.monocle
   )
 )
 
 lazy val testingSettings = Seq(
   addCompilerPlugin(
-    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
+    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
   ),
   libraryDependencies ++= Seq(
-    "io.circe" %% "circe-core" % circeVersion,
-    "io.circe" %% "circe-generic" % circeVersion,
-    "io.circe" %% "circe-parser" % circeVersion,
-    "io.circe" %% "circe-java8" % circeVersion,
-    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-    "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
-    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
-    "org.typelevel" %% "cats-testkit" % catsVersion % Test
+    "io.circe" %% "circe-core" % versions.circe,
+    "io.circe" %% "circe-generic" % versions.circe,
+    "io.circe" %% "circe-parser" % versions.circe,
+    "io.circe" %% "circe-java8" % versions.circe,
+    "org.scalacheck" %% "scalacheck" % versions.scalaCheck % Test,
+    "org.scalatest" %% "scalatest" % versions.scalaTest % Test,
+    "com.typesafe.akka" %% "akka-testkit" % versions.akka % Test,
+    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % versions.akkaPersistenceCassandra % Test,
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % versions.scalaCheckShapeless % Test,
+    "org.typelevel" %% "cats-testkit" % versions.cats % Test
   )
 )
 
 lazy val commonTestSettings =
   Seq(
     addCompilerPlugin(
-      "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.patch
+      "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
     ),
     libraryDependencies ++= Seq(
-      "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
-      "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-      "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-      "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
-      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
-      "org.typelevel" %% "cats-testkit" % catsVersion % Test
+      "org.scalacheck" %% "scalacheck" % versions.scalaCheck % Test,
+      "org.scalatest" %% "scalatest" % versions.scalaTest % Test,
+      "com.typesafe.akka" %% "akka-testkit" % versions.akka % Test,
+      "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % versions.akkaPersistenceCassandra % Test,
+      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % versions.scalaCheckShapeless % Test,
+      "org.typelevel" %% "cats-testkit" % versions.cats % Test
     )
   )
 
@@ -307,11 +247,13 @@ lazy val publishSettings = Seq(
   },
   publishTo := {
     val nexus = "https://oss.sonatype.org/"
+    //val nexus = "https://api.bintray.com/aecor/aecor/"
     if (isSnapshot.value)
       Some("snapshots" at nexus + "content/repositories/snapshots")
     else
       Some("releases" at nexus + "service/local/staging/deploy/maven2")
   },
+  //credentials += Credentials(Path.userHome / ".sbt" / ".credentials"),
   autoAPIMappings := true,
   scmInfo := Some(
     ScmInfo(url("https://github.com/notxcain/aecor"), "scm:git:git@github.com:notxcain/aecor.git")

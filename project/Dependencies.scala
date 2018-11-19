@@ -1,40 +1,36 @@
-object Dependencies {
+import sbt.AutoPlugin
+
+
+object Dependencies extends AutoPlugin {
 
   object versions {
+    lazy val akka = "2.5.15"
+    lazy val akkaPersistenceCassandra = "0.61"
 
-    val akka = "2.5.18"
-    val akkaPersistenceCassandra = "0.61"
-    val cassandraDriverExtras = "3.1.0"
+    lazy val cats = "1.4.0"
+    lazy val catsEffect = "1.0.0"
+    lazy val scodec = "1.10.4"
+    lazy val logback = "1.1.7"
+    lazy val cassandraDriverExtras = "3.1.0"
+    lazy val jsr305 = "3.0.1"
+    lazy val boopickle = "1.3.0"
+    lazy val monocle = "1.5.0-cats"
+    lazy val fs2 = "1.0.0"
+    lazy val log4cats = "0.2.0-M1"
 
-    val cats = "1.4.0"
-    val catsEffect = "1.0.0"
-    val cats_mtl_core = "0.4.0"
-    val catsTagless = "0.2.0"
+    lazy val scalaCheck = "1.13.4"
+    lazy val scalaTest = "3.0.5"
+    lazy val scalaCheckShapeless = "1.1.4"
+    lazy val shapeless = "2.3.3"
+    lazy val kindProjector = "0.9.7"
+    lazy val scalameta = "1.8.0"
 
-    val monocle = "1.5.1-cats"
+    // Example dependencies
 
-    val shapeless = "2.3.3"
-    val kindProjector = "0.9.9"
+    lazy val circe = "0.9.3"
+    lazy val scalametaParadise = "3.0.0-M10"
 
-    val circe = "0.10.1"
+    lazy val catsTagless = "0.1.0"
 
-    val fs2 = "1.0.0"
-
-    val scodec = "1.10.3"
-    val scodec_bits = "1.1.7"
-    val logback = "1.2.3"
-    val log4cats = "0.2.0-M1"
-
-    val jsr305 = "3.0.1"
-    val boopickle = "1.3.0"
-
-    val scalameta = "1.8.0"
-    val scalametaParadise = "3.0.0-M11"
-
-    // Test dependencies
-
-    val scalaCheck = "1.13.4"
-    val scalaTest = "3.0.5"
-    val scalaCheckShapeless = "1.1.8"
   }
 }
