@@ -11,19 +11,22 @@ trait AccountService[F[_]] {
   def openAccount(accountId: AccountId, checkBalance: Boolean): F[Either[String, Unit]]
 }
 
-
 object AccountRoute {
 
-  class Builder[F[_]: Sync](service: AccountService[F]) extends Http4sDsl[F] with CirceEntityDecoder {
+  class Builder[F[_]: Sync](service: AccountService[F])
+      extends Http4sDsl[F]
+      with CirceEntityDecoder {
     def routes: HttpRoutes[F] =
       HttpRoutes.of[F] {
         case req @ POST -> Root / "accounts" =>
           for {
             openAccountRequest <- req.as[OpenAccountRequest]
-            resp <- service.openAccount(openAccountRequest.accountId, openAccountRequest.checkBalance).flatMap {
-              case Left(e)       => BadRequest(e.toString)
-              case Right(_) => Ok("")
-            }
+            resp <- service
+                     .openAccount(openAccountRequest.accountId, openAccountRequest.checkBalance)
+                     .flatMap {
+                       case Left(e)  => BadRequest(e.toString)
+                       case Right(_) => Ok("")
+                     }
           } yield resp
       }
   }

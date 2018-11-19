@@ -4,9 +4,9 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
 import cats.implicits._
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{BeforeAndAfterAll, FunSuiteLike, Matchers}
+import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike, Matchers }
 
 import scala.concurrent.duration._
 
@@ -34,9 +34,9 @@ class GenericRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-
   def runCounters(name: String): IO[CounterId => Counter[IO]] =
-    GenericAkkaRuntime(system).runBehavior[CounterId, Counter, IO](name, (_: CounterId) => Counter.inmem[IO])
+    GenericAkkaRuntime(system)
+      .runBehavior[CounterId, Counter, IO](name, (_: CounterId) => Counter.inmem[IO])
 
   test("routing") {
     val program = for {

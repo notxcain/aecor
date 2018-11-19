@@ -3,12 +3,7 @@ import sbtrelease.Version.Bump
 import pl.project13.scala.sbt._
 import Dependencies.versions
 
-lazy val buildSettings = inThisBuild(
-  Seq(
-    organization := "io.aecor",
-    scalaVersion := "2.12.4"
-  )
-)
+lazy val buildSettings = inThisBuild(Seq(organization := "io.aecor", scalaVersion := "2.12.4"))
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
@@ -85,14 +80,7 @@ lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
   .settings(testKitSettings)
 
 lazy val tests = aecorModule("tests", "Aecor Tests")
-  .dependsOn(
-    core,
-    schedule,
-    testKit,
-    akkaPersistence,
-    distributedProcessing,
-    boopickleWireProtocol
-  )
+  .dependsOn(core, schedule, testKit, akkaPersistence, distributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
@@ -140,7 +128,6 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % versions.akka)
 )
-
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(

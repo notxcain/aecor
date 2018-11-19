@@ -2,15 +2,16 @@ package aecor.example.process
 
 import aecor.Has
 import aecor.Has.syntax._
-import aecor.example.account.{AccountTransactionId, AccountTransactionKind, Accounts}
+import aecor.example.account.{ AccountTransactionId, AccountTransactionKind, Accounts }
 import aecor.example.transaction.Algebra.TransactionInfo
 import aecor.example.transaction.transaction.Transactions
-import aecor.example.transaction.{From, TransactionEvent, TransactionId}
+import aecor.example.transaction.{ From, TransactionEvent, TransactionId }
 import cats.MonadError
 import cats.implicits._
 
-
-final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: Accounts[F])(implicit F: MonadError[F, Throwable]) {
+final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: Accounts[F])(
+  implicit F: MonadError[F, Throwable]
+) {
   def process[A: Has[?, TransactionId]: Has[?, TransactionEvent]](a: A): F[Unit] = {
     val transactionId = a.get[TransactionId]
     a.get[TransactionEvent] match {
@@ -28,9 +29,9 @@ final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: 
       case TransactionEvent.TransactionAuthorized =>
         for {
           txn <- transactions(transactionId).getInfo.flatMap {
-            case Right(x) => x.pure[F]
-            case Left(r) => F.raiseError[TransactionInfo](TransactionProcessor.Failure(r))
-          }
+                  case Right(x) => x.pure[F]
+                  case Left(r)  => F.raiseError[TransactionInfo](TransactionProcessor.Failure(r))
+                }
           creditResult <- accounts(txn.toAccountId.value).credit(
                            AccountTransactionId(transactionId, AccountTransactionKind.Normal),
                            txn.amount
@@ -50,13 +51,13 @@ final class TransactionProcessor[F[_]](transactions: Transactions[F], accounts: 
     }
   }
 
-
 }
 
 object TransactionProcessor {
 
   final case class Failure(description: String) extends RuntimeException(description)
 
-  def apply[F[_]: MonadError[?[_], Throwable]](transactions: Transactions[F], accounts: Accounts[F]): TransactionProcessor[F] =
+  def apply[F[_]: MonadError[?[_], Throwable]](transactions: Transactions[F],
+                                               accounts: Accounts[F]): TransactionProcessor[F] =
     new TransactionProcessor(transactions, accounts)
 }
