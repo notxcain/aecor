@@ -97,8 +97,8 @@ lazy val coreSettings = Seq(
     "com.chuusai" %% "shapeless" % versions.shapeless,
     "org.typelevel" %% "cats-core" % versions.cats,
     "org.typelevel" %% "cats-effect" % versions.catsEffect,
-    "org.scodec" %% "scodec-bits" % "1.1.6",
-    "org.scodec" %% "scodec-core" % "1.10.3"
+    "org.scodec" %% "scodec-bits" % versions.scodec_bits,
+    "org.scodec" %% "scodec-core" % versions.scodec
   )
 )
 
@@ -145,7 +145,7 @@ lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
 
 lazy val testKitSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-mtl-core" % "0.4.0",
+    "org.typelevel" %% "cats-mtl-core" % versions.cats_mtl_core,
     "com.github.julien-truffaut" %% "monocle-core" % versions.monocle,
     "com.github.julien-truffaut" %% "monocle-macro" % versions.monocle
   )
