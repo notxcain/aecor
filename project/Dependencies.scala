@@ -1,7 +1,4 @@
-import sbt.AutoPlugin
-
-
-object Dependencies extends AutoPlugin {
+object Dependencies {
 
   object versions {
     lazy val akka = "2.5.15"

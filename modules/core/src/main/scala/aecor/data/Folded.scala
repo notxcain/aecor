@@ -56,10 +56,10 @@ object Folded extends FoldedInstances {
 }
 
 trait FoldedInstances {
-  implicit val aecorDataInstancesForFolded
-    : Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded] with Alternative[
-      Folded
-    ] =
+  implicit val aecorDataInstancesForFolded: Traverse[Folded]
+    with MonadError[Folded, Unit]
+    with CoflatMap[Folded]
+    with Alternative[Folded] =
     new Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded]
     with Alternative[Folded] {
 

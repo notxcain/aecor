@@ -4,10 +4,10 @@ import aecor.data.Tagging
 import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FunSuiteLike, Matchers}
-import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
+import org.scalatest.{ FunSuiteLike, Matchers }
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import cats.effect.IO

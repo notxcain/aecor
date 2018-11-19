@@ -3,7 +3,6 @@ package aecor.data
 /**
   * Existential pair of type constructors.
   */
-
 sealed abstract class PairE[F[_], G[_]] {
   type A
   def first: F[A]

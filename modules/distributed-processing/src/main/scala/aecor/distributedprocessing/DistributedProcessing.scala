@@ -25,7 +25,8 @@ final class DistributedProcessing private (system: ActorSystem) {
     */
   def start[F[_]: Effect](name: String,
                           processes: List[Process[F]],
-                          settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
+                          settings: DistributedProcessingSettings =
+                            DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
     Effect[F].delay {
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
         DistributedProcessingWorker.props(processes),
