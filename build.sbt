@@ -98,7 +98,11 @@ lazy val coreSettings = Seq(
     "org.typelevel" %% "cats-core" % versions.cats,
     "org.typelevel" %% "cats-effect" % versions.catsEffect,
     "org.scodec" %% "scodec-bits" % versions.scodec_bits,
-    "org.scodec" %% "scodec-core" % versions.scodec
+    "org.scodec" %% "scodec-core" % versions.scodec,
+    "io.circe" %% "circe-core" % versions.circe,
+    "io.circe" %% "circe-generic" % versions.circe,
+    "io.circe" %% "circe-parser" % versions.circe,
+    "io.circe" %% "circe-java8" % versions.circe,
   )
 )
 
