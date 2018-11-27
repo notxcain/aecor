@@ -1,6 +1,6 @@
 package aecor.runtime.akkageneric
 
-import aecor.encoding.{ KeyDecoder, KeyEncoder }
+import aecor.encoding.{KeyDecoder, KeyEncoder}
 import aecor.macros.boopickleWireProtocol
 import boopickle.Default._
 import cats.effect.Sync
@@ -8,8 +8,8 @@ import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.tagless.autoFunctorK
 
+@autoFunctorK(false)
 @boopickleWireProtocol
-@autoFunctorK
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
