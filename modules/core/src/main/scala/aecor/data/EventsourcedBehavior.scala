@@ -1,7 +1,7 @@
 package aecor.data
 
 import aecor.Has
-import cats.Monad
+import cats.{ Monad, ~> }
 import cats.data.EitherT
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
@@ -16,9 +16,12 @@ final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F,
       create,
       (s, e) => update(s, e.event)
     )
+
+  def mapK[G[_]](m: F ~> G)(implicit M: FunctorK[M]): EventsourcedBehavior[M, G, S, E] =
+    copy(actions.mapK(λ[ActionT[F, S, E, ?] ~> ActionT[G, S, E, ?]](_.mapK(m))))
 }
 
-object EventsourcedBehavior {
+object EventsourcedBehavior extends EventsourcedBehaviourIntances {
   def optionalRejectable[M[_[_]], F[_], State, Event, Rejection](
     actions: M[EitherT[ActionT[F, Option[State], Event, ?], Rejection, ?]],
     create: Event => Folded[State],
@@ -37,6 +40,16 @@ object EventsourcedBehavior {
       Option.empty[State],
       (os, e) => os.map(s => update(s, e)).getOrElse(create(e)).map(Some(_))
     )
+}
+
+trait EventsourcedBehaviourIntances {
+  implicit def eventsourcedBehaviourFunctorKInstance[M[_[_]]: FunctorK, S, E]
+    : FunctorK[EventsourcedBehavior[M, ?[_], S, E]] =
+    new FunctorK[EventsourcedBehavior[M, ?[_], S, E]] {
+      def mapK[F[_], G[_]](a: EventsourcedBehavior[M, F, S, E])(
+        f: F ~> G
+      ): EventsourcedBehavior[M, G, S, E] = a.mapK(f)
+    }
 }
 
 final case class Enriched[M, E](metadata: M, event: E)
