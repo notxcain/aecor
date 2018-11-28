@@ -20,6 +20,7 @@ import aecor.encoding.syntax._
 import scala.concurrent.duration.FiniteDuration
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
+import cats.syntax.apply._
 
 private[aecor] object GenericAkkaRuntimeActor {
   def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
@@ -73,6 +74,7 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
       M.decoder
         .decodeValue(opBytes) match {
         case Attempt.Successful(pair) =>
+          log.debug("[{}] [{}] Received invocation [{}]", self.path, key, pair.first.toString)
           performInvocation(actions, pair.first, pair.second)
         case Attempt.Failure(cause) =>
           val decodingError = new IllegalArgumentException(cause.messageWithContext)
@@ -96,7 +98,10 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
     invocation
       .run(actions)
       .toIO
-      .flatMap(a => resultEncoder.encode(a).lift[IO])
+      .flatMap(a =>
+        IO(log.debug("[{}] [{}] Invocation result [{}]", self.path, key, a.toString)) *>
+          resultEncoder.encode(a).lift[IO]
+      )
       .map { responseBytes =>
         Result(opId, Success(responseBytes))
       }
