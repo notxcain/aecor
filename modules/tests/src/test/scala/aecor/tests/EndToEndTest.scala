@@ -133,7 +133,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       _ <- second.increment
     } yield ()
 
-    val Right((state, _)) = program.value
+    val Right((state, _)) = program
       .run(
         SpecState(
           StateEventJournal.State.init,

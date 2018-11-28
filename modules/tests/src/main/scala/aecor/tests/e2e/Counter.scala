@@ -14,7 +14,7 @@ import cats.tagless.autoFunctorK
 import cats.{ Eq, Monad }
 
 @boopickleWireProtocol
-@autoFunctorK
+@autoFunctorK(false)
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
