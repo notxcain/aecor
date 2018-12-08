@@ -3,7 +3,12 @@ import sbtrelease.Version.Bump
 import pl.project13.scala.sbt._
 import Dependencies.versions
 
-lazy val buildSettings = inThisBuild(Seq(organization := "io.aecor", scalaVersion := "2.12.4"))
+lazy val buildSettings = inThisBuild(
+  Seq(
+    organization := "io.aecor",
+    scalaVersion := "2.12.7"
+  )
+)
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
@@ -11,8 +16,16 @@ lazy val commonSettings = Seq(
   addCompilerPlugin("org.spire-math" %% "kind-projector" % versions.kindProjector),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
-    .filter(_ != "-Xfatal-warnings")
+    .filter(_ != "-Xfatal-warnings"),
 ) ++ warnUnusedImport
+
+lazy val macroSettings = Seq(
+  scalacOptions += "-Xplugin-require:macroparadise",
+  addCompilerPlugin(
+    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.full
+  ),
+  sources in (Compile, doc) := Nil // macroparadise doesn't work with scaladoc yet.
+)
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
 
@@ -60,6 +73,7 @@ lazy val akkaGeneric =
     .dependsOn(core)
     .dependsOn(boopickleWireProtocol % "test->compile")
     .settings(aecorSettings)
+    .settings(macroSettings)
     .settings(commonTestSettings)
     .settings(akkaGenericSettings)
 
@@ -98,36 +112,23 @@ lazy val coreSettings = Seq(
     "org.typelevel" %% "cats-core" % versions.cats,
     "org.typelevel" %% "cats-effect" % versions.catsEffect,
     "org.scodec" %% "scodec-bits" % versions.scodec_bits,
-    "org.scodec" %% "scodec-core" % versions.scodec,
-    "io.circe" %% "circe-core" % versions.circe,
-    "io.circe" %% "circe-generic" % versions.circe,
-    "io.circe" %% "circe-parser" % versions.circe,
-    "io.circe" %% "circe-java8" % versions.circe,
+    "org.scodec" %% "scodec-core" % versions.scodec
   )
 )
 
 lazy val boopickleWireProtocolSettings = Seq(
-  addCompilerPlugin(
-    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
-  ),
-  sources in (Compile, doc) := Nil,
-  scalacOptions in (Compile, console) := Seq(),
   libraryDependencies ++= Seq(
     "io.suzaku" %% "boopickle" % versions.boopickle,
     "org.scalameta" %% "scalameta" % versions.scalameta
   )
-)
+) ++ macroSettings
 
 lazy val scheduleSettings = commonProtobufSettings ++ Seq(
-  sources in (Compile, doc) := Nil,
-  addCompilerPlugin(
-    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
-  ),
   libraryDependencies ++= Seq(
     "com.datastax.cassandra" % "cassandra-driver-extras" % versions.cassandraDriverExtras,
     "com.google.code.findbugs" % "jsr305" % versions.jsr305 % Compile
   )
-)
+) ++ macroSettings
 
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % versions.akka)
@@ -156,9 +157,6 @@ lazy val testKitSettings = Seq(
 )
 
 lazy val testingSettings = Seq(
-  addCompilerPlugin(
-    "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
-  ),
   libraryDependencies ++= Seq(
     "io.circe" %% "circe-core" % versions.circe,
     "io.circe" %% "circe-generic" % versions.circe,
@@ -171,13 +169,10 @@ lazy val testingSettings = Seq(
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % versions.scalaCheckShapeless % Test,
     "org.typelevel" %% "cats-testkit" % versions.cats % Test
   )
-)
+) ++ macroSettings
 
 lazy val commonTestSettings =
   Seq(
-    addCompilerPlugin(
-      "org.scalameta" % "paradise" % versions.scalametaParadise cross CrossVersion.patch
-    ),
     libraryDependencies ++= Seq(
       "org.scalacheck" %% "scalacheck" % versions.scalaCheck % Test,
       "org.scalatest" %% "scalatest" % versions.scalaTest % Test,
