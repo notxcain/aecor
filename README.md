@@ -28,6 +28,10 @@ addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M10" cross CrossVersion.
 libraryDependencies += "io.aecor" %% "akka-peristence-runtime" % "x.y.z" // See current version on the badge above
 ```
 
+### Media
+
+- Amazing [series](https://pavkin.ru/aecor-intro) on Aecor by [Vladimir Pavkin](https://github.com/vpavkin)
+
 ### Entity Behavior Definition
 
 In this short guide I'll show you how to define and deploy your first event sourced behavior on runtime backed by Akka Persistence and Akka Cluster Sharding.
