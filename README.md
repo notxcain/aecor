@@ -22,9 +22,9 @@ The name `Aecor` (_lat. ocean_) is inspired by a vision of modern distributed ap
 To start using Aecor Akka Persistence Runtime add the following to your `build.sbt` file:
 
 ```scala
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.7"
 scalacOptions += "-Ypartial-unification"
-addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M10" cross CrossVersion.full)
+addCompilerPlugin("org.scalameta" % "paradise" % "3.0.0-M11" cross CrossVersion.full)
 libraryDependencies += "io.aecor" %% "akka-persistence-runtime" % "x.y.z" // See current version on the badge above
 ```
 
