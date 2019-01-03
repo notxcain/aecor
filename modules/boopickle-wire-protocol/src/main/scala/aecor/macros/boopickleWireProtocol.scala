@@ -47,9 +47,10 @@ object BoopickleWireProtocolMacro {
 
     val unifiedInvocation = t"({type X[A] = aecor.encoding.WireProtocol.Invocation[$unifiedBase, A]})#X"
 
+    val instanceName = Term.Name(s"aecorWireProtocol${typeName.value}")
     val companionStats: Seq[Stat] = Seq(
       q"""
-        implicit def aecorWireProtocol[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase]  =
+        implicit def $instanceName[..$abstractParams]: aecor.encoding.WireProtocol[$unifiedBase]  =
          new aecor.encoding.WireProtocol[$unifiedBase] {
 
             final val encoder = new ${Ctor.Name(typeName.value)}[..$abstractTypes, aecor.encoding.WireProtocol.Encoded] {
