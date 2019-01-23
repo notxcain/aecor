@@ -2,7 +2,8 @@ package aecor.testkit
 
 import aecor.data.{ EventsourcedBehavior, _ }
 import aecor.encoding.WireProtocol
-import aecor.encoding.WireProtocol.{ Encoded, Invocation }
+import aecor.encoding.WireProtocol.Encoded
+import aecor.encoding.syntax._
 import aecor.runtime.Eventsourced._
 import aecor.runtime.{ EventJournal, Eventsourced }
 import cats.data.{ EitherT, StateT }
@@ -13,7 +14,6 @@ import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
 import cats.{ Monad, MonadError, ~> }
 import monocle.Lens
-import aecor.encoding.syntax._
 
 import scala.collection.immutable._
 
@@ -24,14 +24,6 @@ object E2eSupport {
     journal: EventJournal[F, K, E]
   ): K => F[M[F]] =
     Eventsourced[M, F, S, E, K](behavior, journal)
-
-  trait ReifiedInvocations[M[_[_]]] {
-    def invocations: M[Invocation[M, ?]]
-  }
-
-  object ReifiedInvocations {
-    def apply[M[_[_]]](implicit M: ReifiedInvocations[M]): ReifiedInvocations[M] = M
-  }
 
   final class Runtime[F[_]] {
     def deploy[K, M[_[_]]: FunctorK](

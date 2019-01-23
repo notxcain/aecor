@@ -49,10 +49,10 @@ lazy val commonSettings = Seq(
 ) ++ warnUnusedImport
 
 lazy val macroSettings = Seq(
-  scalacOptions += "-Xplugin-require:macroparadise",
+    scalacOptions += "-Xplugin-require:macroparadise",
   addCompilerPlugin(
     "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.full
-  ),
+    ),
   sources in (Compile, doc) := Nil // macroparadise doesn't work with scaladoc yet.
 )
 

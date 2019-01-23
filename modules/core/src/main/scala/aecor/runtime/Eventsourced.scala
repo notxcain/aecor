@@ -1,27 +1,23 @@
 package aecor.runtime
 
 import aecor.data._
-import aecor.runtime.eventsourced.DefaultActionRunner
+import aecor.runtime.eventsourced.StateStrategy
+import cats.Applicative
 import cats.effect.Sync
 import cats.implicits._
 import cats.tagless.FunctorK
-import cats.tagless.syntax.functorK._
 
 object Eventsourced {
   def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     entityBehavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
-    snapshotting: Option[Snapshotting[F, K, S]] = Option.empty
+    snapshotting: Option[Snapshotting[F, K, S]] = none
   ): K => F[M[F]] = { key =>
-    for {
-      actionRunner <- DefaultActionRunner.create(
-                       key,
-                       entityBehavior.create,
-                       entityBehavior.update,
-                       journal,
-                       snapshotting
-                     )
-    } yield entityBehavior.actions.mapK(actionRunner)
+    StateStrategy
+      .basic[F, K, S, E](key, journal)
+      .withSnapshotting(snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S]))
+      .withInmemCache
+      .map(_.useBehavior(entityBehavior))
   }
 
   sealed abstract class Entities[K, M[_[_]], F[_]] {
@@ -43,16 +39,49 @@ object Eventsourced {
       }
   }
 
-  final case class Snapshotting[F[_], K, S](snapshotEach: Long,
-                                            store: KeyValueStore[F, K, InternalState[S]])
-  type EntityKey = String
-  final case class InternalState[S](entityState: S, version: Long) {
-    def withEntityState(s: S): InternalState[S] = copy(entityState = s)
+  final class SnapshotEach[F[_]: Applicative, K, S](interval: Long,
+                                                    store: KeyValueStore[F, K, Versioned[S]])
+      extends Snapshotting[F, K, S] {
+    def snapshotIfNeeded(key: K, currentVersion: Long, nextState: Versioned[S]): F[Unit] =
+      if (nextState.version % interval == 0 || ((currentVersion / interval) - (nextState.version / interval)) > 0)
+        store.setValue(key, nextState)
+      else
+        ().pure[F]
+    override def load(k: K): F[Option[Versioned[S]]] =
+      store.getValue(k)
   }
+
+  final class NoSnapshot[F[_]: Applicative, K, S] extends Snapshotting[F, K, S] {
+    override def snapshotIfNeeded(key: K, currentVersion: Long, nextState: Versioned[S]): F[Unit] =
+      ().pure[F]
+    override def load(k: K): F[Option[Versioned[S]]] =
+      none[Versioned[S]].pure[F]
+  }
+
+  trait Snapshotting[F[_], K, S] {
+    def snapshotIfNeeded(key: K, currentVersion: Long, nextState: Versioned[S]): F[Unit]
+    def load(k: K): F[Option[Versioned[S]]]
+  }
+
+  object Snapshotting {
+    def snapshotEach[F[_]: Applicative, K, S](
+      interval: Long,
+      store: KeyValueStore[F, K, Versioned[S]]
+    ): Snapshotting[F, K, S] =
+      new SnapshotEach(interval, store)
+
+    def noSnapshot[F[_]: Applicative, K, S]: Snapshotting[F, K, S] = new NoSnapshot
+  }
+
+  final case class Versioned[A](value: A, version: Long) {
+    def withValue(s: A): Versioned[A] = copy(value = s)
+  }
+
+  type EntityKey = String
 
   sealed abstract class BehaviorFailure extends Throwable with Product with Serializable
   object BehaviorFailure {
-    def illegalFold(entityId: EntityKey): BehaviorFailure = IllegalFold(entityId)
+    def illegalFold(entityKey: EntityKey): BehaviorFailure = IllegalFold(entityKey)
     final case class IllegalFold(entityKey: EntityKey) extends BehaviorFailure
   }
 }
