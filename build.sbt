@@ -28,6 +28,7 @@ lazy val scalaTestVersion = "3.0.5"
 lazy val scalaCheckShapelessVersion = "1.1.8"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.9"
+lazy val betterMonadicForVersion = "0.3.0-M4"
 lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
@@ -43,6 +44,7 @@ lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
     .filter(_ != "-Xfatal-warnings"),

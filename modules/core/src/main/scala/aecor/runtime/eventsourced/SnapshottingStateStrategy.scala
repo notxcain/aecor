@@ -1,5 +1,5 @@
 package aecor.runtime.eventsourced
-import aecor.data.Folded
+import aecor.data.ActionT
 import aecor.runtime.Eventsourced.{ Snapshotting, Versioned }
 import cats.Monad
 import cats.data.NonEmptyChain
@@ -11,20 +11,21 @@ final class SnapshottingStateStrategy[F[_]: Monad, K, S, E](snapshotting: Snapsh
     extends StateStrategy[F, K, S, E] {
 
   override val key: K = inner.key
-  override def getState(initial: Versioned[S],
-                        fold: (Versioned[S], E) => Folded[Versioned[S]]): F[Versioned[S]] =
+
+  override def getState(initial: Versioned[S]): F[Versioned[S]] =
     for {
       effectiveInitial <- snapshotting.load(key).map(_.getOrElse(initial))
-      out <- inner.getState(effectiveInitial, fold)
+      out <- inner.getState(effectiveInitial)
     } yield out
 
-  override def updateState(currentVersion: Long,
-                           nextState: Versioned[S],
-                           es: NonEmptyChain[E]): F[Unit] =
+  override def updateState(current: Versioned[S], es: NonEmptyChain[E]): F[Versioned[S]] =
     for {
-      _ <- inner.updateState(currentVersion, nextState, es)
-      _ <- snapshotting.snapshotIfNeeded(key, currentVersion, nextState)
-    } yield ()
+      next <- inner.updateState(current, es)
+      _ <- snapshotting
+            .snapshotIfNeeded(key, current.version, next)
+    } yield next
+
+  override def run[A](action: ActionT[F, S, E, A]): F[A] = inner.run(action)
 
   def withInmemCache(implicit F: Sync[F]): F[InMemCachingStateStrategy[F, K, S, E]] =
     InMemCachingStateStrategy.create(this)

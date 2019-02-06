@@ -8,16 +8,15 @@ import cats.implicits._
 import cats.tagless.FunctorK
 
 object Eventsourced {
-  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
-    entityBehavior: EventsourcedBehavior[M, F, S, E],
-    journal: EventJournal[F, K, E],
-    snapshotting: Option[Snapshotting[F, K, S]] = none
-  ): K => F[M[F]] = { key =>
+  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
+                                                    journal: EventJournal[F, K, E],
+                                                    snapshotting: Option[Snapshotting[F, K, S]] =
+                                                      none): K => F[M[F]] = { key =>
     StateStrategy
-      .basic[F, K, S, E](key, journal)
+      .basic[F, K, S, E](key, behavior.initial, behavior.update, journal)
       .withSnapshotting(snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S]))
       .withInmemCache
-      .map(_.useBehavior(entityBehavior))
+      .map(_.runActions(behavior.actions))
   }
 
   sealed abstract class Entities[K, M[_[_]], F[_]] {
