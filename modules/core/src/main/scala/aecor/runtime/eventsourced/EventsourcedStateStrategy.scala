@@ -8,7 +8,7 @@ import cats.data.NonEmptyChain
 import cats.effect.Sync
 import cats.implicits._
 
-final class BasicStateStrategy[F[_], K, S, E](
+final class EventsourcedStateStrategy[F[_], K, S, E](
   val key: K,
   initial: S,
   update: (S, E) => Folded[S],
@@ -56,12 +56,12 @@ final class BasicStateStrategy[F[_], K, S, E](
     InMemCachingStateStrategy.create(this)
 }
 
-object BasicStateStrategy {
+object EventsourcedStateStrategy {
   def apply[F[_], K, S, E](
     key: K,
     initial: S,
     update: (S, E) => Folded[S],
     journal: EventJournal[F, K, E]
-  )(implicit F: MonadError[F, Throwable]): BasicStateStrategy[F, K, S, E] =
-    new BasicStateStrategy(key, initial, update, journal)
+  )(implicit F: MonadError[F, Throwable]): EventsourcedStateStrategy[F, K, S, E] =
+    new EventsourcedStateStrategy(key, initial, update, journal)
 }
