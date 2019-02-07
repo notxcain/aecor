@@ -13,6 +13,7 @@ final class InMemCachingStateStrategy[F[_]: Monad, K, S, E] private (
 ) extends StateStrategy[F, K, S, E] {
 
   override val key: K = inner.key
+
   override def getState(initial: Versioned[S]): F[Versioned[S]] =
     cache.get.flatMap {
       case Some(s) => s.pure[F]

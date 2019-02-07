@@ -18,9 +18,10 @@ final class BasicStateStrategy[F[_], K, S, E](
 
   override def getState(initial: Versioned[S]): F[Versioned[S]] =
     journal
-      .foldById(key, initial.version + 1, initial) { (s: Versioned[S], e: E) =>
-        update(s.value, e)
-          .map(Versioned(_, s.version + 1))
+      .foldById(key, initial.version + 1, initial) {
+        case (Versioned(value, version), event) =>
+          update(value, event)
+            .map(Versioned(_, version + 1))
       }
       .flatMap(unfold)
 

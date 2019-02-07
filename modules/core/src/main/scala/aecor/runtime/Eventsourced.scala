@@ -13,7 +13,7 @@ object Eventsourced {
                                                     snapshotting: Option[Snapshotting[F, K, S]] =
                                                       none): K => F[M[F]] = { key =>
     StateStrategy
-      .basic[F, K, S, E](key, behavior.initial, behavior.update, journal)
+      .eventsourced[F, K, S, E](key, behavior.initial, behavior.update, journal)
       .withSnapshotting(snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S]))
       .withInmemCache
       .map(_.runActions(behavior.actions))

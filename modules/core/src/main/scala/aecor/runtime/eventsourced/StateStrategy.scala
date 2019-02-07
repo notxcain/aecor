@@ -1,8 +1,7 @@
 package aecor.runtime.eventsourced
-import aecor.data.Folded.{ Impossible, Next }
 import aecor.data.{ ActionT, Folded }
 import aecor.runtime.EventJournal
-import aecor.runtime.Eventsourced.{ BehaviorFailure, Versioned }
+import aecor.runtime.Eventsourced.Versioned
 import cats.data.NonEmptyChain
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
@@ -12,7 +11,6 @@ trait StateStrategy[F[_], K, S, E] { outer =>
   val key: K
   def getState(initial: Versioned[S]): F[Versioned[S]]
   def updateState(currentState: Versioned[S], events: NonEmptyChain[E]): F[Versioned[S]]
-
   def run[A](action: ActionT[F, S, E, A]): F[A]
 
   final def asFunctionK: ActionT[F, S, E, ?] ~> F =
@@ -23,7 +21,7 @@ trait StateStrategy[F[_], K, S, E] { outer =>
 }
 
 object StateStrategy {
-  def basic[F[_], K, S, E](
+  def eventsourced[F[_], K, S, E](
     key: K,
     initial: S,
     update: (S, E) => Folded[S],
