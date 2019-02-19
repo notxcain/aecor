@@ -72,8 +72,11 @@ object Eventsourced {
     def noSnapshot[F[_]: Applicative, K, S]: Snapshotting[F, K, S] = new NoSnapshot
   }
 
-  final case class Versioned[A](value: A, version: Long) {
+  final case class Versioned[A](version: Long, value: A) {
     def withValue(s: A): Versioned[A] = copy(value = s)
+  }
+  object Versioned {
+    def zero[A](a: A): Versioned[A] = Versioned(0l, a)
   }
 
   type EntityKey = String
