@@ -11,18 +11,18 @@ import akka.stream.scaladsl.Source
 import scala.concurrent.Future
 
 private[akkapersistence] final class AkkaPersistenceEventJournalQuery[
-  O, I: KeyDecoder, E: PersistentDecoder
+  O, K: KeyDecoder, E: PersistentDecoder
 ](adapter: JournalAdapter[O])
-    extends JournalQuery[O, I, E] {
+    extends JournalQuery[O, K, E] {
 
   private val decoder = PersistentDecoder[E]
-  private val keyDecoder = KeyDecoder[I]
+  private val keyDecoder = KeyDecoder[K]
 
   private val readJournal = adapter.createReadJournal
 
   private def createSource(
     inner: Source[EventEnvelope, NotUsed]
-  ): Source[JournalEntry[O, I, E], NotUsed] =
+  ): Source[JournalEntry[O, K, E], NotUsed] =
     inner.mapAsync(1) {
       case EventEnvelope(offset, persistenceId, sequenceNr, event) =>
         offset match {
@@ -63,14 +63,14 @@ private[akkapersistence] final class AkkaPersistenceEventJournalQuery[
         }
     }
 
-  def eventsByTag(tag: EventTag, offset: Option[O]): Source[JournalEntry[O, I, E], NotUsed] =
+  def eventsByTag(tag: EventTag, offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed] =
     createSource(
       readJournal
         .eventsByTag(tag.value, adapter.journalOffset(offset))
     )
 
   override def currentEventsByTag(tag: EventTag,
-                                  offset: Option[O]): Source[JournalEntry[O, I, E], NotUsed] =
+                                  offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed] =
     createSource(
       readJournal
         .currentEventsByTag(tag.value, adapter.journalOffset(offset))
