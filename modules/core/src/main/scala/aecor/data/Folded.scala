@@ -38,15 +38,13 @@ sealed abstract class Folded[+A] extends Product with Serializable {
   def forall(f: A => Boolean): Boolean = fold(true)(f)
 
   def toOption: Option[A] = fold(Option.empty[A])(Some(_))
+  def toEither[E](error: => E): Either[E, A] = fold[Either[E, A]](Left(error))(Right(_))
 }
 object Folded extends FoldedInstances {
   final case object Impossible extends Folded[Nothing]
   final case class Next[+A](a: A) extends Folded[A]
   def impossible[A]: Folded[A] = Impossible
   def next[A](a: A): Folded[A] = Next(a)
-  def collectNext[A]: PartialFunction[Folded[A], Next[A]] = {
-    case next @ Next(_) => next
-  }
   object syntax {
     implicit class FoldedIdOps[A](val a: A) extends AnyVal {
       def next: Folded[A] = Folded.next(a)
@@ -56,10 +54,10 @@ object Folded extends FoldedInstances {
 }
 
 trait FoldedInstances {
-  implicit val aecorDataInstancesForFolded
-    : Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded] with Alternative[
-      Folded
-    ] =
+  implicit val aecorDataInstancesForFolded: Traverse[Folded]
+    with MonadError[Folded, Unit]
+    with CoflatMap[Folded]
+    with Alternative[Folded] =
     new Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded]
     with Alternative[Folded] {
 

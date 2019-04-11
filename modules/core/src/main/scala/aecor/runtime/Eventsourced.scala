@@ -1,7 +1,7 @@
 package aecor.runtime
 
 import aecor.data._
-import aecor.runtime.eventsourced.StateStrategy
+import aecor.runtime.eventsourced.{ ActionRunner, BasicStateStrategy, StateStrategy }
 import cats.Applicative
 import cats.effect.Sync
 import cats.implicits._
@@ -11,12 +11,16 @@ object Eventsourced {
   def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
                                                     journal: EventJournal[F, K, E],
                                                     snapshotting: Option[Snapshotting[F, K, S]] =
-                                                      none): K => F[M[F]] = { key =>
-    StateStrategy
-      .eventsourced[F, K, S, E](key, behavior.initial, behavior.update, journal)
+                                                      none): K => F[M[F]] = {
+    val strategy = BasicStateStrategy(behavior.update, journal)
       .withSnapshotting(snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S]))
       .withInmemCache
-      .map(_.runActions(behavior.actions))
+
+    { key =>
+      strategy
+        .focus(key)
+        .map(_.runActions(behavior.actions))
+    }
   }
 
   sealed abstract class Entities[K, M[_[_]], F[_]] {

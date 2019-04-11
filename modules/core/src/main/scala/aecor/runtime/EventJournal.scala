@@ -1,7 +1,8 @@
 package aecor.runtime
 
-import aecor.data.Folded
+import aecor.data.{ EntityEvent, Folded }
 import cats.data.NonEmptyChain
+import fs2.Stream
 
 /**
   * Describes abstract event journal.
@@ -14,5 +15,5 @@ import cats.data.NonEmptyChain
   */
 trait EventJournal[F[_], K, E] {
   def append(key: K, sequenceNr: Long, events: NonEmptyChain[E]): F[Unit]
-  def foldById[S](key: K, sequenceNr: Long, initial: S)(f: (S, E) => Folded[S]): F[Folded[S]]
+  def loadEvents(key: K, offset: Long): Stream[F, EntityEvent[K, E]]
 }

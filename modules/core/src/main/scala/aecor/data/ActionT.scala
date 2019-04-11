@@ -59,6 +59,9 @@ final class ActionT[F[_], S, E, A] private (
     ActionT { (s, u, es) =>
       m(unsafeRun(s, u, es))
     }
+
+  def zipWithRead(implicit F: Monad[F]): ActionT[F, S, E, (S, A)] =
+    ActionT.read[F, S, E].product(this)
 }
 
 object ActionT extends ActionTFunctions with ActionTInstances {
