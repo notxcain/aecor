@@ -29,7 +29,7 @@ final class DistributedProcessing private (system: ActorSystem) {
                             DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
     Effect[F].delay {
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
-        DistributedProcessingWorker.props(processes),
+        DistributedProcessingWorker.props(processes, name),
         "worker",
         settings.minBackoff,
         settings.maxBackoff,
