@@ -3,12 +3,12 @@ package aecor.testkit
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
-import cats.{ Monad, MonadError }
+import cats.Monad
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import cats.mtl.MonadState
-import monocle.Lens
 import fs2._
+import monocle.Lens
 
 object StateEventJournal {
   final case class State[K, E](eventsByKey: Map[K, Chain[E]],
@@ -21,13 +21,10 @@ object StateEventJournal {
       copy(consumerOffsets = consumerOffsets.updated(tag -> consumerId, offset))
 
     def getEventsByTag(tag: EventTag, offset: Int): Chain[(Int, EntityEvent[K, E])] = {
-      val stream = Stream
-        .from(1)
-        .zip(
-          eventsByTag
-            .getOrElse(tag, Chain.empty)
-            .toList
-        )
+      val stream = eventsByTag
+        .getOrElse(tag, Chain.empty)
+        .mapWithIndex((e, i) => (i, e))
+        .toList
         .drop(offset - 1)
       Chain.fromSeq(stream)
     }
@@ -79,7 +76,9 @@ final class StateEventJournal[F[_]: Monad, K, S, E](lens: Lens[S, State[K, E]], 
             .getOrElse(key, Chain.empty)
         )
       )
-      .flatMap(x => Stream.emits(x.mapWithIndex((e, idx) => EntityEvent(key, idx + 1, e)).toVector))
+      .flatMap(
+        x => Stream.emits(x.mapWithIndex((e, idx) => EntityEvent(key, idx + 1L, e)).toVector)
+      )
       .drop(offset)
 
   def currentEventsByTag(tag: EventTag, consumerId: ConsumerId): Processable[F, EntityEvent[K, E]] =

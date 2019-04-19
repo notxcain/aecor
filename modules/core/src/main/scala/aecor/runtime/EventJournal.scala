@@ -1,6 +1,6 @@
 package aecor.runtime
 
-import aecor.data.{ EntityEvent, Folded }
+import aecor.data.EntityEvent
 import cats.data.NonEmptyChain
 import fs2.Stream
 
