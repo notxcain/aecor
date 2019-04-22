@@ -70,6 +70,7 @@ lazy val aecor = project
     akkaPersistence,
     akkaGeneric,
     distributedProcessing,
+    kafkaDistributedProcessing,
     example,
     schedule,
     testKit,
@@ -112,6 +113,12 @@ lazy val distributedProcessing =
     .dependsOn(core)
     .settings(aecorSettings)
     .settings(distributedProcessingSettings)
+
+lazy val kafkaDistributedProcessing =
+  aecorModule("kafka-distributed-processing", "Aecor Distributed Processing based on Kafka partition assignment")
+    .dependsOn(core)
+    .settings(aecorSettings)
+    .settings(kafkaDistributedProcessingSettings)
 
 lazy val schedule = aecorModule("schedule", "Aecor Schedule")
   .dependsOn(akkaPersistence, distributedProcessing, boopickleWireProtocol)
@@ -168,6 +175,14 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+)
+
+lazy val kafkaDistributedProcessingSettings = commonProtobufSettings ++ Seq(
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-stream-kafka" % "1.0.1",
+    "co.fs2" %% "fs2-core" % "1.0.4",
+    "co.fs2" %% "fs2-reactive-streams" % "1.0.4"
+  )
 )
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
