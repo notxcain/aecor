@@ -1,7 +1,7 @@
 package aecor.runtime
 
 import aecor.data._
-import aecor.runtime.eventsourced.BasicStateStrategyBuilder
+import aecor.runtime.eventsourced.{ ActionRunner, DefaultEventsourcedState }
 import cats.Applicative
 import cats.effect.Sync
 import cats.implicits._
@@ -12,39 +12,34 @@ object Eventsourced {
                                                     journal: EventJournal[F, K, E],
                                                     snapshotting: Option[Snapshotting[F, K, S]] =
                                                       none): K => F[M[F]] = {
-    val strategy = BasicStateStrategyBuilder(behavior.update, journal)
-      .withSnapshotting(snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S]))
-      .withInmemCache
+    val strategy = new DefaultEventsourcedState(behavior.initial, behavior.update, journal)
+    val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
 
     { key =>
-      strategy.create(key).map(entity => behavior.actions.mapK(entity.init(behavior.initial)))
+      ActionRunner
+        .cached(key, strategy, effectiveSnapshotting)
+        .map(behavior.actions.mapK(_))
     }
   }
 
-  sealed abstract class Entities[K, M[_[_]], F[_]] {
-    def apply(k: K): M[F]
-  }
+  type Entities[K, M[_[_]], F[_]] = K => M[F]
 
   object Entities {
     type Rejectable[K, M[_[_]], F[_], R] = Entities[K, M, λ[α => F[Either[R, α]]]]
 
-    def apply[K, M[_[_]], F[_]](kmf: K => M[F]): Entities[K, M, F] = new Entities[K, M, F] {
-      override def apply(k: K): M[F] = kmf(k)
-    }
+    def apply[K, M[_[_]], F[_]](kmf: K => M[F]): Entities[K, M, F] = kmf
 
     def fromEitherK[K, M[_[_]]: FunctorK, F[_], R](
       mfr: K => EitherK[M, R, F]
-    ): Rejectable[K, M, F, R] =
-      new Rejectable[K, M, F, R] {
-        override def apply(k: K): M[λ[α => F[Either[R, α]]]] = mfr(k).unwrap
-      }
+    ): Rejectable[K, M, F, R] = k => mfr(k).unwrap
+
   }
 
   final class SnapshotEach[F[_]: Applicative, K, S](interval: Long,
                                                     store: KeyValueStore[F, K, Versioned[S]])
       extends Snapshotting[F, K, S] {
-    def snapshotIfNeeded(key: K, currentVersion: Long, nextState: Versioned[S]): F[Unit] =
-      if (nextState.version % interval == 0 || ((currentVersion / interval) - (nextState.version / interval)) > 0)
+    def snapshotIfNeeded(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit] =
+      if (nextState.version % interval == 0 || ((currentState.version / interval) - (nextState.version / interval)) > 0)
         store.setValue(key, nextState)
       else
         ().pure[F]
@@ -53,14 +48,16 @@ object Eventsourced {
   }
 
   final class NoSnapshot[F[_]: Applicative, K, S] extends Snapshotting[F, K, S] {
-    override def snapshotIfNeeded(key: K, currentVersion: Long, nextState: Versioned[S]): F[Unit] =
+    override def snapshotIfNeeded(key: K,
+                                  currentState: Versioned[S],
+                                  nextState: Versioned[S]): F[Unit] =
       ().pure[F]
     override def load(k: K): F[Option[Versioned[S]]] =
       none[Versioned[S]].pure[F]
   }
 
   trait Snapshotting[F[_], K, S] {
-    def snapshotIfNeeded(key: K, currentVersion: Long, nextState: Versioned[S]): F[Unit]
+    def snapshotIfNeeded(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit]
     def load(k: K): F[Option[Versioned[S]]]
   }
 
@@ -75,10 +72,10 @@ object Eventsourced {
   }
 
   final case class Versioned[A](version: Long, value: A) {
-    def withValue(s: A): Versioned[A] = copy(value = s)
+    def withNextValue(s: A): Versioned[A] = Versioned(version + 1L, value)
   }
   object Versioned {
-    def zero[A](a: A): Versioned[A] = Versioned(0l, a)
+    def zero[A](a: A): Versioned[A] = Versioned(0L, a)
   }
 
   type EntityKey = String
