@@ -14,6 +14,6 @@ import fs2.Stream
   * @tparam E - event type
   */
 trait EventJournal[F[_], K, E] {
-  def append(key: K, sequenceNr: Long, events: NonEmptyChain[E]): F[Unit]
+  def append(key: K, offset: Long, events: NonEmptyChain[E]): F[Unit]
   def loadEvents(key: K, offset: Long): Stream[F, EntityEvent[K, E]]
 }

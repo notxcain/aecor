@@ -44,20 +44,16 @@ object ActionRunner {
     Ref[F].of(none[Versioned[S]]).map { cache =>
       Lambda[ActionT[F, S, E, ?] ~> F] { action =>
         for {
-          (before, (after, a)) <- cache.get.flatMap {
-                                   case Some(state) =>
-                                     stateStrategy.run(key, state, action).map((state, _))
-                                   case None =>
-                                     snapshotting
-                                       .load(key)
-                                       .flatMap { snapshot =>
-                                         stateStrategy.recover(key, snapshot).flatMap { state =>
-                                           stateStrategy
-                                             .run(key, state, action)
-                                             .map((state, _))
-                                         }
-                                       }
-                                 }
+          before <- cache.get.flatMap {
+                     case Some(state) =>
+                       state.pure[F]
+                     case None =>
+                       snapshotting
+                         .load(key)
+                         .flatMap(stateStrategy.recover(key, _))
+                   }
+          (after, a) <- stateStrategy
+                         .run(key, before, action)
           _ <- snapshotting.snapshotIfNeeded(key, before, after)
           _ <- cache.set(after.some)
         } yield a
