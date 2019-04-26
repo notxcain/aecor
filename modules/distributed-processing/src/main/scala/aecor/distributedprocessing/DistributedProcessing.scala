@@ -3,14 +3,14 @@ package aecor.distributedprocessing
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-import aecor.distributedprocessing.DistributedProcessing.{ KillSwitch, Process }
-import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import akka.actor.{ ActorSystem, SupervisorStrategy }
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.{ BackoffSupervisor, ask }
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
+import DistributedProcessing._
+import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 
 import scala.concurrent.duration.{ FiniteDuration, _ }
 import aecor.util.effect._
@@ -25,7 +25,8 @@ final class DistributedProcessing private (system: ActorSystem) {
     */
   def start[F[_]: Effect](name: String,
                           processes: List[Process[F]],
-                          settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
+                          settings: DistributedProcessingSettings =
+                            DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
     Effect[F].delay {
       val props = BackoffSupervisor.propsWithSupervisorStrategy(
         DistributedProcessingWorker.props(processes, name),

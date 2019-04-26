@@ -9,11 +9,11 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.18"
+lazy val akkaVersion = "2.5.21"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
 lazy val catsVersion = "1.4.0"
-lazy val catsEffectVersion = "1.0.0"
+lazy val catsEffectVersion = "1.2.0"
 lazy val scodecVersion = "1.10.4"
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
@@ -131,13 +131,13 @@ lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
   .settings(testKitSettings)
 
 lazy val tests = aecorModule("tests", "Aecor Tests")
-  .dependsOn(core, schedule, testKit, akkaPersistence, distributedProcessing, boopickleWireProtocol)
+  .dependsOn(core, schedule, testKit, akkaPersistence, distributedProcessing, kafkaDistributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = aecorModule("example", "Aecor Example Application")
-  .dependsOn(core, schedule, distributedProcessing, boopickleWireProtocol)
+  .dependsOn(core, schedule, distributedProcessing, kafkaDistributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
