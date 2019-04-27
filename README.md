@@ -215,3 +215,7 @@ val deploySubscriptions: IO[SubscriptionId => Subscription[IO]] =
 ```
 val journalQuery = runtime.journal
 ```
+
+# Adopters
+
++ [Evotor](https://evotor.ru/)
