@@ -92,7 +92,6 @@ final class DistributedProcessing private (system: ActorSystem) {
             }
             .map {
               case ((offset, count), assignedPartition) =>
-                println(s"Starting assigned range of processes ($offset, $count)")
                 val runProcesses =
                   Stream
                     .iterate(offset)(_ + 1)
@@ -101,7 +100,6 @@ final class DistributedProcessing private (system: ActorSystem) {
                     .parEvalMapUnordered(count) { processNumber =>
                       processes(processNumber)
                     }
-
                 val partitionRevoked = assignedPartition.compile.drain.attempt
                 runProcesses.interruptWhen(partitionRevoked)
             }
