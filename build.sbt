@@ -12,6 +12,7 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.21"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
+lazy val akkaStreamKafkaVersion = "1.0.1"
 lazy val catsVersion = "1.4.0"
 lazy val catsEffectVersion = "1.2.0"
 lazy val scodecVersion = "1.10.4"
@@ -179,7 +180,7 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val kafkaDistributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-stream-kafka" % "1.0.1",
+    "com.typesafe.akka" %% "akka-stream-kafka" % akkaStreamKafkaVersion,
     "co.fs2" %% "fs2-core" % fs2Version,
     "co.fs2" %% "fs2-reactive-streams" % fs2Version
   )
