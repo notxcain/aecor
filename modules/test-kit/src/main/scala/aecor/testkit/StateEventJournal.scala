@@ -3,15 +3,15 @@ package aecor.testkit
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
-import cats.data.{ Chain, NonEmptyChain }
+import cats.data.{Chain, NonEmptyChain}
 import cats.implicits._
 import cats.mtl.MonadState
 import monocle.Lens
 
 object StateEventJournal {
   final case class State[K, E](eventsByKey: Map[K, Chain[E]],
-                               eventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]],
-                               consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
+                         eventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]],
+                         consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
     def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
 
@@ -23,8 +23,7 @@ object StateEventJournal {
         .from(1)
         .zip(
           eventsByTag
-            .getOrElse(tag, Chain.empty)
-            .toList
+            .getOrElse(tag, Chain.empty).toList
         )
         .drop(offset - 1)
       Chain.fromSeq(stream)

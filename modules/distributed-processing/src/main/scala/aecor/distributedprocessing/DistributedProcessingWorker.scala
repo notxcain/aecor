@@ -1,13 +1,12 @@
 package aecor.distributedprocessing
 
-import aecor.distributedprocessing.DistributedProcessing.RunningProcess
+import aecor.distributedprocessing.DistributedProcessing._
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.distributedprocessing.serialization.Message
 import cats.effect.syntax.effect._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
 import cats.effect.Effect
-import DistributedProcessing._
 import cats.implicits._
 
 private[aecor] object DistributedProcessingWorker {
@@ -17,9 +16,10 @@ private[aecor] object DistributedProcessingWorker {
   final case class KeepRunning(workerId: Int) extends Message
 }
 
-private[aecor] final class DistributedProcessingWorker[F[_]: Effect](processFor: Int => Process[F],
-                                                                     processName: String)
-    extends Actor
+private[aecor] final class DistributedProcessingWorker[F[_]: Effect](
+  processFor: Int => Process[F],
+  processName: String
+) extends Actor
     with ActorLogging {
   import context.dispatcher
 

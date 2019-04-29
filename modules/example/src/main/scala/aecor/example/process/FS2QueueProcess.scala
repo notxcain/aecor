@@ -1,12 +1,12 @@
 package aecor.example.process
 
+import aecor.distributedprocessing.DistributedProcessing.{ Process, RunningProcess }
 import cats.effect.Concurrent
 import cats.effect.concurrent.Deferred
 import cats.implicits._
 import fs2._
 import fs2.concurrent.Queue
 import cats.effect.implicits._
-import aecor.distributedprocessing.DistributedProcessing._
 
 object FS2QueueProcess {
   def create[F[_]: Concurrent, A](
