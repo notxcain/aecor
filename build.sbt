@@ -20,7 +20,7 @@ lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.1-cats"
-lazy val fs2Version = "1.0.0"
+lazy val fs2Version = "1.0.4"
 lazy val log4catsVersion = "0.2.0-M1"
 
 lazy val scalaCheckVersion = "1.13.4"
@@ -180,8 +180,8 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 lazy val kafkaDistributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-stream-kafka" % "1.0.1",
-    "co.fs2" %% "fs2-core" % "1.0.4",
-    "co.fs2" %% "fs2-reactive-streams" % "1.0.4"
+    "co.fs2" %% "fs2-core" % fs2Version,
+    "co.fs2" %% "fs2-reactive-streams" % fs2Version
   )
 )
 
@@ -205,8 +205,7 @@ lazy val exampleSettings =
     resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
     libraryDependencies ++=
       Seq(
-        "com.github.krasserm" %% "streamz-converter" % "0.10-M2",
-        "co.fs2" %% "fs2-core" % "1.0.0",
+        "co.fs2" %% "fs2-core" % fs2Version,
         "org.typelevel" %% "cats-mtl-core" % catsMTLVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "org.http4s" %% "http4s-dsl" % http4sVersion,

@@ -1,6 +1,7 @@
 package aecor.kafkadistributedprocessing
 
 import aecor.util.effect._
+import akka.NotUsed
 import akka.kafka.ConsumerMessage.PartitionOffset
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ AutoSubscription, ConsumerSettings }
@@ -56,7 +57,7 @@ object interop {
               .void
           stream.onFinalize(shutdown).map {
             case (tp, source) =>
-              val messages = source.toStream[F](materializer).flatMap(_._2).map { cm =>
+              val messages = source.toStream[F](materializer).map { cm =>
                 CommittableMessage(
                   cm.record,
                   CommittableOffset(
@@ -82,6 +83,12 @@ object interop {
       materializer: Materializer
     )(implicit F: ConcurrentEffect[F]): Stream[F, (Mat, Stream[F, A])] =
       sourceToStream(source, materializer)
+  }
+
+  implicit final class SourceWithNotUsedMatToStreamOps[A](val source: Source[A, NotUsed])
+      extends AnyVal {
+    def toStream[F[_]](materializer: Materializer)(implicit F: ConcurrentEffect[F]): Stream[F, A] =
+      sourceToStream(source, materializer).flatMap(_._2)
   }
 
 }
