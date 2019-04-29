@@ -40,6 +40,7 @@ final class DistributedProcessing private (system: ActorSystem) {
       .ifM(
         consumerRef.take
           .flatMap { consumer =>
+            // Dirty hack to avoid concurrent access to `Consumer#partitionsFor`
             F.async[Int] { cb =>
               val di = system.dispatchers.lookup(settings.consumerSettings.dispatcher)
               di.execute(new Runnable {
@@ -75,6 +76,7 @@ final class DistributedProcessing private (system: ActorSystem) {
             .withGroupId(name)
             .withConsumerFactory { cs =>
               val consumer = ConsumerSettings.createKafkaConsumer(cs)
+              // Dirty hack to be able to get Consumer
               F.toIO(consumerRef.put(consumer)).unsafeRunAsyncAndForget()
               consumer
             }
