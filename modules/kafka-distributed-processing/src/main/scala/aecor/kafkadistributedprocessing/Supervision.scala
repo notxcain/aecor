@@ -11,7 +11,7 @@ object Supervision {
                                             randomFactor: Double = 0.2,
                                             maxAttempts: Int = Int.MaxValue): Supervision[F] = {
     def nextDelay(in: FiniteDuration): FiniteDuration =
-      FiniteDuration((in.toMillis * (1 + randomFactor)).toLong, MILLISECONDS).max(maxBackoff)
+      FiniteDuration((in.toMillis * (1 + randomFactor)).toLong, MILLISECONDS).min(maxBackoff)
     fa =>
       retry(fa, minBackoff, nextDelay, Int.MaxValue, Function.const(true)).compile.drain
   }

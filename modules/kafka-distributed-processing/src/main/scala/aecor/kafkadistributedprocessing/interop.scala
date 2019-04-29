@@ -1,5 +1,6 @@
 package aecor.kafkadistributedprocessing
 
+import aecor.util.effect._
 import akka.kafka.ConsumerMessage.PartitionOffset
 import akka.kafka.scaladsl.Consumer
 import akka.kafka.{ AutoSubscription, ConsumerSettings }
@@ -10,7 +11,8 @@ import cats.implicits._
 import fs2.Stream
 import fs2.interop.reactivestreams._
 import org.apache.kafka.clients.consumer.ConsumerRecord
-import aecor.util.effect._
+
+import scala.concurrent.Future
 
 object interop {
 
@@ -45,7 +47,13 @@ object interop {
       .toStream[F](materializer)
       .flatMap {
         case (control, stream) =>
-          val shutdown = F.liftIO(IO.fromFuture(IO(control.shutdown))).void
+          val shutdown =
+            F.liftIO(
+                IO.fromFuture(
+                  IO(control.drainAndShutdown(Future.successful(()))(materializer.executionContext))
+                )
+              )
+              .void
           stream.onFinalize(shutdown).map {
             case (tp, source) =>
               val messages = source.toStream[F](materializer).flatMap(_._2).map { cm =>
