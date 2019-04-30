@@ -70,12 +70,41 @@ object interop {
           }
       }
 
+  def plainPartitionedStream[F[_], K, V](
+    consumerSettings: ConsumerSettings[K, V],
+    subscription: AutoSubscription,
+    materializer: Materializer
+  )(implicit F: ConcurrentEffect[F]): Stream[F, TopicPartition[F, ConsumerRecord[K, V]]] =
+    Consumer
+      .plainPartitionedSource(consumerSettings, subscription)
+      .toStream[F](materializer)
+      .flatMap {
+        case (control, stream) =>
+          val shutdown =
+            F.liftIO(
+                IO.fromFuture(
+                  IO(control.drainAndShutdown(Future.successful(()))(materializer.executionContext))
+                )
+              )
+              .void
+          stream.onFinalize(shutdown).map {
+            case (tp, source) =>
+              val messages = source.toStream[F](materializer)
+              TopicPartition(tp.topic(), tp.partition(), messages)
+          }
+      }
+
   implicit final class ConsumerSettingsOps[K, V](val self: ConsumerSettings[K, V]) extends AnyVal {
     def committablePartitionedStream[F[_]: ConcurrentEffect](
       subscription: AutoSubscription,
       materializer: Materializer
     ): Stream[F, TopicPartition[F, CommittableMessage[F, K, V]]] =
       interop.committablePartitionedStream(self, subscription, materializer)
+    def plainPartitionedStream[F[_]: ConcurrentEffect](
+      subscription: AutoSubscription,
+      materializer: Materializer
+    ): Stream[F, TopicPartition[F, ConsumerRecord[K, V]]] =
+      interop.plainPartitionedStream(self, subscription, materializer)
   }
 
   implicit final class SourceToStreamOps[A, Mat](val source: Source[A, Mat]) extends AnyVal {

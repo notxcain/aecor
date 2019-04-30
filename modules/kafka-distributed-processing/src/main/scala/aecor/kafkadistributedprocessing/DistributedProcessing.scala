@@ -12,7 +12,6 @@ import cats.implicits._
 import fs2.Stream
 import org.apache.kafka.clients.consumer.Consumer
 import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
-
 import scala.util.Try
 
 final class DistributedProcessing private (system: ActorSystem) {
@@ -76,11 +75,11 @@ final class DistributedProcessing private (system: ActorSystem) {
             .withGroupId(name)
             .withConsumerFactory { cs =>
               val consumer = ConsumerSettings.createKafkaConsumer(cs)
-              // Dirty hack to be able to get Consumer
+              // Dirty hack to be able to get a Consumer
               F.toIO(consumerRef.put(consumer)).unsafeRunAsyncAndForget()
               consumer
             }
-            .committablePartitionedStream[F](
+            .plainPartitionedStream[F](
               Subscriptions.topics(settings.topicName),
               settings.materializer
             )
@@ -92,21 +91,22 @@ final class DistributedProcessing private (system: ActorSystem) {
                 (assignRange(processes.size, pc, tp.partition), tp.messages)
               }
             }
-            .map {
-              case ((offset, count), assignedPartition) =>
-                val runProcesses =
-                  Stream
-                    .iterate(offset)(_ + 1)
-                    .take(count.toLong)
-                    .covary[F]
-                    .parEvalMapUnordered(count) { processNumber =>
-                      processes(processNumber)
-                    }
-                val partitionRevoked = assignedPartition.compile.drain.attempt
-                runProcesses.interruptWhen(partitionRevoked)
-            }
-            .parJoinUnbounded
       }
+      .map {
+        case ((offset, count), assignedPartition) =>
+          println(s"$offset, $count")
+          Stream
+            .range[F](offset, offset + count)
+            .parEvalMapUnordered(count)(processes)
+            .interruptWhen(
+              assignedPartition.noneTerminate
+                .map(_ => println(s"${System.currentTimeMillis()} terminating"))
+                .compile
+                .drain
+                .attempt
+            )
+      }
+      .parJoinUnbounded
       .compile
       .drain
 }

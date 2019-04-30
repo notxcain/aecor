@@ -239,7 +239,8 @@ lazy val testingSettings = Seq(
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
     "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
-    "org.typelevel" %% "cats-testkit" % catsVersion % Test
+    "org.typelevel" %% "cats-testkit" % catsVersion % Test,
+    "io.github.embeddedkafka" %% "embedded-kafka" % "2.2.0" % Test
   )
 ) ++ macroSettings
 
