@@ -29,16 +29,14 @@ lazy val scalaCheckShapelessVersion = "1.1.8"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.9"
 lazy val betterMonadicForVersion = "0.3.0-M4"
-lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
 
 lazy val circeVersion = "0.10.1"
 lazy val http4sVersion = "0.20.0-M3"
-lazy val scalametaParadiseVersion = "3.0.0-M11"
 
 lazy val catsMTLVersion = "0.4.0"
-lazy val catsTaglessVersion = "0.2.0"
+lazy val catsTaglessVersion = "0.6"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
@@ -51,11 +49,7 @@ lazy val commonSettings = Seq(
 ) ++ warnUnusedImport
 
 lazy val macroSettings = Seq(
-    scalacOptions += "-Xplugin-require:macroparadise",
-  addCompilerPlugin(
-    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.full
-    ),
-  sources in (Compile, doc) := Nil // macroparadise doesn't work with scaladoc yet.
+  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 )
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
@@ -158,7 +152,8 @@ lazy val coreSettings = Seq(
 lazy val boopickleWireProtocolSettings = Seq(
   libraryDependencies ++= Seq(
     "io.suzaku" %% "boopickle" % boopickleVersion,
-    "org.scalameta" %% "scalameta" % scalametaVersion
+    "org.scala-lang" % "scala-compiler" % scalaVersion.value % "provided",
+    "org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided"
   )
 ) ++ macroSettings
 
@@ -187,7 +182,7 @@ lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
 lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
-    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion % Test
   )
 )
 

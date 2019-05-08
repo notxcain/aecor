@@ -1,12 +1,11 @@
 package aecor.example.transaction
 
-import aecor.encoding.{ KeyDecoder, KeyEncoder }
+import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
 import aecor.example.account.AccountId
 import aecor.example.common.Amount
 import aecor.example.transaction.Algebra.TransactionInfo
-import aecor.macros.boopickleWireProtocol
-import boopickle.Default._
-import cats.tagless.autoFunctorK
+import aecor.macros.boopickle.BoopickleWireProtocol
+import cats.tagless.{ Derive, FunctorK }
 
 final case class TransactionId(value: String) extends AnyVal
 object TransactionId {
@@ -17,8 +16,6 @@ object TransactionId {
 final case class From[A](value: A) extends AnyVal
 final case class To[A](value: A) extends AnyVal
 
-@boopickleWireProtocol
-@autoFunctorK(false)
 trait Algebra[F[_]] {
   def create(fromAccountId: From[AccountId], toAccountId: To[AccountId], amount: Amount): F[Unit]
   def authorize: F[Unit]
@@ -32,4 +29,7 @@ object Algebra {
                                    toAccountId: To[AccountId],
                                    amount: Amount,
                                    succeeded: Option[Boolean])
+
+  implicit def functorK: FunctorK[Algebra] = Derive.functorK
+  implicit def wireProtocol: WireProtocol[Algebra] = BoopickleWireProtocol.derive
 }
