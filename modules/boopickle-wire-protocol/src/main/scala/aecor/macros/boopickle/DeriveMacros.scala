@@ -74,29 +74,6 @@ class DeriveMacros(val c: blackbox.Context) {
       q"type ${tpe.name}[..$typeParams] = ${rhs(tpe, typeArgs)}"
     }
 
-  /** Delegate the definition of methods in `algebra` to an existing `instance`. */
-  def delegateMethods(algebra: Type, members: Iterable[Symbol], instance: Symbol)(
-    transform: PartialFunction[Method, Method]
-  ): Iterable[Tree] =
-    for (member <- members if member.isMethod && !member.asMethod.isAccessor) yield {
-      val method = member.asMethod
-      val signature = method.typeSignatureIn(algebra)
-      val typeParams = for (tp <- signature.typeParams) yield typeDef(tp)
-      val typeArgs = for (tp <- signature.typeParams) yield typeRef(NoPrefix, tp, Nil)
-      val paramLists = for (ps <- signature.paramLists)
-        yield
-          for (p <- ps) yield {
-            // Only preserve the implicit modifier (e.g. drop the default parameter flag).
-            val modifiers = if (p.isImplicit) Modifiers(Flag.IMPLICIT) else Modifiers()
-            ValDef(modifiers, p.name.toTermName, TypeTree(p.typeSignatureIn(algebra)), EmptyTree)
-          }
-
-      val argLists = for (ps <- signature.paramLists) yield for (p <- ps) yield p.name.toTermName
-      val delegate = q"$instance.$method[..$typeArgs](...$argLists)"
-      val reified = Method(method, typeParams, paramLists, signature.finalResultType, delegate)
-      transform.applyOrElse(reified, identity[Method]).definition
-    }
-
   def overridableMethodsOf(algebra: Type): Iterable[Method] =
     for (member <- overridableMembersOf(algebra) if member.isMethod && !member.asMethod.isAccessor)
       yield {
@@ -111,15 +88,19 @@ class DeriveMacros(val c: blackbox.Context) {
               ValDef(modifiers, p.name.toTermName, TypeTree(p.typeSignatureIn(algebra)), EmptyTree)
             }
 
-        Method(method, typeParams, paramLists, signature.finalResultType, q"()")
+        Method(
+          method,
+          typeParams,
+          paramLists,
+          signature.finalResultType,
+          q"_root_.scala.Predef.???"
+        )
       }
 
   /** Type-check a definition of type `instance` with stubbed methods to gain more type information. */
   def declare(instance: Type): Tree = {
     val stubs =
-      overridableMethodsOf(instance).map { method =>
-        method.copy(body = q"_root_.scala.Predef.???").definition
-      }
+      overridableMethodsOf(instance).map(_.definition)
 
     val Block(List(declaration), _) = typeCheckWithFreshTypeParams(q"new $instance { ..$stubs }")
     declaration
