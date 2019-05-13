@@ -21,6 +21,7 @@ object notification {
     import boopickle.Default._
     implicit def functorK: FunctorK[Notification] = Derive.functorK
     implicit def wireProtocol: WireProtocol[Notification] = BoopickleWireProtocol.derive
+
   }
 
   sealed abstract class NotificationEvent

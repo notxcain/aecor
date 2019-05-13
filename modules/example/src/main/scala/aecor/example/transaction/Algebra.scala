@@ -25,6 +25,7 @@ trait Algebra[F[_]] {
 }
 
 object Algebra {
+  import boopickle.Default._
   final case class TransactionInfo(fromAccountId: From[AccountId],
                                    toAccountId: To[AccountId],
                                    amount: Amount,

@@ -1,7 +1,7 @@
 package aecor.macros.boopickle
 
 import aecor.encoding.WireProtocol
-import aecor.encoding.WireProtocol.Encoded
+import aecor.encoding.WireProtocol.{ Encoded, Invocation }
 
 import scala.reflect.macros.blackbox
 
@@ -57,11 +57,8 @@ class DeriveMacros(val c: blackbox.Context) {
       original
     }
 
-    println(originalNames)
-    println(tree)
-
     val typed = c.typecheck(tree)
-    for ((tp, original) <- typeParams zip originalNames) setName(tp, original)
+    for ((tp, original) <- typeParams zip originalNames) if (tp != NoSymbol) setName(tp, original)
     typed
   }
 
@@ -100,25 +97,6 @@ class DeriveMacros(val c: blackbox.Context) {
       transform.applyOrElse(reified, identity[Method]).definition
     }
 
-  def implementMethods(algebra: Type, members: Iterable[Symbol])(
-    transform: PartialFunction[Method, Method]
-  ): Iterable[Tree] =
-    for (member <- members if member.isMethod && !member.asMethod.isAccessor) yield {
-      val method = member.asMethod
-      val signature = method.typeSignatureIn(algebra)
-      val typeParams = for (tp <- signature.typeParams) yield typeDef(tp)
-      val paramLists = for (ps <- signature.paramLists)
-        yield
-          for (p <- ps) yield {
-            // Only preserve the implicit modifier (e.g. drop the default parameter flag).
-            val modifiers = if (p.isImplicit) Modifiers(Flag.IMPLICIT) else Modifiers()
-            ValDef(modifiers, p.name.toTermName, TypeTree(p.typeSignatureIn(algebra)), EmptyTree)
-          }
-
-      val reified = Method(method, typeParams, paramLists, signature.finalResultType, q"()")
-      transform.applyOrElse(reified, identity[Method]).definition
-    }
-
   def overridableMethodsOf(algebra: Type): Iterable[Method] =
     for (member <- overridableMembersOf(algebra) if member.isMethod && !member.asMethod.isAccessor)
       yield {
@@ -139,8 +117,8 @@ class DeriveMacros(val c: blackbox.Context) {
   /** Type-check a definition of type `instance` with stubbed methods to gain more type information. */
   def declare(instance: Type): Tree = {
     val stubs =
-      delegateMethods(instance, overridableMembersOf(instance).filter(_.isAbstract), NoSymbol) {
-        case method => method.copy(body = q"_root_.scala.Predef.???")
+      overridableMethodsOf(instance).map { method =>
+        method.copy(body = q"_root_.scala.Predef.???").definition
       }
 
     val Block(List(declaration), _) = typeCheckWithFreshTypeParams(q"new $instance { ..$stubs }")
@@ -167,9 +145,9 @@ class DeriveMacros(val c: blackbox.Context) {
   /** Create a new instance of `typeClass` for `algebra`.
     * `rhs` should define a mapping for each method (by name) to an implementation function based on type signature.
     */
-  def instantiate(typeClass: TypeSymbol, algebra: Type)(rhs: (String, Type => Tree)*): Tree = {
+  def instantiate(typeClass: TypeSymbol, params: Type*)(rhs: (String, Type => Tree)*): Tree = {
     val impl = rhs.toMap
-    val TcA = appliedType(typeClass, algebra)
+    val TcA = appliedType(typeClass, params: _*)
     val declaration @ ClassDef(_, _, _, Template(parents, self, members)) = declare(TcA)
     val implementations = for (member <- members)
       yield
@@ -182,13 +160,14 @@ class DeriveMacros(val c: blackbox.Context) {
           case other => other
         }
 
-    val definition = classDef(declaration.symbol, Template(parents, self, implementations))
+    val definition =
+      classDef(declaration.symbol, Template(parents, self, implementations))
     typeCheckWithFreshTypeParams(q"{ $definition; new ${declaration.symbol} }")
   }
 
   def encoder(algebra: Type): (String, Type => Tree) =
     "encoder" -> { _ =>
-      val methods = implementMethods(algebra, overridableMembersOf(algebra)) {
+      val methods = overridableMethodsOf(algebra).map {
         case method @ Method(name, _, _, TypeRef(_, _, outParams), _) =>
           val args = method.argLists((pn, _) => Ident(pn)).flatten
           val body =
@@ -196,51 +175,63 @@ class DeriveMacros(val c: blackbox.Context) {
                 ,_root_.aecor.macros.boopickle.BoopickleCodec.decoder[${outParams.last}]
                 )"""
 
-          method.copy(rt = appliedType(symbolOf[Encoded[Any]].toType, outParams.last), body = body)
+          method
+            .copy(rt = appliedType(symbolOf[Encoded[Any]].toType, outParams.last), body = body)
+            .definition
       }
       implement(appliedType(algebra, symbolOf[Encoded[Any]].toTypeConstructor), methods)
     }
 
   def decoder(algebra: Type): (String, Type => Tree) =
     "decoder" -> { t =>
-      val unifiedBase = algebra
-      val ifs = overridableMethodsOf(algebra)
-        .foldLeft(q"""throw new IllegalArgumentException(s"Unknown type tag $$hint")""": Tree) {
-          case (acc, Method(name, _, pss, TypeRef(_, _, outParams), _)) if pss.isEmpty =>
-            val out = outParams.last
-            q"""
-            if (hint == ${name.name.toString}) {
-              val invocation = new _root_.aecor.encoding.WireProtocol.Invocation[$unifiedBase, $out] {
-                final override def run[F[_]](mf: $unifiedBase[F]): F[$out] = mf.$name
-                final override def toString: String = ${name.name.toString}
-              }
-              val resultEncoder = _root_.aecor.macros.boopickle.BoopickleCodec.encoder[$out]
-              _root_.aecor.data.PairE(invocation, resultEncoder)
-            } else $acc"""
+      val ifs =
+        overridableMethodsOf(algebra)
+          .foldLeft(q"""throw new IllegalArgumentException(s"Unknown type tag $$hint")""": Tree) {
+            case (acc, Method(name, _, pss, TypeRef(_, _, outParams), _)) =>
+              val out = outParams.last
+              val argList = pss.map(x => (1 to x.size).map(i => q"args.${TermName(s"_$i")}"))
 
-          case (acc, Method(name, _, pss, TypeRef(_, _, outParams), _)) if pss.nonEmpty =>
-            val out = outParams.last
-            val arglist = pss.map(x => (1 to x.size).map(i => q"args.${TermName(s"_$i")}"))
-            val paramTypes = pss.flatten.map {
-              case ValDef(_, _, tp, _) => tp
-            }
-            val tupleTpeBase = TypeName(s"Tuple${paramTypes.size}")
-            q"""
-              if (hint == ${name.name.toString}) {
-              val args = state.unpickle[$tupleTpeBase[..$paramTypes]]
-              val invocation = new _root_.aecor.encoding.WireProtocol.Invocation[$unifiedBase, $out] {
-                final override def run[F[_]](mf: $unifiedBase[F]): F[$out] =
-                  mf.$name(...$arglist)
-                final override def toString: String = {
-                  val name = ${name.name.toString}
-                  s"$$name$$args"
+              val Invocation = appliedType(symbolOf[Invocation[Any, Any]], algebra, out)
+
+              def runImplementation(instance: TermName) =
+                if (argList.isEmpty)
+                  q"$instance.$name"
+                else
+                  q"$instance.$name(...$argList)"
+
+              val toStringImpl = q"""
+               override def toString: String = {
+                 val name = ${name.name.toString}
+                 val algebraName = ${algebra.typeSymbol.name.toString}
+                ${if (argList.isEmpty) q"""s"$$algebraName#$$name""""
+              else q"""s"$$algebraName#$$name$$args""""}
+              }"""
+
+              val members = toStringImpl :: overridableMethodsOf(Invocation).map {
+                case m @ Method(_, _, List(List(ValDef(_, ps, _, _))), _, _) =>
+                  m.copy(body = runImplementation(ps)).definition
+              }.toList
+
+              val invocation = implement(Invocation, members)
+
+              val argsTerm =
+                if (argList.isEmpty) q""
+                else {
+                  val paramTypes = pss.flatten.map(_.tpt)
+                  val TupleNCons = TypeName(s"Tuple${paramTypes.size}")
+                  q"val args = state.unpickle[$TupleNCons[..$paramTypes]]"
                 }
-              }
-              val resultEncoder = _root_.aecor.macros.boopickle.BoopickleCodec.encoder[$out]
-              _root_.aecor.data.PairE(invocation, resultEncoder)
-              } else $acc
-              """
-        }
+
+              val pair =
+                q"""
+                    $argsTerm
+                    val invocation = $invocation
+                    val resultEncoder = _root_.aecor.macros.boopickle.BoopickleCodec.encoder[$out]
+                    _root_.aecor.data.PairE(invocation, resultEncoder)
+                  """
+
+              q"if (hint == ${name.name.toString}) $pair else $acc"
+          }
 
       val out = q"""
            new ${t.finalResultType} {
@@ -252,7 +243,6 @@ class DeriveMacros(val c: blackbox.Context) {
              })
           }
          """
-      println(out)
       out
     }
 

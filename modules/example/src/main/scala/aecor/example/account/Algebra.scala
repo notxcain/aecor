@@ -35,6 +35,7 @@ trait Algebra[F[_]] {
 }
 
 object Algebra {
+  import boopickle.Default._
   implicit def functorK: FunctorK[Algebra] = Derive.functorK
   implicit def wireProtocol: WireProtocol[Algebra] = BoopickleWireProtocol.derive
 }
