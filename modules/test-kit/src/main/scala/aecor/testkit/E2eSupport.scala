@@ -12,8 +12,9 @@ import cats.implicits._
 import cats.mtl.MonadState
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
-import cats.{ Monad, MonadError, ~> }
+import cats.{ MonadError, ~> }
 import monocle.Lens
+import fs2.Stream
 
 import scala.collection.immutable._
 
@@ -95,12 +96,13 @@ trait E2eSupport {
     StateEventJournal[F, I, SpecState, E](lens, tagging)
 
   final def wireProcess[In](process: In => F[Unit],
-                            source: Processable[F, In],
-                            sources: Processable[F, In]*)(implicit F: Monad[F]): F[Unit] =
+                            source: Stream[F, Committable[F, In]],
+                            sources: Stream[F, Committable[F, In]]*)(implicit F: Sync[F]): F[Unit] =
     sources
-      .fold(source)(_ merge _)
-      .process(process)
-      .void
+      .fold(source)(_ ++ _)
+      .evalMap(_.process(process))
+      .compile
+      .drain
 
   val runtime = new E2eSupport.Runtime[F]
 }
