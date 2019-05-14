@@ -20,7 +20,7 @@ object EventsourcedState {
     new DefaultEventsourcedState(initialState, update, journal)
 }
 
-final class DefaultEventsourcedState[F[_], K, E, S](
+final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
   initialState: S,
   update: (S, E) => Folded[S],
   journal: EventJournal[F, K, E]
@@ -30,7 +30,7 @@ final class DefaultEventsourcedState[F[_], K, E, S](
   override def recover(key: K, snapshot: Option[Versioned[S]]): F[Versioned[S]] = {
     val from = snapshot.getOrElse(Versioned.zero(initialState))
     journal
-      .loadEvents(key, from.version)
+      .read(key, from.version)
       .scan(from.asRight[Throwable]) {
         case (Right(x @ Versioned(version, value)), ee @ EntityEvent(_, _, event)) =>
           update(value, event) match {
@@ -55,11 +55,11 @@ final class DefaultEventsourcedState[F[_], K, E, S](
                       state: Versioned[S],
                       action: ActionT[F, S, E, A]): F[(Versioned[S], A)] =
     for {
-      result <- action.zipWithRead.run(state.value, update)
-      (es, (nextState, a)) <- result match {
+      result <- action.productRead.run(state.value, update)
+      (es, (a, nextState)) <- result match {
                                case Next(a) => a.pure[F]
                                case Folded.Impossible =>
-                                 F.raiseError[(Chain[E], (S, A))](
+                                 F.raiseError[(Chain[E], (A, S))](
                                    new IllegalArgumentException(
                                      s"Failed to run action [$action] against state [$state]"
                                    )

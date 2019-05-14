@@ -8,10 +8,10 @@ import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
 object Eventsourced {
-  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
-                                                    journal: EventJournal[F, K, E],
-                                                    snapshotting: Option[Snapshotting[F, K, S]] =
-                                                      none): K => F[M[F]] = {
+  def cached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
+                                                     journal: EventJournal[F, K, E],
+                                                     snapshotting: Option[Snapshotting[F, K, S]] =
+                                                       none): K => F[M[F]] = {
     val strategy = EventsourcedState(behavior.initial, behavior.update, journal)
     val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
 
@@ -19,6 +19,18 @@ object Eventsourced {
       ActionRunner
         .cached(key, strategy, effectiveSnapshotting)
         .map(behavior.actions.mapK(_))
+    }
+  }
+
+  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
+                                                    journal: EventJournal[F, K, E],
+                                                    snapshotting: Option[Snapshotting[F, K, S]] =
+                                                      none): K => M[F] = {
+    val strategy = EventsourcedState(behavior.initial, behavior.update, journal)
+    val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
+
+    { key =>
+      behavior.actions.mapK(ActionRunner(key, strategy, effectiveSnapshotting))
     }
   }
 

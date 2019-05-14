@@ -18,11 +18,11 @@ object ActionRunner {
   def apply[F[_]: Monad, G[_]: Monad, K, S, E](key: K,
                                                stateStrategy: EventsourcedState[G, K, S, E],
                                                snapshotting: Snapshotting[F, K, S],
-                                               boundary: G ~> F): ActionT[G, S, E, ?] ~> F =
+                                               journalBoundary: G ~> F): ActionT[G, S, E, ?] ~> F =
     Lambda[ActionT[G, S, E, ?] ~> F] { action =>
       for {
         snapshot <- snapshotting.load(key)
-        (before, (after, a)) <- boundary {
+        (before, (after, a)) <- journalBoundary {
                                  stateStrategy
                                    .recover(key, snapshot)
                                    .flatMap(
