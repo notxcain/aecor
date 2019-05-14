@@ -10,6 +10,7 @@ final case class Committable[F[_], +A](commit: F[Unit], value: A) {
   def map[B](f: A => B): Committable[F, B] = copy(value = f(value))
   def traverse[G[_], B](f: A => G[B])(implicit G: Functor[G]): G[Committable[F, B]] =
     G.map(f(value))(b => copy(value = b))
+  def process[B](f: A => F[B])(implicit F: Monad[F]): F[B] = f(value) <* commit
 }
 
 object Committable {

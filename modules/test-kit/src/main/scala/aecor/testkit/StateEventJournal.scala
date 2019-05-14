@@ -23,9 +23,9 @@ object StateEventJournal {
     def getEventsByTag(tag: EventTag, offset: Int): Chain[(Int, EntityEvent[K, E])] = {
       val stream = eventsByTag
         .getOrElse(tag, Chain.empty)
-        .mapWithIndex((e, i) => (i, e))
+        .mapWithIndex((e, i) => (i + 1, e))
         .toList
-        .drop(offset - 1)
+        .drop(offset)
       Chain.fromSeq(stream)
     }
 
@@ -81,22 +81,17 @@ final class StateEventJournal[F[_]: Monad, K, S, E](lens: Lens[S, State[K, E]], 
       )
       .drop(offset)
 
-  def currentEventsByTag(tag: EventTag, consumerId: ConsumerId): Processable[F, EntityEvent[K, E]] =
-    new Processable[F, EntityEvent[K, E]] {
-      override def process(f: EntityEvent[K, E] => F[Unit]): F[Unit] =
-        for {
-          state <- F.get
-          committedOffset = state.getConsumerOffset(tag, consumerId)
-          result = state.getEventsByTag(tag, committedOffset + 1)
-          _ <- result.traverse {
-                case (offset, e) =>
-                  for {
-                    _ <- f(e)
-                    _ <- F.modify(_.setConsumerOffset(tag, consumerId, offset))
-                  } yield ()
-              }
-        } yield ()
-    }
+  def currentEventsByTag(tag: EventTag,
+                         consumerId: ConsumerId): Stream[F, Committable[F, EntityEvent[K, E]]] =
+    for {
+      state <- Stream.eval(F.get)
+      committedOffset = state.getConsumerOffset(tag, consumerId)
+      result = state.getEventsByTag(tag, committedOffset)
+      a <- Stream(result.toVector: _*).map {
+            case (offset, e) =>
+              Committable(F.modify(_.setConsumerOffset(tag, consumerId, offset)), e)
+          }
+    } yield a
 
 }
 

@@ -5,15 +5,15 @@ import java.time._
 import aecor.data._
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
 import aecor.schedule._
-import aecor.schedule.process.{ScheduleEventJournal, ScheduleProcess}
+import aecor.schedule.process.{ ScheduleEventJournal, ScheduleProcess }
 import aecor.testkit.E2eSupport._
-import aecor.testkit.{E2eSupport, StateClock, StateEventJournal, StateKeyValueStore}
-import aecor.tests.e2e.notification.{NotificationEvent, NotificationId}
-import aecor.tests.e2e.{notification, _}
+import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueStore }
+import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
+import aecor.tests.e2e.{ notification, _ }
 import cats.data.Chain
 import cats.implicits._
 import monocle.macros.GenLens
-import org.scalatest.{FunSuite, Matchers}
+import org.scalatest.{ FunSuite, Matchers }
 import shapeless.Coproduct
 
 import scala.concurrent.duration._
@@ -39,8 +39,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       Tagging.const(CounterEvent.tag)
     )
 
-  def counters
-    : CounterId => Counter[F] =
+  def counters: CounterId => Counter[F] =
     runtime.deploy(behavior(CounterBehavior.instance[F], counterEventJournal))
 
   def notificationEventJournal =
@@ -72,7 +71,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
     ): F[Unit] =
       schduleEventJournal
         .currentEventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
-        .process(f)
+        .evalTap(_.process(f))
+        .compile
+        .drain
   }
 
   val offsetStore =
@@ -104,10 +105,10 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       NotificationProcess(counters, notifications),
       counterEventJournal
         .currentEventsByTag(CounterEvent.tag, notificationProcessConsumerId)
-        .map(Coproduct[NotificationProcess.Input](_)),
+        .map(_.map(Coproduct[NotificationProcess.Input](_))),
       notificationEventJournal
         .currentEventsByTag(NotificationEvent.tag, notificationProcessConsumerId)
-        .map(Coproduct[NotificationProcess.Input](_))
+        .map(_.map(Coproduct[NotificationProcess.Input](_)))
     ),
     scheduleProcess
   )
@@ -144,13 +145,16 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Vector.empty,
           Map.empty
         )
-      ).value.unsafeRunSync()
+      )
+      .value
+      .unsafeRunSync()
 
     println(state.counterJournalState)
     state.counterViewState.values shouldBe Map(firstCounterId -> 1L, secondCounterId -> 2L)
 
     state.notificationJournalState.eventsByKey
-      .getOrElse("1-2", Chain.empty).size shouldBe 2
+      .getOrElse("1-2", Chain.empty)
+      .size shouldBe 2
   }
 
   test("Schedule should fire") {
@@ -184,7 +188,9 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Vector.empty,
           Map.empty
         )
-      ).value.unsafeRunSync()
+      )
+      .value
+      .unsafeRunSync()
 
     state.scheduleEntries.exists(e => e.entryId == "e1" && e.fired) shouldBe true
     state.scheduleEntries.exists(e => e.entryId == "e2" && e.fired) shouldBe true
