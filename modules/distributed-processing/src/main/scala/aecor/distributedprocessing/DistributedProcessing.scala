@@ -5,15 +5,15 @@ import java.nio.charset.StandardCharsets
 
 import aecor.distributedprocessing.DistributedProcessing.{ KillSwitch, Process }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
-import akka.actor.{ ActorSystem, SupervisorStrategy }
+import aecor.util.effect._
+import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
-import akka.pattern.{ BackoffSupervisor, ask }
+import akka.pattern.{ BackoffOpts, BackoffSupervisor, ask }
 import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 
 import scala.concurrent.duration.{ FiniteDuration, _ }
-import aecor.util.effect._
 final class DistributedProcessing private (system: ActorSystem) {
 
   /**
@@ -25,16 +25,19 @@ final class DistributedProcessing private (system: ActorSystem) {
     */
   def start[F[_]: Effect](name: String,
                           processes: List[Process[F]],
-                          settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
+                          settings: DistributedProcessingSettings =
+                            DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
     Effect[F].delay {
-      val props = BackoffSupervisor.propsWithSupervisorStrategy(
-        DistributedProcessingWorker.props(processes),
-        "worker",
-        settings.minBackoff,
-        settings.maxBackoff,
-        settings.randomFactor,
-        SupervisorStrategy.stoppingStrategy
-      )
+      val opts = BackoffOpts
+        .onFailure(
+          DistributedProcessingWorker.props(processes),
+          "worker",
+          settings.minBackoff,
+          settings.maxBackoff,
+          settings.randomFactor
+        )
+
+      val props = BackoffSupervisor.props(opts)
 
       val region = ClusterSharding(system).start(
         typeName = name,
