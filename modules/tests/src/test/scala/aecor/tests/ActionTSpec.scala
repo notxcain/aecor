@@ -16,7 +16,7 @@ class ActionTSpec extends FunSuite {
   def run[A](action: ActionT[Id, String, String, A]): Folded[(Chain[String], A)] =
     action.run("", (l, r) => (l ++ r).pure[Folded])
 
-  test("ActionT#read associativity") {
+  test("ActionT.read associativity") {
     val n1 @ Next((es, out)) = run(append("a") >> (append("b") >> read))
     val n2 = run(append("a") >> append("b") >> read)
     assert(es === Chain("a", "b"))
