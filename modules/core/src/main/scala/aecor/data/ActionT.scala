@@ -47,9 +47,9 @@ final class ActionT[F[_], S, E, A] private (
       })
     }
 
-  def xmapState[S2](update: (S2, S) => S2)(extract: S2 => S): ActionT[F, S2, E, A] =
+  def xmapState[S2](set: (S2, S) => S2)(get: S2 => S): ActionT[F, S2, E, A] =
     ActionT { (s2, u2, es) =>
-      unsafeRun(extract(s2), (s, e) => u2(update(s2, s), e).map(extract), es)
+      unsafeRun(get(s2), (s, e) => u2(set(s2, s), e).map(get), es)
     }
 
   def product[B](that: ActionT[F, S, E, B])(implicit F: Monad[F]): ActionT[F, S, E, (A, B)] =
@@ -60,7 +60,7 @@ final class ActionT[F[_], S, E, A] private (
       m(unsafeRun(s, u, es))
     }
 
-  def productRead(implicit F: Monad[F]): ActionT[F, S, E, (A, S)] =
+  def zipWithRead(implicit F: Monad[F]): ActionT[F, S, E, (A, S)] =
     this.product(ActionT.read[F, S, E])
 }
 

@@ -55,11 +55,16 @@ final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
                       state: Versioned[S],
                       action: ActionT[F, S, E, A]): F[(Versioned[S], A)] =
     for {
-      result <- action.productRead.run(state.value, update)
+      result <- action
+                 .xmapState[Versioned[S]]((versioned, s) => {
+                   println(s"$versioned.copy(value = $s)"); versioned.copy(value = s)
+                 })(_.value)
+                 .zipWithRead
+                 .run(state, Versioned.update(update))
       (es, (a, nextState)) <- result match {
                                case Next(a) => a.pure[F]
                                case Folded.Impossible =>
-                                 F.raiseError[(Chain[E], (A, S))](
+                                 F.raiseError[(Chain[E], (A, Versioned[S]))](
                                    new IllegalArgumentException(
                                      s"Failed to run action [$action] against state [$state]"
                                    )
@@ -68,5 +73,5 @@ final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
       _ <- NonEmptyChain
             .fromChain(es)
             .traverse_(nes => journal.append(key, state.version + 1, nes))
-    } yield (Versioned(state.version + es.size, nextState), a)
+    } yield (nextState, a)
 }

@@ -4,10 +4,10 @@ import aecor.data.Tagging
 import aecor.tests.e2e._
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import com.typesafe.config.{Config, ConfigFactory}
+import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{FunSuiteLike, Matchers}
-import aecor.runtime.akkapersistence.{AkkaPersistenceRuntime, CassandraJournalAdapter}
+import org.scalatest.{ FunSuiteLike, Matchers }
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import cats.effect.IO
@@ -67,7 +67,7 @@ class AkkaPersistenceRuntimeSpec
       counters <- deployCounters
       first = counters(CounterId("1"))
       second = counters(CounterId("2"))
-      _ <- first.increment
+      _ <- first.incrementTwice
       _ <- second.increment
       _2 <- second.value
       _ <- first.decrement
@@ -75,7 +75,7 @@ class AkkaPersistenceRuntimeSpec
       afterPassivation <- timer.sleep(2.seconds) >> second.value
     } yield (_1, _2, afterPassivation)
 
-    program.unsafeRunSync() shouldEqual ((0L, 1L, 1L))
+    program.unsafeRunSync() shouldEqual ((1L, 1L, 1L))
   }
   test("Journal should work") {
     implicit val materializer = ActorMaterializer()
@@ -83,7 +83,7 @@ class AkkaPersistenceRuntimeSpec
     val entries = journal.currentEventsByTag(CounterEvent.tag, None).runWith(Sink.seq).futureValue
 
     val map = entries.map(_.event).groupBy(_.entityKey)
-    map(CounterId("1")).size shouldBe 2
+    map(CounterId("1")).size shouldBe 3
     map(CounterId("2")).size shouldBe 1
   }
 }

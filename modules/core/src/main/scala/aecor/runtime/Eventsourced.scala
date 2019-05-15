@@ -2,7 +2,7 @@ package aecor.runtime
 
 import aecor.data._
 import aecor.runtime.eventsourced.{ ActionRunner, EventsourcedState }
-import cats.Applicative
+import cats.{ Applicative, Functor }
 import cats.effect.Sync
 import cats.implicits._
 import cats.tagless.FunctorK
@@ -88,6 +88,10 @@ object Eventsourced {
   }
   object Versioned {
     def zero[A](a: A): Versioned[A] = Versioned(0L, a)
+    def update[F[_]: Functor, S, E](f: (S, E) => F[S]): (Versioned[S], E) => F[Versioned[S]] = {
+      case (Versioned(version, s), e) =>
+        f(s, e).map(Versioned(version + 1, _))
+    }
   }
 
   type EntityKey = String
