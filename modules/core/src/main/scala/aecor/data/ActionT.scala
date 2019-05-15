@@ -142,7 +142,7 @@ trait ActionTLowerPriorityInstances1 {
     override def tailRecM[A, B](a: A)(f: A => ActionT[F, S, E, Either[A, B]]): ActionT[F, S, E, B] =
       ActionT { (s, ue, es) =>
         F.tailRecM(a) { a =>
-          f(a).unsafeRun(s, ue, es).flatMap[Either[A, Folded[(Chain[E], B)]]] {
+          f(a).unsafeRun(s, ue, es).flatMap {
             case Impossible            => impossible[(Chain[E], B)].asRight[A].pure[F]
             case Next((es2, Right(b))) => (es2, b).next.asRight[A].pure[F]
             case Next((es2, Left(na))) =>
