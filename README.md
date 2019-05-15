@@ -215,3 +215,9 @@ val deploySubscriptions: IO[SubscriptionId => Subscription[IO]] =
 ```
 val journalQuery = runtime.journal
 ```
+
+# Adopters
+
+Using Aecor in your organization? Send us a PR to list your company here:
+
++ [Evotor](https://evotor.ru/)

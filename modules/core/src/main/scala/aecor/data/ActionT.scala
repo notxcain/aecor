@@ -23,10 +23,7 @@ final class ActionT[F[_], S, E, A] private (
     ActionT { (s0, u, es0) =>
       unsafeRun(s0, u, es0).flatMap {
         case Folded.Next((es1, a)) =>
-          es1
-            .foldM(s0)(u)
-            .traverse(f(a).unsafeRun(_, u, es1))
-            .map(_.flatten)
+          f(a).unsafeRun(s0, u, es1)
         case Impossible =>
           impossible[(Chain[E], B)].pure[F]
       }
@@ -71,8 +68,8 @@ object ActionT extends ActionTFunctions with ActionTInstances {
 }
 
 trait ActionTFunctions {
-  def read[F[_]: Applicative, S, E]: ActionT[F, S, E, S] =
-    ActionT((s, _, es) => (es, s).next.pure[F])
+  def read[F[_]: Monad, S, E]: ActionT[F, S, E, S] =
+    ActionT((s, u, es) => es.foldM(s)(u).map((es, _)).pure[F])
 
   def append[F[_]: Applicative, S, E](e: NonEmptyChain[E]): ActionT[F, S, E, Unit] =
     ActionT((_, _, es0) => (es0 ++ e.toChain, ()).next.pure[F])
