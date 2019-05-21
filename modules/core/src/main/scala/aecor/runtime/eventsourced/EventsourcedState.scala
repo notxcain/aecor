@@ -56,9 +56,7 @@ final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
                       action: ActionT[F, S, E, A]): F[(Versioned[S], A)] =
     for {
       result <- action
-                 .xmapState[Versioned[S]]((versioned, s) => {
-                   println(s"$versioned.copy(value = $s)"); versioned.copy(value = s)
-                 })(_.value)
+                 .xmapState[Versioned[S]]((s2, s) => s2.copy(value = s))(_.value)
                  .zipWithRead
                  .run(state, Versioned.update(update))
       (es, (a, nextState)) <- result match {

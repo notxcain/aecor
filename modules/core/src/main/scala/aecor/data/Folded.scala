@@ -6,7 +6,7 @@ import cats.{ Alternative, Applicative, CoflatMap, Eval, MonadError, Now, Show, 
 
 import scala.annotation.tailrec
 
-sealed abstract class Folded[+A] extends Product with Serializable {
+sealed abstract class Folded[+A] extends Product with Serializable { self =>
   def fold[B](impossible: => B)(next: A => B): B = this match {
     case Impossible => impossible
     case Next(a)    => next(a)
@@ -39,6 +39,18 @@ sealed abstract class Folded[+A] extends Product with Serializable {
 
   def toOption: Option[A] = fold(Option.empty[A])(Some(_))
   def toEither[E](error: => E): Either[E, A] = fold[Either[E, A]](Left(error))(Right(_))
+
+  def toMonadError[F[_], E]: ToMonadErrorPartiallyApplied[F, E] =
+    new ToMonadErrorPartiallyApplied[F, E]
+  final class ToMonadErrorPartiallyApplied[F[_], E] {
+    def apply[AA >: A](error: => E)(implicit F: MonadError[F, E]): F[AA] =
+      self match {
+        case Next(a) => F.pure(a)
+        case Folded.Impossible =>
+          F.raiseError[AA](error)
+      }
+  }
+
 }
 object Folded extends FoldedInstances {
   final case object Impossible extends Folded[Nothing]

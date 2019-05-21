@@ -17,7 +17,6 @@ import cats.{ Eq, Monad }
 @autoFunctorK(false)
 trait Counter[F[_]] {
   def increment: F[Long]
-  def incrementTwice: F[Long]
   def decrement: F[Long]
 
   def value: F[Long]
@@ -62,9 +61,6 @@ final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, Counte
 
   override def increment: F[Long] =
     append(CounterIncremented) >> read.map(_.value)
-
-  override def incrementTwice: F[Long] =
-    append(CounterIncremented) >> append(CounterIncremented) >> read.map(_.value)
 
   override def decrement: F[Long] = append(CounterDecremented) >> read.map(_.value)
 
