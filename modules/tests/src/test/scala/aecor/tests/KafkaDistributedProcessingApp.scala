@@ -38,14 +38,11 @@ object KafkaDistributedProcessingApp extends IOApp {
       .toList
 
     systemResource.use { system =>
-      val settings = DistributedProcessingSettings
-        .default(system)
-        .withTopicName("dp3")
-        .modifyConsumerSettings(_.withBootstrapServers("localhost:9092"))
+      val settings = DistributedProcessingSettings(Set("localhost:9092"), "dp3")
 
       def run(clientId: String) =
-        DistributedProcessing(system)
-          .start("test", processes, settings.modifyConsumerSettings(_.withClientId(clientId)))
+        DistributedProcessing(settings.withClientId(clientId))
+          .start("test", processes)
 
       (run("123"), timer.sleep(10.seconds) >> run("456")).parMapN((_, _) => ExitCode.Success)
     }

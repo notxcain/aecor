@@ -1,20 +1,15 @@
 package aecor.kafkadistributedprocessing
 
-import java.util
+import java.util.Properties
 
 import aecor.kafkadistributedprocessing.interop._
-import akka.actor.ActorSystem
-import akka.kafka.{ ConsumerSettings, Subscriptions }
-import akka.stream.{ ActorMaterializer, Materializer }
-import cats.effect.concurrent.MVar
-import cats.effect.{ Async, ConcurrentEffect, Timer }
+import cats.effect.implicits._
+import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
 import cats.implicits._
 import fs2.Stream
-import org.apache.kafka.clients.consumer.Consumer
-import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
-import scala.util.Try
+import org.apache.kafka.clients.consumer.ConsumerConfig
 
-final class DistributedProcessing private (system: ActorSystem) {
+final class DistributedProcessing(settings: DistributedProcessingSettings) {
 
   private def assignRange(size: Int, partitionCount: Int, partition: Int): (Int, Int) = {
     val even = size / partitionCount
@@ -30,31 +25,6 @@ final class DistributedProcessing private (system: ActorSystem) {
     }
   }
 
-  private def populatePartitionCount[F[_]](
-    settings: DistributedProcessingSettings,
-    consumerRef: MVar[F, Consumer[Unit, Unit]],
-    partitionCountRef: MVar[F, Int]
-  )(implicit F: Async[F]): F[Unit] =
-    partitionCountRef.isEmpty
-      .ifM(
-        consumerRef.take
-          .flatMap { consumer =>
-            // Dirty hack to avoid concurrent access to `Consumer#partitionsFor`
-            F.async[Int] { cb =>
-              val di = system.dispatchers.lookup(settings.consumerSettings.dispatcher)
-              di.execute(new Runnable {
-                override def run(): Unit = {
-                  val result =
-                    Try(consumer.partitionsFor(settings.topicName).size()).toEither
-                  cb(result)
-                }
-              })
-            }
-          }
-          .flatMap(partitionCountRef.put),
-        ().pure[F]
-      )
-
   /**
     * Starts `processes` distributed over internal Kafka topic consumers.
     *
@@ -62,88 +32,52 @@ final class DistributedProcessing private (system: ActorSystem) {
     * @param processes - list of processes to distribute
     *
     */
-  def start[F[_]: Timer](
-    name: String,
-    processes: List[F[Unit]],
-    settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)
-  )(implicit F: ConcurrentEffect[F]): F[Unit] =
-    Stream
-      .eval((MVar[F].empty[Consumer[Unit, Unit]], MVar[F].empty[Int]).tupled)
-      .flatMap {
-        case (consumerRef, partitionCountRef) =>
-          settings.consumerSettings
-            .withGroupId(name)
-            .withConsumerFactory { cs =>
-              val consumer = ConsumerSettings.createKafkaConsumer(cs)
-              // Dirty hack to be able to get a Consumer
-              F.toIO(consumerRef.put(consumer)).unsafeRunAsyncAndForget()
-              consumer
-            }
-            .plainPartitionedStream[F](
-              Subscriptions.topics(settings.topicName),
-              settings.materializer
-            )
-            .evalTap { _ =>
-              populatePartitionCount(settings, consumerRef, partitionCountRef)
-            }
-            .evalMap { tp =>
-              partitionCountRef.read.map { pc =>
-                (assignRange(processes.size, pc, tp.partition), tp.messages)
-              }
-            }
-      }
+  def start[F[_]: ConcurrentEffect: Timer: ContextShift](name: String,
+                                                         processes: List[F[Unit]]): F[Unit] =
+    interop
+      .assignPartitions(settings.asProperties(name), settings.topicName)
       .map {
-        case ((offset, count), assignedPartition) =>
-          println(s"$offset, $count")
-          Stream
-            .range[F](offset, offset + count)
-            .parEvalMapUnordered(count)(processes)
-            .interruptWhen(
-              assignedPartition.noneTerminate
-                .map(_ => println(s"${System.currentTimeMillis()} terminating"))
-                .compile
-                .drain
-                .attempt
-            )
+        case AssignedPartition(partition, partitionCount, watchRevocation) =>
+          val (offset, processCount) = assignRange(processes.size, partitionCount, partition)
+          if (processCount > 0)
+            Stream
+              .range[F](offset, offset + processCount)
+              .parEvalMapUnordered(processCount)(processes)
+              .compile
+              .drain
+              .race(watchRevocation)
+              .flatMap(_.sequence_)
+          else
+            watchRevocation.start.flatMap(_.cancel)
       }
+      .map(Stream.eval_)
       .parJoinUnbounded
       .compile
       .drain
 }
 
 object DistributedProcessing {
-  def apply(system: ActorSystem): DistributedProcessing = new DistributedProcessing(system)
+  def apply(settings: DistributedProcessingSettings): DistributedProcessing =
+    new DistributedProcessing(settings)
 }
 
-final case class DistributedProcessingSettings(topicName: String,
-                                               materializer: Materializer,
-                                               consumerSettings: ConsumerSettings[Unit, Unit]) {
-  def modifyConsumerSettings(
-    f: ConsumerSettings[Unit, Unit] => ConsumerSettings[Unit, Unit]
-  ): DistributedProcessingSettings =
-    DistributedProcessingSettings(topicName, materializer, f(consumerSettings))
-  def withTopicName(newTopicName: String): DistributedProcessingSettings =
-    copy(topicName = newTopicName)
-}
+final case class DistributedProcessingSettings(brokers: Set[String],
+                                               topicName: String,
+                                               settings: Map[String, String] = Map.empty) {
+  def withClientId(clientId: String): DistributedProcessingSettings =
+    withProperty(ConsumerConfig.CLIENT_ID_CONFIG, clientId)
 
-object DistributedProcessingSettings {
-  def default(materializer: Materializer,
-              consumerSettings: ConsumerSettings[Unit, Unit]): DistributedProcessingSettings =
-    DistributedProcessingSettings(
-      topicName = "distributed-processing",
-      materializer = materializer,
-      consumerSettings = consumerSettings
-    )
+  def withProperty(key: String, value: String): DistributedProcessingSettings =
+    copy(settings = settings.updated(key, value))
 
-  def default(system: ActorSystem): DistributedProcessingSettings =
-    default(ActorMaterializer()(system), ConsumerSettings(system, unitSerde, unitSerde))
-
-  val unitSerde: Serializer[Unit] with Deserializer[Unit] =
-    new Serializer[Unit] with Deserializer[Unit] {
-      private val emptyByteArray = Array.empty[Byte]
-      override def serialize(topic: String, data: Unit): Array[Byte] = emptyByteArray
-      override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
-      override def deserialize(topic: String, data: Array[Byte]): Unit = ()
-      override def close(): Unit = ()
+  def asProperties(groupId: String): Properties = {
+    val properties = new Properties()
+    settings.foreach {
+      case (key, value) => properties.setProperty(key, value)
     }
+    properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers.mkString(","))
+    properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId)
+    properties
+  }
+
 }

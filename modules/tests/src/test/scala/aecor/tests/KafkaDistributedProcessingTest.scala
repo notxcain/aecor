@@ -7,30 +7,31 @@ import cats.implicits._
 import fs2.concurrent.Queue
 import net.manub.embeddedkafka.{ EmbeddedKafka, EmbeddedKafkaConfig }
 import org.scalatest.FunSuiteLike
+import scala.concurrent.duration._
 
-class KafkaDistributedProcessingTest
-    extends FunSuiteLike
-    with EmbeddedKafka
-    with TestActorSystem
-    with IOAkkaSpec {
+class KafkaDistributedProcessingTest extends FunSuiteLike with EmbeddedKafka with IOSupport {
 
-  val embeddedKafka = EmbeddedKafka.start()(EmbeddedKafkaConfig(kafkaPort = 0, zooKeeperPort = 0))
+  override protected val topicCreationTimeout: FiniteDuration = 10.seconds
 
-  createCustomTopic("dp", Map.empty, 4, 0)
+  val embeddedKafka = IO(
+    EmbeddedKafka.start()(EmbeddedKafkaConfig(kafkaPort = 0, zooKeeperPort = 0))
+  )
 
-  val settings = DistributedProcessingSettings
-    .default(system)
-    .withTopicName("dp")
-    .modifyConsumerSettings(_.withBootstrapServers(s"localhost:${embeddedKafka.config.kafkaPort}"))
+  val topicName = "dp4"
+
+//  createCustomTopic("dp", Map.empty, 4)
+
+  val settings = DistributedProcessingSettings(Set(s"localhost:9092"), topicName)
 
   println("Kafka started")
 
   test("Process error propagation") {
     val exception = new RuntimeException("Oops!")
 
-    val result = DistributedProcessing(system)
-      .start("test", List(IO.raiseError[Unit](exception)), settings)
+    val result = DistributedProcessing(settings)
+      .start("test", List(IO.raiseError[Unit](exception)))
       .attempt
+      .timeout(80.seconds)
       .unsafeRunSync()
 
     assert(result == Left(exception))
@@ -46,14 +47,14 @@ class KafkaDistributedProcessingTest
               .set((true, false))
               .guarantee(ref.set((true, true))) >> done.complete(()) >> IO.never.void
 
-          val run = DistributedProcessing(system)
-            .start("test1", List(process), settings)
+          val run = DistributedProcessing(settings)
+            .start("test1", List(process))
 
           IO.race(run, done.get) >> ref.get
         }
     }
 
-    val (started, finished) = test.unsafeRunSync()
+    val (started, finished) = test.timeout(80.seconds).unsafeRunSync()
 
     assert(started)
     assert(finished)
@@ -65,42 +66,36 @@ class KafkaDistributedProcessingTest
         .from(0)
         .take(8)
         .map { idx =>
-          IO(println(s"Starting $idx")) >> queue.enqueue1(idx) >> IO.never.void
+          queue.enqueue1(idx) >> IO.never.void
         }
         .toList
 
-      def run(clientId: String) =
-        DistributedProcessing(system)
-          .start("test3", processes, settings.modifyConsumerSettings(_.withClientId(clientId)))
+      val run =
+        DistributedProcessing(settings)
+          .start("test3", processes)
 
-      def dequeue(size: Long): IO[List[Int]] =
-        queue.dequeue.evalTap(x => IO(println(x))).take(size).compile.toList
+      def dequeue(size: Long): IO[Set[Int]] =
+        queue.dequeue.take(size).compile.to[Set]
 
       for {
-        f1 <- run("1").start
-        _ = println(s"Started 1")
+        f1 <- run.start
         s1 <- dequeue(8)
-        _ = println(s"Dequeued 8")
-        f2 <- run("2").start
-        _ = println(s"Started 2")
+        f2 <- run.start
         s2 <- dequeue(4)
-        _ = println(s"Dequeued 4")
         _ <- f1.cancel
         s3 <- dequeue(4)
-        _ = println(s"Dequeued 4")
         _ <- f2.cancel
       } yield (s1, s2, s3)
     }
 
-    val (s1, s2, s3) = test.unsafeRunSync()
-
-    assert(s1 == List(0, 1, 2, 3, 4, 5, 6, 7))
-    assert(s2 == List(4, 5, 6, 7))
-    assert(s3 == List(0, 1, 2, 3))
+    val x @ (s1, s2, s3) = test.timeout(80.seconds).unsafeRunSync()
+    println(x)
+    assert(s1 == Set(0, 1, 2, 3, 4, 5, 6, 7))
+    assert(s3 == s1 -- s2)
   }
 
   override protected def afterAll(): Unit = {
-    EmbeddedKafka.stop()
+    IO(EmbeddedKafka.stop())
     super.afterAll()
   }
 }

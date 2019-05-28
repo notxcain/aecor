@@ -15,7 +15,7 @@ import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
 import com.typesafe.config.ConfigFactory
-import aecor.kafkadistributedprocessing.interop._
+import streamz.converter._
 import cats.implicits._
 
 import scala.concurrent.duration._
@@ -65,7 +65,7 @@ object App extends IOApp {
         val sources = transaction.EventsourcedAlgebra.tagging.tags.map { tag =>
           journal
             .eventsByTag(tag, consumerId)
-            .toStream[IO](materializer)
+            .toStream[IO]()
         }
         FS2QueueProcess.create(sources).flatMap {
           case (stream, processes) =>

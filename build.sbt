@@ -12,7 +12,7 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.21"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
-lazy val akkaStreamKafkaVersion = "1.0.1"
+lazy val apacheKafkaClientsVersion = "2.2.0"
 lazy val catsVersion = "1.4.0"
 lazy val catsEffectVersion = "1.2.0"
 lazy val scodecVersion = "1.10.4"
@@ -180,7 +180,7 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val kafkaDistributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
-    "com.typesafe.akka" %% "akka-stream-kafka" % akkaStreamKafkaVersion,
+    "org.apache.kafka" % "kafka-clients" % apacheKafkaClientsVersion,
     "co.fs2" %% "fs2-core" % fs2Version,
     "co.fs2" %% "fs2-reactive-streams" % fs2Version
   )
@@ -206,6 +206,7 @@ lazy val exampleSettings =
     resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
     libraryDependencies ++=
       Seq(
+        "com.github.krasserm" %% "streamz-converter" % "0.10-M2",
         "co.fs2" %% "fs2-core" % fs2Version,
         "org.typelevel" %% "cats-mtl-core" % catsMTLVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
