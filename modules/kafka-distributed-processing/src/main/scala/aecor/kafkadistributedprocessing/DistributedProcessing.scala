@@ -2,7 +2,7 @@ package aecor.kafkadistributedprocessing
 
 import java.util.Properties
 
-import aecor.kafkadistributedprocessing.interop._
+import aecor.kafkadistributedprocessing.Kafka._
 import cats.effect.implicits._
 import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
 import cats.implicits._
@@ -34,7 +34,7 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
     */
   def start[F[_]: ConcurrentEffect: Timer: ContextShift](name: String,
                                                          processes: List[F[Unit]]): F[Unit] =
-    interop
+    Kafka
       .assignPartitions(settings.asProperties(name), settings.topicName)
       .map {
         case AssignedPartition(partition, partitionCount, watchRevocation) =>
@@ -63,16 +63,16 @@ object DistributedProcessing {
 
 final case class DistributedProcessingSettings(brokers: Set[String],
                                                topicName: String,
-                                               settings: Map[String, String] = Map.empty) {
+                                               consumerSettings: Map[String, String] = Map.empty) {
   def withClientId(clientId: String): DistributedProcessingSettings =
-    withProperty(ConsumerConfig.CLIENT_ID_CONFIG, clientId)
+    withConsumerSetting(ConsumerConfig.CLIENT_ID_CONFIG, clientId)
 
-  def withProperty(key: String, value: String): DistributedProcessingSettings =
-    copy(settings = settings.updated(key, value))
+  def withConsumerSetting(key: String, value: String): DistributedProcessingSettings =
+    copy(consumerSettings = consumerSettings.updated(key, value))
 
   def asProperties(groupId: String): Properties = {
     val properties = new Properties()
-    settings.foreach {
+    consumerSettings.foreach {
       case (key, value) => properties.setProperty(key, value)
     }
     properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers.mkString(","))

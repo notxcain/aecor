@@ -1,7 +1,6 @@
 package aecor.tests
 
 import cats.effect.{ ContextShift, IO, Timer }
-import org.scalatest.Suite
 
 trait IOSupport {
   implicit val contextShift: ContextShift[IO] =

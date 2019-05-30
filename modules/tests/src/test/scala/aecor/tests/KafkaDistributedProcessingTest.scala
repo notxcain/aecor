@@ -6,10 +6,15 @@ import cats.effect.concurrent.{ Deferred, Ref }
 import cats.implicits._
 import fs2.concurrent.Queue
 import net.manub.embeddedkafka.{ EmbeddedKafka, EmbeddedKafkaConfig }
-import org.scalatest.FunSuiteLike
+import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike }
+
 import scala.concurrent.duration._
 
-class KafkaDistributedProcessingTest extends FunSuiteLike with EmbeddedKafka with IOSupport {
+class KafkaDistributedProcessingTest
+    extends FunSuiteLike
+    with EmbeddedKafka
+    with IOSupport
+    with BeforeAndAfterAll {
 
   override protected val topicCreationTimeout: FiniteDuration = 10.seconds
 
@@ -19,7 +24,7 @@ class KafkaDistributedProcessingTest extends FunSuiteLike with EmbeddedKafka wit
 
   val topicName = "dp4"
 
-//  createCustomTopic("dp", Map.empty, 4)
+  createCustomTopic(topicName, Map.empty, 4)
 
   val settings = DistributedProcessingSettings(Set(s"localhost:9092"), topicName)
 

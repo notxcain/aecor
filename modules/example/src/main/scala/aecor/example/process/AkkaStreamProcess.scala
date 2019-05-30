@@ -1,4 +1,4 @@
-package aecor.kafkadistributedprocessing
+package aecor.example.process
 
 import aecor.util.effect._
 import akka.stream.scaladsl.{ Keep, Sink, Source }
