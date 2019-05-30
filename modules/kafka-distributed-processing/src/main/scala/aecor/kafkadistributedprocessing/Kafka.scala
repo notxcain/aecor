@@ -5,7 +5,8 @@ import java.util
 import java.util.Properties
 import java.util.concurrent.Executors
 
-import aecor.kafkadistributedprocessing.EnqueueingRebalanceListener.RebalanceCommand
+import aecor.data.Committable
+import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
 import cats.effect.concurrent.{ Deferred, Ref }
 import cats.effect.implicits._
 import cats.effect.{ ConcurrentEffect, ContextShift, ExitCase, Timer }
@@ -21,12 +22,13 @@ import scala.concurrent.duration._
 
 private[kafkadistributedprocessing] object Kafka {
 
-  type RevocationCallback[F[_]] = F[Unit] => F[Unit]
+  type RevocationCallback[F[_]] = F[Unit]
+  type RevocationObserver[F[_]] = RevocationCallback[F] => F[Unit]
   type Partition = Int
 
   final case class AssignedPartition[F[_]](partition: Partition,
                                            partitionCount: Int,
-                                           watchRevocation: F[F[Unit]])
+                                           watchRevocation: F[RevocationCallback[F]])
 
   def assignPartitions[F[_]](config: Properties, topic: String)(
     implicit F: ConcurrentEffect[F],
@@ -36,7 +38,7 @@ private[kafkadistributedprocessing] object Kafka {
     Stream
       .bracket(F.delay {
         val consumer =
-          new KafkaConsumer(config, unitSerde, unitSerde)
+          new KafkaConsumer(config, UnitSerde, UnitSerde)
         val executor = Executors.newSingleThreadExecutor()
         new ((Consumer[Unit, Unit] => ?) ~> F) {
           override def apply[A](f: Consumer[Unit, Unit] => A): F[A] =
@@ -65,23 +67,23 @@ private[kafkadistributedprocessing] object Kafka {
 
         Stream
           .eval(
-            EnqueueingRebalanceListener[F]
-              .use(
+            RebalanceEvents[F]
+              .subscribe(
                 listener =>
                   subscribe(listener) >>
                   fetchPartitionCount
               )
           )
           .flatMap {
-            case (pc, rebalanceCommands) =>
-              rebalanceCommands
+            case (pc, events) =>
+              events
                 .concurrently(Stream.repeatEval(poll >> timer.sleep(500.millis)))
                 .evalScan(
-                  (List.empty[AssignedPartition[F]], Map.empty[Partition, RevocationCallback[F]])
+                  (List.empty[AssignedPartition[F]], Map.empty[Partition, RevocationObserver[F]])
                 ) {
-                  case ((_, revocationCallbacks), command) =>
-                    command match {
-                      case RebalanceCommand.RevokePartitions(partitions, commit) =>
+                  case ((_, revocationCallbacks), Committable(commit, event)) =>
+                    event match {
+                      case RebalanceEvent.PartitionsRevoked(partitions) =>
                         partitions.toList
                           .traverse_ { partition =>
                             revocationCallbacks.get(partition).traverse { callback =>
@@ -90,7 +92,7 @@ private[kafkadistributedprocessing] object Kafka {
                               }
                             }
                           } >> commit.as((List.empty, revocationCallbacks -- partitions))
-                      case RebalanceCommand.AssignPartitions(partitions, commit) =>
+                      case RebalanceEvent.PartitionsAssigned(partitions) =>
                         partitions.toList
                           .traverse { p =>
                             Deferred[F, F[Unit]].flatMap { x =>
@@ -123,12 +125,11 @@ private[kafkadistributedprocessing] object Kafka {
           }
       }
 
-  private val unitSerde: Serializer[Unit] with Deserializer[Unit] =
-    new Serializer[Unit] with Deserializer[Unit] {
-      private val emptyByteArray = Array.empty[Byte]
-      override def serialize(topic: String, data: Unit): Array[Byte] = emptyByteArray
-      override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
-      override def deserialize(topic: String, data: Array[Byte]): Unit = ()
-      override def close(): Unit = ()
-    }
+  private object UnitSerde extends Serializer[Unit] with Deserializer[Unit] {
+    private val emptyByteArray = Array.empty[Byte]
+    override def serialize(topic: String, data: Unit): Array[Byte] = emptyByteArray
+    override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
+    override def deserialize(topic: String, data: Array[Byte]): Unit = ()
+    override def close(): Unit = ()
+  }
 }
