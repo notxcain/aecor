@@ -9,7 +9,7 @@ import aecor.data.Committable
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
 import cats.effect.concurrent.{ Deferred, Ref }
 import cats.effect.implicits._
-import cats.effect.{ ConcurrentEffect, ContextShift, ExitCase, Timer }
+import cats.effect.{ Async, ConcurrentEffect, ContextShift, ExitCase, Timer }
 import cats.implicits._
 import cats.~>
 import fs2.Stream
@@ -37,25 +37,11 @@ private[kafkadistributedprocessing] object Kafka {
   ): Stream[F, AssignedPartition[F]] =
     Stream
       .bracket(F.delay {
-        val consumer =
-          new KafkaConsumer(config, UnitSerde, UnitSerde)
-        val executor = Executors.newSingleThreadExecutor()
-        new ((Consumer[Unit, Unit] => ?) ~> F) {
-          override def apply[A](f: Consumer[Unit, Unit] => A): F[A] =
-            contextShift.evalOn(ExecutionContext.fromExecutor(executor)) {
-              F.async[A] { cb =>
-                executor.execute(new Runnable {
-                  override def run(): Unit =
-                    cb {
-                      try Right(f(consumer))
-                      catch {
-                        case e: Throwable => Left(e)
-                      }
-                    }
-                })
-              }
-            }
-        }
+        val original = Thread.currentThread.getContextClassLoader
+        Thread.currentThread.setContextClassLoader(null)
+        val consumer = new KafkaConsumer[Unit, Unit](config, new UnitSerde, new UnitSerde)
+        Thread.currentThread.setContextClassLoader(original)
+        new ConsumerAccess[F, Unit, Unit](consumer)
       })(useConsumer => useConsumer(_.close()))
       .flatMap { accessConsumer =>
         val fetchPartitionCount = accessConsumer(_.partitionsFor(topic).size())
@@ -125,11 +111,32 @@ private[kafkadistributedprocessing] object Kafka {
           }
       }
 
-  private object UnitSerde extends Serializer[Unit] with Deserializer[Unit] {
+  class UnitSerde extends Serializer[Unit] with Deserializer[Unit] {
     private val emptyByteArray = Array.empty[Byte]
     override def serialize(topic: String, data: Unit): Array[Byte] = emptyByteArray
     override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
     override def deserialize(topic: String, data: Array[Byte]): Unit = ()
     override def close(): Unit = ()
   }
+
+  final class ConsumerAccess[F[_], K, V](consumer: Consumer[K, V])(implicit F: Async[F],
+                                                                   contextShift: ContextShift[F])
+      extends ((Consumer[K, V] => ?) ~> F) {
+    private val executor = Executors.newSingleThreadExecutor()
+    override def apply[A](f: Consumer[K, V] => A): F[A] =
+      contextShift.evalOn(ExecutionContext.fromExecutor(executor)) {
+        F.async[A] { cb =>
+          executor.execute(new Runnable {
+            override def run(): Unit =
+              cb {
+                try Right(f(consumer))
+                catch {
+                  case e: Throwable => Left(e)
+                }
+              }
+          })
+        }
+      }
+  }
+
 }

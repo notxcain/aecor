@@ -36,7 +36,7 @@ class KafkaDistributedProcessingTest
     val result = DistributedProcessing(settings)
       .start("test", List(IO.raiseError[Unit](exception)))
       .attempt
-      .timeout(80.seconds)
+      .timeout(20.seconds)
       .unsafeRunSync()
 
     assert(result == Left(exception))
@@ -59,7 +59,7 @@ class KafkaDistributedProcessingTest
         }
     }
 
-    val (started, finished) = test.timeout(80.seconds).unsafeRunSync()
+    val (started, finished) = test.timeout(20.seconds).unsafeRunSync()
 
     assert(started)
     assert(finished)
@@ -93,7 +93,7 @@ class KafkaDistributedProcessingTest
       } yield (s1, s2, s3)
     }
 
-    val x @ (s1, s2, s3) = test.timeout(80.seconds).unsafeRunSync()
+    val x @ (s1, s2, s3) = test.timeout(20.seconds).unsafeRunSync()
     println(x)
     assert(s1 == Set(0, 1, 2, 3, 4, 5, 6, 7))
     assert(s3 == s1 -- s2)
