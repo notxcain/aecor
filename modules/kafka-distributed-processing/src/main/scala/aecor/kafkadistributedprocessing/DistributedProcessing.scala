@@ -49,14 +49,6 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
               ().pure[F]
           }
       }
-      .onFinalizeCase(
-        x =>
-          Sync[F].delay(
-            println(
-              s"Terminating process '$name' with clientId = ${settings.clientId}, reason [$x]"
-            )
-        )
-      )
       .compile
       .drain
 }

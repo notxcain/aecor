@@ -58,7 +58,6 @@ class KafkaDistributedProcessingTest extends FunSuiteLike with KafkaSupport with
 
   test("Process distribution") {
     val test = Queue.unbounded[IO, Int].flatMap { queue =>
-      def println[A](string: A): IO[Unit] = IO(Predef.println(string))
       def run(client: Int) =
         DistributedProcessing(
           settings.withConsumerSetting(ConsumerConfig.CLIENT_ID_CONFIG, client.toString)
@@ -70,7 +69,7 @@ class KafkaDistributedProcessingTest extends FunSuiteLike with KafkaSupport with
             .map { n =>
               val idx = client * 10 + n
               (queue.enqueue1(idx) >> IO.cancelBoundary <* IO.never)
-                .guaranteeCase(x => queue.enqueue1(-idx) >> println(s"Process $idx $x"))
+                .guaranteeCase(x => queue.enqueue1(-idx))
             }
             .toList
         )
@@ -79,15 +78,12 @@ class KafkaDistributedProcessingTest extends FunSuiteLike with KafkaSupport with
         queue.dequeue.take(size).compile.to[List]
 
       for {
-        _ <- println("Process distribution test")
         d1 <- run(1).start
         s1 <- dequeue(8)
         d2 <- run(2).start
         s2 <- dequeue(16)
-        _ <- println(s2)
         _ <- d1.cancel
         s3 <- dequeue(16)
-        _ <- println(s3)
         _ <- d2.cancel
         s4 <- dequeue(8)
       } yield (s1, s2, s3, s4)
@@ -95,7 +91,6 @@ class KafkaDistributedProcessingTest extends FunSuiteLike with KafkaSupport with
 
     val x @ (s1, s2, s3, s4) = test.timeout(20.seconds).unsafeRunSync()
 
-    println(x)
     assert(s1.toSet == Set(10, 11, 12, 13, 14, 15, 16, 17))
     assert((s1 ++ s2 ++ s3 ++ s4).sum == 0)
   }
