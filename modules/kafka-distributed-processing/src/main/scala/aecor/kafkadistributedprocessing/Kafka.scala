@@ -23,27 +23,31 @@ import scala.concurrent.duration._
 private[kafkadistributedprocessing] object Kafka {
 
   type CompletionCallback[F[_]] = F[Unit]
-  type RevokeToken[F[_]] = F[Unit]
   type Partition = Int
 
   final case class AssignedPartition[F[_]](partition: Partition,
                                            partitionCount: Int,
-                                           watchRevocation: F[RevokeToken[F]])
+                                           watchRevocation: F[CompletionCallback[F]])
 
-  def cancelableRevocationObserver[F[_]: Concurrent]
-    : F[(F[CompletionCallback[F]], RevokeToken[F])] =
+  final case class Channel[F[_]](watch: F[CompletionCallback[F]], call: F[Unit])
+
+  def channel[F[_]: Concurrent]: F[Channel[F]] =
     for {
       deferredCallback <- Deferred[F, CompletionCallback[F]]
       watchCancelled <- Deferred[F, Unit]
-      watchRevocation = deferredCallback.get
+      watch = deferredCallback.get
         .guaranteeCase {
-          case ExitCase.Canceled => watchCancelled.complete(())
-          case _                 => ().pure[F]
+          case ExitCase.Canceled =>
+            println("Watch Canceled")
+            watchCancelled.complete(())
+          case x => println(s"Watch $x").pure[F]
         }
-      revoke = Deferred[F, Unit].flatMap { x =>
-        deferredCallback.complete(x.complete(())) >> watchCancelled.get.race(x.get).void
-      }
-    } yield (watchRevocation, revoke)
+      call = watchCancelled.get
+        .race(Deferred[F, Unit].flatMap { deferredCompletion =>
+          deferredCallback.complete(deferredCompletion.complete(())) >> deferredCompletion.get
+        })
+        .void
+    } yield Channel(watch, call)
 
   def runUntilCancelled[F[_]: Concurrent, A](
     watchCancellation: F[F[Unit]]
@@ -85,10 +89,9 @@ private[kafkadistributedprocessing] object Kafka {
 
   }
 
-  def assignPartitions[F[_]](config: Properties, topic: String)(
-    implicit F: ConcurrentEffect[F],
-    timer: Timer[F],
-    contextShift: ContextShift[F]
+  def assignPartitions[F[_]: ConcurrentEffect: Timer: ContextShift](
+    config: Properties,
+    topic: String
   ): Stream[F, AssignedPartition[F]] =
     Stream
       .resource(createConsumerAccess[F](config))
@@ -104,9 +107,9 @@ private[kafkadistributedprocessing] object Kafka {
                     case RebalanceEvent.PartitionsAssigned(partitions) =>
                       partitions.toList
                         .traverse { partition =>
-                          cancelableRevocationObserver[F].map {
-                            case (watchRevocation, revoke) =>
-                              AssignedPartition(partition, partitionCount, watchRevocation) -> revoke
+                          channel[F].map {
+                            case Channel(watch, call) =>
+                              AssignedPartition(partition, partitionCount, watch) -> call
                           }
                         }
                         .map { list =>

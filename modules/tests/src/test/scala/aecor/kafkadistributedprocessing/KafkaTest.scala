@@ -2,6 +2,7 @@ package aecor.kafkadistributedprocessing
 
 import java.util.Properties
 
+import aecor.kafkadistributedprocessing.Kafka.Channel
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent.{
   PartitionsAssigned,
@@ -14,6 +15,7 @@ import fs2.Stream
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.scalatest.FunSuite
 import cats.implicits._
+import cats.effect.implicits._
 
 import scala.concurrent.duration._
 
@@ -91,18 +93,18 @@ class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
     assert(result.size() == partitionCount)
   }
 
-  test("Cancellable observer completes only after callback is called") {
+  test("Channel#call completes only after completion callback") {
     val out = Kafka
-      .cancelableRevocationObserver[IO]
+      .channel[IO]
       .flatMap {
-        case (watchRevocation, revoke) =>
+        case Channel(watch, call) =>
           Queue.unbounded[IO, String].flatMap { queue =>
             for {
-              fiber <- watchRevocation.flatMap { callback =>
+              fiber <- watch.flatMap { callback =>
                         queue.enqueue1("before callback") >> callback >> queue
                           .enqueue1("after callback")
                       }.start
-              _ <- queue.enqueue1("before revoke") >> revoke >> queue.enqueue1("after revoke")
+              _ <- queue.enqueue1("before call") >> call >> queue.enqueue1("after call")
               _ <- fiber.join
               out <- queue.dequeue.take(4).compile.toList
             } yield out
@@ -110,15 +112,15 @@ class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
       }
       .unsafeRunTimed(1.seconds)
       .get
-    assert(out == List("before revoke", "before callback", "after callback", "after revoke"))
+    assert(out == List("before call", "before callback", "after callback", "after call"))
   }
 
-  test("Cancellable observer does not wait for completion callback when cancelled") {
+  test("Channel#call does not wait for completion callback if watch cancelled") {
     Kafka
-      .cancelableRevocationObserver[IO]
+      .channel[IO]
       .flatMap {
-        case (watchRevocation, revoke) =>
-          watchRevocation.start.flatMap(_.cancel) >> revoke
+        case Channel(watch, call) =>
+          watch.start.flatMap(x => x.cancel.race(x.join).map(x => IO(println(x)) >> x.sequence)) >> call
       }
       .unsafeRunTimed(5.seconds)
       .get

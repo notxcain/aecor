@@ -49,11 +49,12 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
               ().pure[F]
           }
       }
-      .onFinalize(
-        Sync[F].delay(
-          println(
-            s"Terminating process $name, ${settings.consumerSettings.getOrElse(ConsumerConfig.CLIENT_ID_CONFIG, "")}"
-          )
+      .onFinalizeCase(
+        x =>
+          Sync[F].delay(
+            println(
+              s"Terminating process '$name' with clientId = ${settings.clientId}, reason [$x]"
+            )
         )
       )
       .compile
@@ -70,6 +71,8 @@ final case class DistributedProcessingSettings(brokers: Set[String],
                                                consumerSettings: Map[String, String] = Map.empty) {
   def withClientId(clientId: String): DistributedProcessingSettings =
     withConsumerSetting(ConsumerConfig.CLIENT_ID_CONFIG, clientId)
+
+  def clientId: Option[String] = consumerSettings.get(ConsumerConfig.CLIENT_ID_CONFIG)
 
   def withConsumerSetting(key: String, value: String): DistributedProcessingSettings =
     copy(consumerSettings = consumerSettings.updated(key, value))
