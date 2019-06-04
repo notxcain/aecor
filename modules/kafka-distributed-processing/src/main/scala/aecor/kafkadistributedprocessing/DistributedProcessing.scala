@@ -3,8 +3,7 @@ package aecor.kafkadistributedprocessing
 import java.util.Properties
 
 import aecor.kafkadistributedprocessing.Kafka._
-import cats.effect.implicits._
-import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
+import cats.effect.{ ConcurrentEffect, ContextShift, Sync, Timer }
 import cats.implicits._
 import fs2.Stream
 import org.apache.kafka.clients.consumer.ConsumerConfig
@@ -36,22 +35,27 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
                                                          processes: List[F[Unit]]): F[Unit] =
     Kafka
       .assignPartitions(settings.asProperties(name), settings.topicName)
-      .map {
+      .parEvalMapUnordered(Int.MaxValue) {
         case AssignedPartition(partition, partitionCount, watchRevocation) =>
           val (offset, processCount) = assignRange(processes.size, partitionCount, partition)
-          if (processCount > 0)
-            Stream
-              .range[F](offset, offset + processCount)
-              .parEvalMapUnordered(processCount)(processes)
-              .compile
-              .drain
-              .race(watchRevocation)
-              .flatMap(_.sequence_)
-          else
-            watchRevocation.start.flatMap(_.cancel)
+          Kafka.runUntilCancelled(watchRevocation) {
+            if (processCount > 0)
+              Stream
+                .range[F](offset, offset + processCount)
+                .parEvalMapUnordered(processCount)(processes)
+                .compile
+                .drain
+            else
+              ().pure[F]
+          }
       }
-      .map(Stream.eval_)
-      .parJoinUnbounded
+      .onFinalize(
+        Sync[F].delay(
+          println(
+            s"Terminating process $name, ${settings.consumerSettings.getOrElse(ConsumerConfig.CLIENT_ID_CONFIG, "")}"
+          )
+        )
+      )
       .compile
       .drain
 }

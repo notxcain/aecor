@@ -1,34 +1,22 @@
-package aecor.tests
+package aecor.kafkadistributedprocessing
 
-import aecor.kafkadistributedprocessing.{ DistributedProcessing, DistributedProcessingSettings }
+import aecor.tests.IOSupport
 import cats.effect.IO
 import cats.effect.concurrent.{ Deferred, Ref }
 import cats.implicits._
 import fs2.concurrent.Queue
-import net.manub.embeddedkafka.{ EmbeddedKafka, EmbeddedKafkaConfig }
-import org.scalatest.{ BeforeAndAfterAll, FunSuiteLike }
+import org.apache.kafka.clients.consumer.ConsumerConfig
+import org.scalatest.FunSuiteLike
 
 import scala.concurrent.duration._
+class KafkaDistributedProcessingTest extends FunSuiteLike with KafkaSupport with IOSupport {
 
-class KafkaDistributedProcessingTest
-    extends FunSuiteLike
-    with EmbeddedKafka
-    with IOSupport
-    with BeforeAndAfterAll {
+  val topicName = "process-distribution"
 
-  override protected val topicCreationTimeout: FiniteDuration = 10.seconds
+  createCustomTopic(topicName, partitions = 4)
 
-  val embeddedKafka = IO(
-    EmbeddedKafka.start()(EmbeddedKafkaConfig(kafkaPort = 0, zooKeeperPort = 0))
-  )
-
-  val topicName = "dp4"
-
-  createCustomTopic(topicName, Map.empty, 4)
-
-  val settings = DistributedProcessingSettings(Set(s"localhost:9092"), topicName)
-
-  println("Kafka started")
+  val settings =
+    DistributedProcessingSettings(Set(s"localhost:${kafkaConfig.kafkaPort}"), topicName)
 
   test("Process error propagation") {
     val exception = new RuntimeException("Oops!")
@@ -71,36 +59,36 @@ class KafkaDistributedProcessingTest
         .from(0)
         .take(8)
         .map { idx =>
-          queue.enqueue1(idx) >> IO.never.void
+          queue.enqueue1(idx) >> IO.never.void.guaranteeCase(_ => queue.enqueue1(-idx))
         }
         .toList
 
-      val run =
-        DistributedProcessing(settings)
+      def run(c: String) =
+        DistributedProcessing(settings.withConsumerSetting(ConsumerConfig.CLIENT_ID_CONFIG, c))
           .start("test3", processes)
 
-      def dequeue(size: Long): IO[Set[Int]] =
-        queue.dequeue.take(size).compile.to[Set]
+      def dequeue(size: Long): IO[List[Int]] =
+        queue.dequeue.take(size).compile.to[List]
 
       for {
-        f1 <- run.start
+        f1 <- run("1").start
         s1 <- dequeue(8)
-        f2 <- run.start
-        s2 <- dequeue(4)
+        _ = println(s1)
+        f2 <- run("2").start
+        s2 <- dequeue(8)
+        _ = println(s2)
         _ <- f1.cancel
-        s3 <- dequeue(4)
+        s3 <- dequeue(8)
+        _ = println(s3)
         _ <- f2.cancel
-      } yield (s1, s2, s3)
+      } yield (s1, s2, List.empty[Int], 0)
     }
 
-    val x @ (s1, s2, s3) = test.timeout(20.seconds).unsafeRunSync()
+    val x @ (s1, s2, s3, tail) = test.timeout(10.seconds).unsafeRunSync()
+
     println(x)
-    assert(s1 == Set(0, 1, 2, 3, 4, 5, 6, 7))
-    assert(s3 == s1 -- s2)
+    assert(s1 == List(0, 1, 2, 3, 4, 5, 6, 7))
+    assert(s3 == s1.filter(s2.contains))
   }
 
-  override protected def afterAll(): Unit = {
-    IO(EmbeddedKafka.stop())
-    super.afterAll()
-  }
 }

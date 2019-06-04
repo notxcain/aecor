@@ -17,8 +17,8 @@ import scala.collection.JavaConverters._
 private[kafkadistributedprocessing] object RebalanceEvents {
   final class UsePartiallyApplied[F[_]] {
     def subscribe[A](
-      f: ConsumerRebalanceListener => F[A]
-    )(implicit F: ConcurrentEffect[F]): F[(A, Stream[F, Committable[F, RebalanceEvent]])] =
+      f: ConsumerRebalanceListener => F[Unit]
+    )(implicit F: ConcurrentEffect[F]): F[Stream[F, Committable[F, RebalanceEvent]]] =
       for {
         queue <- Queue.unbounded[F, Committable[F, RebalanceEvent]]
         listener = new Listener[F](
@@ -28,8 +28,8 @@ private[kafkadistributedprocessing] object RebalanceEvents {
                 queue.enqueue1(Committable(completion.complete(()), event)) >> completion.get
             }
         )
-        a <- f(listener)
-      } yield (a, queue.dequeue)
+        _ <- f(listener)
+      } yield queue.dequeue
   }
 
   def apply[F[_]]: UsePartiallyApplied[F] = new UsePartiallyApplied[F]

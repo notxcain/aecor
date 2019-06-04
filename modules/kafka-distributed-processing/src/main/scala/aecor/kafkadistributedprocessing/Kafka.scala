@@ -7,9 +7,9 @@ import java.util.concurrent.Executors
 
 import aecor.data.Committable
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
-import cats.effect.concurrent.{ Deferred, Ref }
+import cats.effect.concurrent.Deferred
 import cats.effect.implicits._
-import cats.effect.{ Async, ConcurrentEffect, ContextShift, ExitCase, Timer }
+import cats.effect.{ Async, Concurrent, ConcurrentEffect, ContextShift, ExitCase, Resource, Timer }
 import cats.implicits._
 import cats.~>
 import fs2.Stream
@@ -22,13 +22,68 @@ import scala.concurrent.duration._
 
 private[kafkadistributedprocessing] object Kafka {
 
-  type RevocationCallback[F[_]] = F[Unit]
-  type RevocationObserver[F[_]] = RevocationCallback[F] => F[Unit]
+  type CompletionCallback[F[_]] = F[Unit]
+  type RevokeToken[F[_]] = F[Unit]
   type Partition = Int
 
   final case class AssignedPartition[F[_]](partition: Partition,
                                            partitionCount: Int,
-                                           watchRevocation: F[RevocationCallback[F]])
+                                           watchRevocation: F[RevokeToken[F]])
+
+  def cancelableRevocationObserver[F[_]: Concurrent]
+    : F[(F[CompletionCallback[F]], RevokeToken[F])] =
+    for {
+      deferredCallback <- Deferred[F, CompletionCallback[F]]
+      watchCancelled <- Deferred[F, Unit]
+      watchRevocation = deferredCallback.get
+        .guaranteeCase {
+          case ExitCase.Canceled => watchCancelled.complete(())
+          case _                 => ().pure[F]
+        }
+      revoke = Deferred[F, Unit].flatMap { x =>
+        deferredCallback.complete(x.complete(())) >> watchCancelled.get.race(x.get).void
+      }
+    } yield (watchRevocation, revoke)
+
+  def runUntilCancelled[F[_]: Concurrent, A](
+    watchCancellation: F[F[Unit]]
+  )(fa: F[A]): F[Either[Unit, A]] =
+    fa.race(watchCancellation).flatMap(_.sequence).map(_.swap)
+
+  def createConsumerAccess[F[_]: ContextShift](
+    config: Properties
+  )(implicit F: Async[F]): Resource[F, ConsumerAccess[F, Unit, Unit]] =
+    Resource.make(F.delay {
+      val original = Thread.currentThread.getContextClassLoader
+      Thread.currentThread.setContextClassLoader(null)
+      val consumer = new KafkaConsumer[Unit, Unit](config, new UnitSerde, new UnitSerde)
+      Thread.currentThread.setContextClassLoader(original)
+      new ConsumerAccess[F, Unit, Unit](consumer)
+    })(useConsumer => useConsumer(_.close()))
+
+  def watchRebalanceEvents[F[_]: ConcurrentEffect](
+    accessConsumer: ConsumerAccess[F, Unit, Unit],
+    topic: String
+  )(implicit timer: Timer[F]): Stream[F, Committable[F, RebalanceEvent]] = {
+
+    def subscribe(listener: ConsumerRebalanceListener) =
+      accessConsumer(_.subscribe(List(topic).asJava, listener))
+    val unsubscribe =
+      accessConsumer(_.unsubscribe())
+
+    val poll = accessConsumer(_.poll(Duration.ofMillis(50))).void
+
+    Stream
+      .force(
+        RebalanceEvents[F]
+          .subscribe(subscribe)
+          .map(
+            _.onFinalize(unsubscribe)
+              .concurrently(Stream.repeatEval(poll >> timer.sleep(500.millis)))
+          )
+      )
+
+  }
 
   def assignPartitions[F[_]](config: Properties, topic: String)(
     implicit F: ConcurrentEffect[F],
@@ -36,74 +91,40 @@ private[kafkadistributedprocessing] object Kafka {
     contextShift: ContextShift[F]
   ): Stream[F, AssignedPartition[F]] =
     Stream
-      .bracket(F.delay {
-        val original = Thread.currentThread.getContextClassLoader
-        Thread.currentThread.setContextClassLoader(null)
-        val consumer = new KafkaConsumer[Unit, Unit](config, new UnitSerde, new UnitSerde)
-        Thread.currentThread.setContextClassLoader(original)
-        new ConsumerAccess[F, Unit, Unit](consumer)
-      })(useConsumer => useConsumer(_.close()))
+      .resource(createConsumerAccess[F](config))
       .flatMap { accessConsumer =>
         val fetchPartitionCount = accessConsumer(_.partitionsFor(topic).size())
-
-        def subscribe(listener: ConsumerRebalanceListener) =
-          accessConsumer(_.subscribe(List(topic).asJava, listener))
-
-        val poll = accessConsumer(_.poll(Duration.ofMillis(50))).void
-
         Stream
-          .eval(
-            RebalanceEvents[F]
-              .subscribe(
-                listener =>
-                  subscribe(listener) >>
-                  fetchPartitionCount
-              )
-          )
-          .flatMap {
-            case (pc, events) =>
-              events
-                .concurrently(Stream.repeatEval(poll >> timer.sleep(500.millis)))
-                .evalScan(
-                  (List.empty[AssignedPartition[F]], Map.empty[Partition, RevocationObserver[F]])
-                ) {
-                  case ((_, revocationCallbacks), Committable(commit, event)) =>
-                    event match {
-                      case RebalanceEvent.PartitionsRevoked(partitions) =>
-                        partitions.toList
-                          .traverse_ { partition =>
-                            revocationCallbacks.get(partition).traverse { callback =>
-                              Deferred[F, Unit].flatMap { revocationCompletion =>
-                                callback(revocationCompletion.complete(())) >> revocationCompletion.get
-                              }
-                            }
-                          } >> commit.as((List.empty, revocationCallbacks -- partitions))
-                      case RebalanceEvent.PartitionsAssigned(partitions) =>
-                        partitions.toList
-                          .traverse { p =>
-                            Deferred[F, F[Unit]].flatMap { x =>
-                              Ref[F].of(false).map { cancelled =>
-                                val assignedPartition =
-                                  AssignedPartition(p, pc, x.get.guaranteeCase {
-                                    case ExitCase.Canceled => cancelled.set(true)
-                                    case _                 => ().pure[F]
-                                  })
-                                val completionCallback = (complete: F[Unit]) =>
-                                  cancelled.get.ifM(complete, x.complete(complete))
-                                (assignedPartition, completionCallback)
-                              }
-                            }
+          .eval(fetchPartitionCount)
+          .flatMap { partitionCount =>
+            watchRebalanceEvents(accessConsumer, topic)
+              .evalScan((List.empty[AssignedPartition[F]], Map.empty[Partition, F[Unit]])) {
+                case ((_, revokeTokens), Committable(commit, event)) =>
+                  val handleEvent = event match {
+                    case RebalanceEvent.PartitionsAssigned(partitions) =>
+                      partitions.toList
+                        .traverse { partition =>
+                          cancelableRevocationObserver[F].map {
+                            case (watchRevocation, revoke) =>
+                              AssignedPartition(partition, partitionCount, watchRevocation) -> revoke
                           }
-                          .flatMap { list =>
-                            val assignedPartitions = list.map(_._1)
-                            val updatedRevocationCallbacks = revocationCallbacks ++ list.map {
-                              case (AssignedPartition(partition, _, _), callback) =>
-                                partition -> callback
-                            }
-                            commit.as((assignedPartitions, updatedRevocationCallbacks))
+                        }
+                        .map { list =>
+                          val assignedPartitions = list.map(_._1)
+                          val updatedRevocationCallbacks = revokeTokens ++ list.map {
+                            case (AssignedPartition(partition, _, _), revoke) =>
+                              partition -> revoke
                           }
-                    }
-                }
+                          (assignedPartitions, updatedRevocationCallbacks)
+                        }
+                    case RebalanceEvent.PartitionsRevoked(partitions) =>
+                      partitions.toList
+                        .flatMap(revokeTokens.get)
+                        .sequence_
+                        .as((List.empty[AssignedPartition[F]], revokeTokens -- partitions))
+                  }
+                  handleEvent <* commit
+              }
           }
           .flatMap {
             case (assignedPartitions, _) =>
