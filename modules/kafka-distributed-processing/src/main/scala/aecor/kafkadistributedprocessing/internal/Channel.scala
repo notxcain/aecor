@@ -1,6 +1,7 @@
-package aecor.kafkadistributedprocessing
+package aecor.kafkadistributedprocessing.internal
 
-import aecor.kafkadistributedprocessing.Channel.CompletionCallback
+import aecor.kafkadistributedprocessing.internal
+import aecor.kafkadistributedprocessing.internal.Channel.CompletionCallback
 import cats.effect.Concurrent
 import cats.effect.concurrent.Deferred
 import cats.effect.implicits._
@@ -26,5 +27,5 @@ private[kafkadistributedprocessing] object Channel {
         .race(closed.get)
         .void
 
-    } yield Channel(watch, close, call)
+    } yield internal.Channel(watch, close, call)
 }

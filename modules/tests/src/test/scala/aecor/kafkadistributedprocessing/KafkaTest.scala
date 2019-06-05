@@ -2,8 +2,9 @@ package aecor.kafkadistributedprocessing
 
 import java.util.Properties
 
-import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
-import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent.{
+import aecor.kafkadistributedprocessing.internal.Kafka
+import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent
+import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent.{
   PartitionsAssigned,
   PartitionsRevoked
 }

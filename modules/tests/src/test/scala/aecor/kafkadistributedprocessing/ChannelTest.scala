@@ -1,11 +1,13 @@
 package aecor.kafkadistributedprocessing
 
+import aecor.kafkadistributedprocessing.internal.Channel
 import aecor.tests.IOSupport
 import cats.effect.IO
 import cats.implicits._
 import fs2.concurrent.Queue
 import org.scalatest.FunSuite
 import cats.effect.implicits._
+
 import scala.concurrent.duration._
 
 class ChannelTest extends FunSuite with IOSupport {

@@ -1,4 +1,4 @@
-package aecor.kafkadistributedprocessing
+package aecor.kafkadistributedprocessing.internal
 
 import java.util
 

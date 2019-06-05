@@ -1,4 +1,4 @@
-package aecor.kafkadistributedprocessing
+package aecor.kafkadistributedprocessing.internal
 
 import java.time.Duration
 import java.util
@@ -6,8 +6,8 @@ import java.util.Properties
 import java.util.concurrent.Executors
 
 import aecor.data.Committable
-import aecor.kafkadistributedprocessing.Channel.CompletionCallback
-import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
+import aecor.kafkadistributedprocessing.internal.Channel.CompletionCallback
+import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent
 import cats.effect.{ Async, ConcurrentEffect, ContextShift, Resource, Timer }
 import cats.implicits._
 import cats.~>
