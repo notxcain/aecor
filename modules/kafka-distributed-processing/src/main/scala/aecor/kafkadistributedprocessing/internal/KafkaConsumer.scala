@@ -6,7 +6,12 @@ import java.util.concurrent.Executors
 
 import aecor.kafkadistributedprocessing.internal.Kafka.UnitDeserializer
 import cats.effect.{ Async, ContextShift, Resource }
-import org.apache.kafka.clients.consumer.{ Consumer, ConsumerRebalanceListener, ConsumerRecords }
+import org.apache.kafka.clients.consumer.{
+  Consumer,
+  ConsumerRebalanceListener,
+  ConsumerRecord,
+  ConsumerRecords
+}
 import org.apache.kafka.common.PartitionInfo
 import org.apache.kafka.common.serialization.Deserializer
 
@@ -37,6 +42,9 @@ private[kafkadistributedprocessing] final class KafkaConsumer[F[_], K, V](consum
   def subscribe(topics: Set[String], listener: ConsumerRebalanceListener): F[Unit] =
     this(_.subscribe(topics.asJava, listener))
 
+  def subscribe(topics: Set[String]): F[Unit] =
+    this(_.subscribe(topics.asJava))
+
   val unsubscribe: F[Unit] =
     this(_.unsubscribe())
 
@@ -45,8 +53,8 @@ private[kafkadistributedprocessing] final class KafkaConsumer[F[_], K, V](consum
 
   def close: F[Unit] = this(_.close())
 
-  def poll(duration: FiniteDuration): F[ConsumerRecords[K, V]] =
-    this(_.poll(Duration.ofNanos(duration.toNanos)))
+  def poll(timeout: FiniteDuration): F[ConsumerRecords[K, V]] =
+    this(_.poll(Duration.ofNanos(timeout.toNanos)))
 }
 
 private[kafkadistributedprocessing] object KafkaConsumer {
