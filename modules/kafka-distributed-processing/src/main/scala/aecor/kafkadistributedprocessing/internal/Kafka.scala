@@ -3,20 +3,15 @@ package aecor.kafkadistributedprocessing.internal
 import java.time.Duration
 import java.util
 import java.util.Properties
-import java.util.concurrent.Executors
 
 import aecor.data.Committable
 import aecor.kafkadistributedprocessing.internal.Channel.CompletionCallback
 import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent
-import cats.effect.{ Async, ConcurrentEffect, ContextShift, Resource, Timer }
+import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
 import cats.implicits._
-import cats.~>
 import fs2.Stream
-import org.apache.kafka.clients.consumer.{ Consumer, ConsumerRebalanceListener, KafkaConsumer }
-import org.apache.kafka.common.serialization.{ Deserializer, Serializer }
+import org.apache.kafka.common.serialization.Deserializer
 
-import scala.collection.JavaConverters._
-import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 
 private[kafkadistributedprocessing] object Kafka {
@@ -28,53 +23,37 @@ private[kafkadistributedprocessing] object Kafka {
                                            watchRevocation: F[CompletionCallback[F]],
                                            release: F[Unit])
 
-  def createConsumerAccess[F[_]: ContextShift](
-    config: Properties
-  )(implicit F: Async[F]): Resource[F, ConsumerAccess[F, Unit, Unit]] =
-    Resource.make(F.delay {
-      val original = Thread.currentThread.getContextClassLoader
-      Thread.currentThread.setContextClassLoader(null)
-      val consumer = new KafkaConsumer[Unit, Unit](config, new UnitSerde, new UnitSerde)
-      Thread.currentThread.setContextClassLoader(original)
-      new ConsumerAccess[F, Unit, Unit](consumer)
-    })(useConsumer => useConsumer(_.close()))
-
   def watchRebalanceEvents[F[_]: ConcurrentEffect](
-    accessConsumer: ConsumerAccess[F, Unit, Unit],
-    topic: String
-  )(implicit timer: Timer[F]): Stream[F, Committable[F, RebalanceEvent]] = {
-
-    def subscribe(listener: ConsumerRebalanceListener) =
-      accessConsumer(_.subscribe(List(topic).asJava, listener))
-    val unsubscribe =
-      accessConsumer(_.unsubscribe())
-
-    val poll = accessConsumer(_.poll(Duration.ofMillis(50))).void
-
+    consumer: KafkaConsumer[F, Unit, Unit],
+    topic: String,
+    pollingInterval: FiniteDuration,
+    pollTimeout: FiniteDuration
+  )(implicit timer: Timer[F]): Stream[F, Committable[F, RebalanceEvent]] =
     Stream
       .force(
         RebalanceEvents[F]
-          .subscribe(subscribe)
+          .subscribe(consumer.subscribe(Set(topic), _))
           .map(
-            _.onFinalize(unsubscribe)
-              .concurrently(Stream.repeatEval(poll >> timer.sleep(500.millis)))
+            _.onFinalize(consumer.unsubscribe)
+              .concurrently(
+                Stream.repeatEval(consumer.poll(pollTimeout) >> timer.sleep(pollingInterval))
+              )
           )
       )
 
-  }
-
   def assignPartitions[F[_]: ConcurrentEffect: Timer: ContextShift](
     config: Properties,
-    topic: String
+    topic: String,
+    pollingInterval: FiniteDuration,
+    pollTimeout: FiniteDuration
   ): Stream[F, AssignedPartition[F]] =
     Stream
-      .resource(createConsumerAccess[F](config))
-      .flatMap { accessConsumer =>
-        val fetchPartitionCount = accessConsumer(_.partitionsFor(topic).size())
+      .resource(KafkaConsumer.create[F](config, new UnitDeserializer, new UnitDeserializer))
+      .flatMap { consumer =>
         Stream
-          .eval(fetchPartitionCount)
+          .eval(consumer.partitionsFor(topic).map(_.size))
           .flatMap { partitionCount =>
-            watchRebalanceEvents(accessConsumer, topic)
+            watchRebalanceEvents(consumer, topic, pollingInterval, pollTimeout)
               .evalScan((List.empty[AssignedPartition[F]], Map.empty[Partition, F[Unit]])) {
                 case ((_, revokeTokens), Committable(commit, event)) =>
                   val handleEvent = event match {
@@ -83,7 +62,7 @@ private[kafkadistributedprocessing] object Kafka {
                         .traverse { partition =>
                           Channel.create[F].map {
                             case Channel(watch, close, call) =>
-                              AssignedPartition(partition, partitionCount, watch, close) -> call
+                              AssignedPartition(partition.partition(), partitionCount, watch, close) -> call
                           }
                         }
                         .map { list =>
@@ -96,9 +75,15 @@ private[kafkadistributedprocessing] object Kafka {
                         }
                     case RebalanceEvent.PartitionsRevoked(partitions) =>
                       partitions.toList
+                        .map(_.partition())
                         .flatMap(revokeTokens.get)
                         .sequence_
-                        .as((List.empty[AssignedPartition[F]], revokeTokens -- partitions))
+                        .as(
+                          (
+                            List.empty[AssignedPartition[F]],
+                            revokeTokens -- partitions.map(_.partition)
+                          )
+                        )
                   }
                   handleEvent <* commit
               }
@@ -109,32 +94,10 @@ private[kafkadistributedprocessing] object Kafka {
           }
       }
 
-  class UnitSerde extends Serializer[Unit] with Deserializer[Unit] {
-    private val emptyByteArray = Array.empty[Byte]
-    override def serialize(topic: String, data: Unit): Array[Byte] = emptyByteArray
+  final class UnitDeserializer extends Deserializer[Unit] {
     override def configure(configs: util.Map[String, _], isKey: Boolean): Unit = ()
     override def deserialize(topic: String, data: Array[Byte]): Unit = ()
     override def close(): Unit = ()
-  }
-
-  final class ConsumerAccess[F[_], K, V](consumer: Consumer[K, V])(implicit F: Async[F],
-                                                                   contextShift: ContextShift[F])
-      extends ((Consumer[K, V] => ?) ~> F) {
-    private val executor = Executors.newSingleThreadExecutor()
-    override def apply[A](f: Consumer[K, V] => A): F[A] =
-      contextShift.evalOn(ExecutionContext.fromExecutor(executor)) {
-        F.async[A] { cb =>
-          executor.execute(new Runnable {
-            override def run(): Unit =
-              cb {
-                try Right(f(consumer))
-                catch {
-                  case e: Throwable => Left(e)
-                }
-              }
-          })
-        }
-      }
   }
 
 }

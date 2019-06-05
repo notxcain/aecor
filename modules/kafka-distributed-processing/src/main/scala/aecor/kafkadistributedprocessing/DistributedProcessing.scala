@@ -10,6 +10,8 @@ import cats.effect.implicits._
 import fs2.Stream
 import org.apache.kafka.clients.consumer.ConsumerConfig
 
+import scala.concurrent.duration._
+
 final class DistributedProcessing(settings: DistributedProcessingSettings) {
 
   private def assignRange(size: Int, partitionCount: Int, partition: Int): Option[(Int, Int)] = {
@@ -36,7 +38,12 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
   def start[F[_]: ConcurrentEffect: Timer: ContextShift](name: String,
                                                          processes: List[F[Unit]]): F[Unit] =
     Kafka
-      .assignPartitions(settings.asProperties(name), settings.topicName)
+      .assignPartitions(
+        settings.asProperties(name),
+        settings.topicName,
+        settings.pollingInterval,
+        settings.pollTimeout
+      )
       .parEvalMapUnordered(Int.MaxValue) {
         case AssignedPartition(partition, partitionCount, watchRevocation, release) =>
           assignRange(processes.size, partitionCount, partition).fold(release) {
@@ -64,6 +71,8 @@ object DistributedProcessing {
 
 final case class DistributedProcessingSettings(brokers: Set[String],
                                                topicName: String,
+                                               pollingInterval: FiniteDuration = 500.millis,
+                                               pollTimeout: FiniteDuration = 50.millis,
                                                consumerSettings: Map[String, String] = Map.empty) {
   def withClientId(clientId: String): DistributedProcessingSettings =
     withConsumerSetting(ConsumerConfig.CLIENT_ID_CONFIG, clientId)

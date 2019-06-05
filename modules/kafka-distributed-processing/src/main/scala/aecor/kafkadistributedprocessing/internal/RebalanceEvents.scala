@@ -11,6 +11,7 @@ import fs2.Stream
 import fs2.concurrent.Queue
 import org.apache.kafka.clients.consumer.ConsumerRebalanceListener
 import org.apache.kafka.common
+import org.apache.kafka.common.TopicPartition
 
 import scala.collection.JavaConverters._
 
@@ -36,19 +37,19 @@ private[kafkadistributedprocessing] object RebalanceEvents {
 
   sealed abstract class RebalanceEvent
   object RebalanceEvent {
-    final case class PartitionsRevoked(partitions: Set[Int]) extends RebalanceEvent
-    final case class PartitionsAssigned(partitions: Set[Int]) extends RebalanceEvent
+    final case class PartitionsRevoked(partitions: Set[TopicPartition]) extends RebalanceEvent
+    final case class PartitionsAssigned(partitions: Set[TopicPartition]) extends RebalanceEvent
   }
 
   private final class Listener[F[_]: Effect](processEvent: RebalanceEvent => F[Unit])
       extends ConsumerRebalanceListener {
 
     override def onPartitionsRevoked(partitions: util.Collection[common.TopicPartition]): Unit =
-      processEvent(RebalanceEvent.PartitionsRevoked(partitions.asScala.map(_.partition()).toSet)).toIO
+      processEvent(RebalanceEvent.PartitionsRevoked(partitions.asScala.toSet)).toIO
         .unsafeRunSync()
 
     override def onPartitionsAssigned(partitions: util.Collection[common.TopicPartition]): Unit =
-      processEvent(RebalanceEvent.PartitionsAssigned(partitions.asScala.map(_.partition()).toSet)).toIO
+      processEvent(RebalanceEvent.PartitionsAssigned(partitions.asScala.toSet)).toIO
         .unsafeRunSync()
   }
 }

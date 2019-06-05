@@ -2,7 +2,8 @@ package aecor.kafkadistributedprocessing
 
 import java.util.Properties
 
-import aecor.kafkadistributedprocessing.internal.Kafka
+import aecor.kafkadistributedprocessing.internal.Kafka.UnitDeserializer
+import aecor.kafkadistributedprocessing.internal.{ Kafka, KafkaConsumer }
 import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent
 import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent.{
   PartitionsAssigned,
@@ -28,13 +29,13 @@ class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
     val properties = new Properties()
     properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers.mkString(","))
     properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, "test")
-    Kafka.createConsumerAccess[IO](properties)
+    KafkaConsumer.create[IO](properties, new UnitDeserializer, new UnitDeserializer)
   }
 
   val watchRebalanceEvents =
     Stream
       .resource(createConsumerAccess)
-      .flatMap(Kafka.watchRebalanceEvents(_, topic))
+      .flatMap(Kafka.watchRebalanceEvents(_, topic, 500.millis, 50.millis))
 
   test("Rebalance event stream") {
 
@@ -87,9 +88,9 @@ class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
   }
 
   test("Topic partitions query works before subscription") {
-    val program = createConsumerAccess.use(_(_.partitionsFor(topic)))
+    val program = createConsumerAccess.use(_.partitionsFor(topic))
     val result = program.unsafeRunTimed(2.seconds).get
-    assert(result.size() == partitionCount)
+    assert(result.size == partitionCount)
   }
 
 }
