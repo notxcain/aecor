@@ -6,10 +6,9 @@ import java.util.Properties
 import java.util.concurrent.Executors
 
 import aecor.data.Committable
+import aecor.kafkadistributedprocessing.Channel.CompletionCallback
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
-import cats.effect.concurrent.Deferred
-import cats.effect.implicits._
-import cats.effect.{ Async, Concurrent, ConcurrentEffect, ContextShift, ExitCase, Resource, Timer }
+import cats.effect.{ Async, ConcurrentEffect, ContextShift, Resource, Timer }
 import cats.implicits._
 import cats.~>
 import fs2.Stream
@@ -22,37 +21,12 @@ import scala.concurrent.duration._
 
 private[kafkadistributedprocessing] object Kafka {
 
-  type CompletionCallback[F[_]] = F[Unit]
   type Partition = Int
 
   final case class AssignedPartition[F[_]](partition: Partition,
                                            partitionCount: Int,
-                                           watchRevocation: F[CompletionCallback[F]])
-
-  final case class Channel[F[_]](watch: F[CompletionCallback[F]], call: F[Unit])
-
-  def channel[F[_]: Concurrent]: F[Channel[F]] =
-    for {
-      deferredCallback <- Deferred[F, CompletionCallback[F]]
-      watchCancelled <- Deferred[F, Unit]
-      watch = deferredCallback.get
-        .guaranteeCase {
-          case ExitCase.Canceled =>
-            println("Watch Canceled")
-            watchCancelled.complete(())
-          case x => println(s"Watch $x").pure[F]
-        }
-      call = watchCancelled.get
-        .race(Deferred[F, Unit].flatMap { deferredCompletion =>
-          deferredCallback.complete(deferredCompletion.complete(())) >> deferredCompletion.get
-        })
-        .void
-    } yield Channel(watch, call)
-
-  def runUntilCancelled[F[_]: Concurrent, A](
-    watchCancellation: F[F[Unit]]
-  )(fa: F[A]): F[Either[Unit, A]] =
-    fa.race(watchCancellation).flatMap(_.sequence).map(_.swap)
+                                           watchRevocation: F[CompletionCallback[F]],
+                                           release: F[Unit])
 
   def createConsumerAccess[F[_]: ContextShift](
     config: Properties
@@ -107,15 +81,15 @@ private[kafkadistributedprocessing] object Kafka {
                     case RebalanceEvent.PartitionsAssigned(partitions) =>
                       partitions.toList
                         .traverse { partition =>
-                          channel[F].map {
-                            case Channel(watch, call) =>
-                              AssignedPartition(partition, partitionCount, watch) -> call
+                          Channel.create[F].map {
+                            case Channel(watch, close, call) =>
+                              AssignedPartition(partition, partitionCount, watch, close) -> call
                           }
                         }
                         .map { list =>
                           val assignedPartitions = list.map(_._1)
                           val updatedRevocationCallbacks = revokeTokens ++ list.map {
-                            case (AssignedPartition(partition, _, _), revoke) =>
+                            case (AssignedPartition(partition, _, _, _), revoke) =>
                               partition -> revoke
                           }
                           (assignedPartitions, updatedRevocationCallbacks)

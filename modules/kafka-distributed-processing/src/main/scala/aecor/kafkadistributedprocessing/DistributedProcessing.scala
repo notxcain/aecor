@@ -3,8 +3,9 @@ package aecor.kafkadistributedprocessing
 import java.util.Properties
 
 import aecor.kafkadistributedprocessing.Kafka._
-import cats.effect.{ ConcurrentEffect, ContextShift, Sync, Timer }
+import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
 import cats.implicits._
+import cats.effect.implicits._
 import fs2.Stream
 import org.apache.kafka.clients.consumer.ConsumerConfig
 
@@ -36,9 +37,10 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
     Kafka
       .assignPartitions(settings.asProperties(name), settings.topicName)
       .parEvalMapUnordered(Int.MaxValue) {
-        case AssignedPartition(partition, partitionCount, watchRevocation) =>
+        case AssignedPartition(partition, partitionCount, watchRevocation, release) =>
           val (offset, processCount) = assignRange(processes.size, partitionCount, partition)
-          Kafka.runUntilCancelled(watchRevocation) {
+
+          val task =
             if (processCount > 0)
               Stream
                 .range[F](offset, offset + processCount)
@@ -47,6 +49,9 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
                 .drain
             else
               ().pure[F]
+          task.race(watchRevocation).flatMap {
+            case Left(_)      => release
+            case Right(value) => value
           }
       }
       .compile

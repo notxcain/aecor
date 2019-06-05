@@ -2,7 +2,6 @@ package aecor.kafkadistributedprocessing
 
 import java.util.Properties
 
-import aecor.kafkadistributedprocessing.Kafka.Channel
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent
 import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent.{
   PartitionsAssigned,
@@ -10,12 +9,11 @@ import aecor.kafkadistributedprocessing.RebalanceEvents.RebalanceEvent.{
 }
 import aecor.tests.IOSupport
 import cats.effect.IO
-import fs2.concurrent.Queue
+import cats.implicits._
 import fs2.Stream
+import fs2.concurrent.Queue
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.scalatest.FunSuite
-import cats.implicits._
-import cats.effect.implicits._
 
 import scala.concurrent.duration._
 
@@ -93,37 +91,4 @@ class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
     assert(result.size() == partitionCount)
   }
 
-  test("Channel#call completes only after completion callback") {
-    val out = Kafka
-      .channel[IO]
-      .flatMap {
-        case Channel(watch, call) =>
-          Queue.unbounded[IO, String].flatMap { queue =>
-            for {
-              fiber <- watch.flatMap { callback =>
-                        queue.enqueue1("before callback") >> callback >> queue
-                          .enqueue1("after callback")
-                      }.start
-              _ <- queue.enqueue1("before call") >> call >> queue.enqueue1("after call")
-              _ <- fiber.join
-              out <- queue.dequeue.take(4).compile.toList
-            } yield out
-          }
-      }
-      .unsafeRunTimed(1.seconds)
-      .get
-    assert(out == List("before call", "before callback", "after callback", "after call"))
-  }
-
-  test("Channel#call does not wait for completion callback if watch cancelled") {
-    Kafka
-      .channel[IO]
-      .flatMap {
-        case Channel(watch, call) =>
-          watch.start.flatMap(x => x.cancel.race(x.join).map(x => IO(println(x)) >> x.sequence)) >> call
-      }
-      .unsafeRunTimed(5.seconds)
-      .get
-    assert(true)
-  }
 }
