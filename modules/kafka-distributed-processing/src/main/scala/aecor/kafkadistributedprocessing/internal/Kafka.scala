@@ -1,6 +1,5 @@
 package aecor.kafkadistributedprocessing.internal
 
-import java.time.Duration
 import java.util
 import java.util.Properties
 

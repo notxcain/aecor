@@ -75,9 +75,9 @@ class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
         case (s, (c, e)) =>
           e match {
             case PartitionsRevoked(partitions) =>
-              s.updated(c, s.getOrElse(c, Set.empty[Int]) -- partitions)
+              s.updated(c, s.getOrElse(c, Set.empty[Int]) -- partitions.map(_.partition()))
             case PartitionsAssigned(partitions) =>
-              s.updated(c, s.getOrElse(c, Set.empty[Int]) ++ partitions)
+              s.updated(c, s.getOrElse(c, Set.empty[Int]) ++ partitions.map(_.partition()))
           }
       }
 
