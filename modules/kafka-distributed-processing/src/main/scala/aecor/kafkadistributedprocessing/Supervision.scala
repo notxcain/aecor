@@ -13,7 +13,7 @@ object Supervision {
     def nextDelay(in: FiniteDuration): FiniteDuration =
       FiniteDuration((in.toMillis * (1 + randomFactor)).toLong, MILLISECONDS).min(maxBackoff)
     fa =>
-      retry(fa, minBackoff, nextDelay, Int.MaxValue, Function.const(true)).compile.drain
+      retry(fa, minBackoff, nextDelay, maxAttempts, Function.const(true)).compile.drain
   }
   def noop[F[_]]: Supervision[F] = identity
 }
