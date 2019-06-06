@@ -6,7 +6,6 @@ import cats.effect.IO
 import cats.implicits._
 import fs2.concurrent.Queue
 import org.scalatest.FunSuite
-import cats.effect.implicits._
 
 import scala.concurrent.duration._
 
@@ -39,9 +38,11 @@ class ChannelTest extends FunSuite with IOSupport {
       .flatMap {
         case Channel(watch, close, call) =>
           for {
-            f <- watch.start
-            _ <- call.race(close)
-            _ <- f.cancel
+            w <- watch.start
+            c <- call.start
+            _ <- close
+            _ <- c.join
+            _ <- w.cancel
           } yield ()
       }
       .replicateA(100)
