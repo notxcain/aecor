@@ -4,23 +4,21 @@ import sbtrelease.Version.Bump
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    scalaVersion := "2.12.7"
+    scalaVersion := "2.12.8"
   )
 )
 
-
 lazy val akkaVersion = "2.5.23"
-lazy val akkaPersistenceCassandraVersion = "0.61"
+lazy val akkaPersistenceCassandraVersion = "0.98"
 
-lazy val catsVersion = "1.6.0"
-lazy val catsEffectVersion = "1.3.0"
-lazy val scodecVersion = "1.10.4"
+lazy val catsVersion = "1.6.1"
+lazy val catsEffectVersion = "1.3.1"
 lazy val logbackVersion = "1.2.3"
-lazy val cassandraDriverExtrasVersion = "3.1.0"
-lazy val jsr305Version = "3.0.1"
-lazy val boopickleVersion = "1.3.0"
+lazy val cassandraDriverExtrasVersion = "3.7.1"
+lazy val jsr305Version = "3.0.2"
+lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "1.5.1-cats"
-lazy val fs2Version = "1.0.4"
+lazy val fs2Version = "1.0.5"
 lazy val scodecBitsVersion = "1.1.10"
 lazy val scodecCoreVersion = "1.10.3"
 lazy val catsTaglessVersion = "0.8"
@@ -34,13 +32,12 @@ lazy val betterMonadicForVersion = "0.3.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.10.1"
-lazy val http4sVersion = "0.20.0-M3"
+lazy val circeVersion = "0.11.1"
+lazy val http4sVersion = "0.20.3"
 lazy val log4catsVersion = "0.3.0"
-lazy val catsMTLVersion = "0.4.0"
+lazy val catsMTLVersion = "0.5.0"
 
 lazy val commonSettings = Seq(
-  resolvers += "jitpack" at "https://jitpack.io",
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.typelevel" %% "kind-projector" % kindProjectorVersion),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),

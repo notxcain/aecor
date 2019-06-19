@@ -20,8 +20,9 @@ import cats.implicits._
 
 import scala.concurrent.duration._
 import fs2._
-import org.http4s.server.Server
-import org.http4s.server.blaze.BlazeBuilder
+import org.http4s.server.{ Router, Server }
+import org.http4s.server.blaze.BlazeServerBuilder
+import org.http4s.syntax.kleisli._
 
 object App extends IOApp {
 
@@ -95,10 +96,14 @@ object App extends IOApp {
         transaction.DefaultTransactionService(transactions)
       val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
 
-      BlazeBuilder[IO]
+      val httpApp = Router[IO](
+        "/" -> TransactionRoute(transactionService),
+        "/" -> AccountRoute(accountService)
+      ).orNotFound
+
+      BlazeServerBuilder[IO]
         .bindHttp(config.getInt("http.port"), config.getString("http.interface"))
-        .mountService(TransactionRoute(transactionService), "/")
-        .mountService(AccountRoute(accountService), "/")
+        .withHttpApp(httpApp)
         .resource
     }
 

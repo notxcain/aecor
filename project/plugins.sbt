@@ -9,9 +9,10 @@ addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "2.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.3.3")
 addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.3.14")
 
-addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.19")
+addSbtPlugin("com.lucidchart" % "sbt-scalafmt" % "1.15")
+addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.23")
 
-libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.8.2"
+libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.8.4"
 
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.0.0")
-addSbtPlugin("com.timushev.sbt" % "sbt-updates" % "0.4.0")
+addSbtPlugin("com.timushev.sbt" % "sbt-updates" % "0.4.1")
