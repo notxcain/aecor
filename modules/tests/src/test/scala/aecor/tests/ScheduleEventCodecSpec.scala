@@ -1,5 +1,6 @@
 package aecor.tests
 
+import java.time.temporal.ChronoField
 import java.time.{Instant, LocalDateTime}
 
 import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
@@ -13,7 +14,11 @@ class ScheduleEventCodecSpec extends AkkaSpec with PropertyChecks {
   val decoder = PersistentDecoder[ScheduleEvent]
 
   implicit val arbitraryLocalDateTime = Arbitrary(Gen.lzy(Gen.const(LocalDateTime.now())))
-  implicit val arbitraryInstant = Arbitrary(Gen.lzy(Gen.const(Instant.now())))
+
+  // OpenJDK 9+ offers more precise system clock than millisecond.
+  // https://bugs.openjdk.java.net/browse/JDK-8068730
+  implicit val arbitraryInstant =
+    Arbitrary(Gen.lzy(Gen.const(Instant.now().`with`(ChronoField.MICRO_OF_SECOND, 0L))))
 
   "ScheduleEventCodec" must {
     "be able to encode and decode ScheduleEvent" in {
