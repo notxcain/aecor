@@ -45,7 +45,7 @@ class AkkaPersistenceRuntimeSpec
 
   override def systemName = system.name
 
-  override implicit val patienceConfig = PatienceConfig(15.seconds, 150.millis)
+  override implicit val patienceConfig = PatienceConfig(30.seconds, 150.millis)
 
   val timer = IO.timer(system.dispatcher)
 
