@@ -29,7 +29,7 @@ object ActionRunner {
       } yield a
     }
 
-  def cached[F[_]: Sync, K, S, E](
+  def createCached[F[_]: Sync, K, S, E](
     key: K,
     stateStrategy: EventsourcedState[F, K, S, E],
     snapshotting: Snapshotting[F, K, S]
