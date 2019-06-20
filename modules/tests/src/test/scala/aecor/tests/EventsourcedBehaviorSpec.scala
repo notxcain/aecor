@@ -28,7 +28,7 @@ class EventsourcedBehaviorSpec extends FlatSpec with Matchers {
       EventsourcedBehavior
         .optional(new CounterOptionalActions, e => CounterState(0L).applyEvent(e), _.applyEvent(_))
     behavior
-      .update(behavior.initial, CounterEvent.CounterIncremented)
+      .update(behavior.create, CounterEvent.CounterIncremented)
       .toOption
       .flatten shouldEqual CounterState(1).some
   }

@@ -8,19 +8,19 @@ import cats.data.{ Chain, NonEmptyChain }
 import cats.effect.Sync
 import cats.implicits._
 
-trait EventsourcedState[F[_], K, S, E] {
+private[aecor] trait EventsourcedState[F[_], K, S, E] {
   def recover(key: K, snapshot: Option[Versioned[S]]): F[Versioned[S]]
   def run[A](key: K, state: Versioned[S], action: ActionT[F, S, E, A]): F[(Versioned[S], A)]
 }
 
-object EventsourcedState {
+private[aecor] object EventsourcedState {
   def apply[F[_]: Sync, K, E, S](initialState: S,
                                  update: (S, E) => Folded[S],
                                  journal: EventJournal[F, K, E]): EventsourcedState[F, K, S, E] =
     new DefaultEventsourcedState(initialState, update, journal)
 }
 
-final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
+private[aecor] final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
   initialState: S,
   update: (S, E) => Folded[S],
   journal: EventJournal[F, K, E]

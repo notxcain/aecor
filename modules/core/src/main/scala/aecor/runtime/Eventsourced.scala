@@ -12,7 +12,7 @@ object Eventsourced {
                                                      journal: EventJournal[F, K, E],
                                                      snapshotting: Option[Snapshotting[F, K, S]] =
                                                        none): K => F[M[F]] = {
-    val strategy = EventsourcedState(behavior.initial, behavior.update, journal)
+    val strategy = EventsourcedState(behavior.create, behavior.update, journal)
     val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
 
     { key =>
@@ -26,7 +26,7 @@ object Eventsourced {
                                                     journal: EventJournal[F, K, E],
                                                     snapshotting: Option[Snapshotting[F, K, S]] =
                                                       none): K => M[F] = {
-    val strategy = EventsourcedState(behavior.initial, behavior.update, journal)
+    val strategy = EventsourcedState(behavior.create, behavior.update, journal)
     val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
 
     { key =>

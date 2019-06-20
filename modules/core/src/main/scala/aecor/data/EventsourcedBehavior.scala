@@ -7,13 +7,13 @@ import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
 
 final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F, S, E, ?]],
-                                                           initial: S,
+                                                           create: S,
                                                            update: (S, E) => Folded[S]) {
   def enrich[Env](f: F[Env])(implicit M: FunctorK[M],
                              F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E]] =
     EventsourcedBehavior(
       actions.mapK(ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
-      initial,
+      create,
       (s, e) => update(s, e.event)
     )
 

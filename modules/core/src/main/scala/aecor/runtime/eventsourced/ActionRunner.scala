@@ -25,12 +25,11 @@ object ActionRunner {
         (before, (after, a)) <- journalBoundary {
                                  stateStrategy
                                    .recover(key, snapshot)
-                                   .flatMap(
-                                     state =>
-                                       stateStrategy
-                                         .run(key, state, action)
-                                         .map(out => (state, out))
-                                   )
+                                   .flatMap { state =>
+                                     stateStrategy
+                                       .run(key, state, action)
+                                       .map(out => (state, out))
+                                   }
                                }
         _ <- snapshotting.snapshotIfNeeded(key, before, after)
       } yield a
