@@ -14,10 +14,10 @@ private[aecor] trait EventsourcedState[F[_], K, S, E] {
 }
 
 private[aecor] object EventsourcedState {
-  def apply[F[_]: Sync, K, E, S](initialState: S,
+  def apply[F[_]: Sync, K, E, S](create: S,
                                  update: (S, E) => Folded[S],
                                  journal: EventJournal[F, K, E]): EventsourcedState[F, K, S, E] =
-    new DefaultEventsourcedState(initialState, update, journal)
+    new DefaultEventsourcedState(create, update, journal)
 }
 
 private[aecor] final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (

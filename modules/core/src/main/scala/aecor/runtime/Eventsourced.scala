@@ -2,7 +2,8 @@ package aecor.runtime
 
 import aecor.data._
 import aecor.runtime.eventsourced.{ ActionRunner, EventsourcedState }
-import cats.{ Applicative, Functor }
+import cats.arrow.FunctionK
+import cats.{ Applicative, Functor, Monad, ~> }
 import cats.effect.Sync
 import cats.implicits._
 import cats.tagless.FunctorK
@@ -22,15 +23,23 @@ object Eventsourced {
     }
   }
 
-  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
-                                                    journal: EventJournal[F, K, E],
-                                                    snapshotting: Option[Snapshotting[F, K, S]] =
-                                                      none): K => M[F] = {
+  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
+    behavior: EventsourcedBehavior[M, F, S, E],
+    journal: EventJournal[F, K, E],
+    snapshotting: Option[Snapshotting[F, K, S]] = none
+  ): K => M[F] = Eventsourced(behavior, journal, FunctionK.id, snapshotting)
+
+  def apply[M[_[_]]: FunctorK, F[_]: Monad, G[_]: Sync, S, E, K](
+    behavior: EventsourcedBehavior[M, G, S, E],
+    journal: EventJournal[G, K, E],
+    journalBoundary: G ~> F,
+    snapshotting: Option[Snapshotting[F, K, S]] = none
+  ): K => M[F] = {
     val strategy = EventsourcedState(behavior.create, behavior.update, journal)
     val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
 
     { key =>
-      behavior.actions.mapK(ActionRunner(key, strategy, effectiveSnapshotting))
+      behavior.actions.mapK(ActionRunner(key, strategy, effectiveSnapshotting, journalBoundary))
     }
   }
 

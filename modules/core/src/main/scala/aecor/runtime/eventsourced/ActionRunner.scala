@@ -2,18 +2,12 @@ package aecor.runtime.eventsourced
 
 import aecor.data.ActionT
 import aecor.runtime.Eventsourced.{ Snapshotting, Versioned }
-import cats.arrow.FunctionK
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.{ Monad, ~> }
 
 object ActionRunner {
-
-  def apply[F[_]: Monad, K, S, E](key: K,
-                                  stateStrategy: EventsourcedState[F, K, S, E],
-                                  snapshotting: Snapshotting[F, K, S]): ActionT[F, S, E, ?] ~> F =
-    apply(key, stateStrategy, snapshotting, FunctionK.id)
 
   def apply[F[_]: Monad, G[_]: Monad, K, S, E](key: K,
                                                stateStrategy: EventsourcedState[G, K, S, E],
