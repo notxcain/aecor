@@ -9,7 +9,7 @@ lazy val buildSettings = inThisBuild(
 )
 
 lazy val akkaVersion = "2.5.23"
-lazy val akkaPersistenceCassandraVersion = "0.61"
+lazy val akkaPersistenceCassandraVersion = "0.62"
 
 lazy val catsVersion = "1.6.1"
 lazy val catsEffectVersion = "1.3.1"
