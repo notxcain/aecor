@@ -1,46 +1,57 @@
 package aecor.runtime
 
 import aecor.data._
-import aecor.runtime.eventsourced.{ ActionRunner, EventsourcedState }
+import aecor.runtime.eventsourced.ActionRunner
 import cats.arrow.FunctionK
-import cats.{ Applicative, Functor, Monad, ~> }
 import cats.effect.Sync
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
+import cats.{ Functor, Monad, ~> }
 object Eventsourced {
   def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
-    snapshotting: Option[Snapshotting[F, K, S]] = none
-  ): K => F[M[F]] = {
-    val strategy = EventsourcedState(behavior.create, behavior.update, journal)
-    val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.disabled[F, K, S])
-
-    { key =>
-      ActionRunner
-        .createCached(key, strategy, effectiveSnapshotting)
-        .map(behavior.actions.mapK(_))
-    }
+    snapshotting: Snapshotting[F, K, S]
+  ): K => F[M[F]] = { key =>
+    ActionRunner
+      .createCached(key, behavior.create, behavior.update, journal, snapshotting)
+      .map(behavior.actions.mapK(_))
   }
 
-  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
+  def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],
-    journal: EventJournal[F, K, E],
-    snapshotting: Snapshotting[F, K, S]
-  ): K => M[F] = Eventsourced(behavior, journal, FunctionK.id, snapshotting)
+    journal: EventJournal[F, K, E]
+  ): K => F[M[F]] = { key =>
+    ActionRunner
+      .createCached(key, behavior.create, behavior.update, journal, Snapshotting.disabled[F, K, S])
+      .map(behavior.actions.mapK(_))
+  }
 
   def apply[M[_[_]]: FunctorK, F[_]: Monad, G[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, G, S, E],
     journal: EventJournal[G, K, E],
     journalBoundary: G ~> F,
     snapshotting: Snapshotting[F, K, S]
-  ): K => M[F] = {
-    val strategy = EventsourcedState(behavior.create, behavior.update, journal)
+  ): K => M[F] = { key =>
+    val run =
+      ActionRunner(key, behavior.create, behavior.update, journal, snapshotting, journalBoundary)
+    behavior.actions.mapK(run)
+  }
 
-    { key =>
-      behavior.actions.mapK(ActionRunner(key, strategy, snapshotting, journalBoundary))
-    }
+  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
+                                                    journal: EventJournal[F, K, E],
+  ): K => M[F] = { key =>
+    val run: ActionT[F, S, E, ?] ~> F =
+      ActionRunner(
+        key,
+        behavior.create,
+        behavior.update,
+        journal,
+        Snapshotting.disabled[F, K, S],
+        FunctionK.id
+      )
+    behavior.actions.mapK(run)
   }
 
   type Entities[K, M[_[_]], F[_]] = K => M[F]
@@ -56,50 +67,14 @@ object Eventsourced {
 
   }
 
-  final class SnapshotEach[F[_]: Applicative, K, S](interval: Long,
-                                                    store: KeyValueStore[F, K, Versioned[S]])
-      extends Snapshotting[F, K, S] {
-    def snapshotIfNeeded(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit] =
-      if (nextState.version % interval == 0 || ((currentState.version / interval) - (nextState.version / interval)) > 0)
-        store.setValue(key, nextState)
-      else
-        ().pure[F]
-    override def load(k: K): F[Option[Versioned[S]]] =
-      store.getValue(k)
-  }
-
-  final class NoSnapshot[F[_]: Applicative, K, S] extends Snapshotting[F, K, S] {
-    override def snapshotIfNeeded(key: K,
-                                  currentState: Versioned[S],
-                                  nextState: Versioned[S]): F[Unit] =
-      ().pure[F]
-    override def load(k: K): F[Option[Versioned[S]]] =
-      none[Versioned[S]].pure[F]
-  }
-
-  trait Snapshotting[F[_], K, S] {
-    def snapshotIfNeeded(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit]
-    def load(k: K): F[Option[Versioned[S]]]
-  }
-
-  object Snapshotting {
-    def eachVersion[F[_]: Applicative, K, S](
-      interval: Long,
-      store: KeyValueStore[F, K, Versioned[S]]
-    ): Snapshotting[F, K, S] =
-      new SnapshotEach(interval, store)
-
-    def disabled[F[_]: Applicative, K, S]: Snapshotting[F, K, S] = new NoSnapshot
-  }
-
   final case class Versioned[A](version: Long, value: A) {
-    def withNextValue(s: A): Versioned[A] = Versioned(version + 1L, value)
+    def withNextValue(next: A): Versioned[A] = Versioned(version + 1L, next)
   }
   object Versioned {
     def zero[A](a: A): Versioned[A] = Versioned(0L, a)
     def update[F[_]: Functor, S, E](f: (S, E) => F[S]): (Versioned[S], E) => F[Versioned[S]] = {
-      case (Versioned(version, s), e) =>
-        f(s, e).map(Versioned(version + 1, _))
+      (current, e) =>
+        f(current.value, e).map(current.withNextValue)
     }
   }
 

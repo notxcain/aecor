@@ -31,7 +31,7 @@ trait KeyValueStore[F[_], K, A] { self =>
 }
 
 object KeyValueStore {
-  implicit def liberatorFunctorKInstance[K, A]: FunctorK[KeyValueStore[?[_], K, A]] =
+  implicit def catsTaglessFunctorKInstance[K, A]: FunctorK[KeyValueStore[?[_], K, A]] =
     new FunctorK[KeyValueStore[?[_], K, A]] {
       override def mapK[F[_], G[_]](
         mf: KeyValueStore[F, K, A]

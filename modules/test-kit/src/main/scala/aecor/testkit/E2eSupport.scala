@@ -22,7 +22,7 @@ object E2eSupport {
       behavior: EventsourcedBehavior[M, F, S, E],
       journal: EventJournal[F, K, E]
     )(implicit F: Sync[F]): K => M[F] =
-      Eventsourced[M, F, S, E, K](behavior, journal, Snapshotting.disabled)
+      Eventsourced[M, F, S, E, K](behavior, journal)
   }
 
   abstract class Processes[F[_]](items: Vector[F[Unit]]) {

@@ -21,23 +21,23 @@ private[aecor] object EventsourcedState {
 }
 
 private[aecor] final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
-  initialState: S,
+  create: S,
   update: (S, E) => Folded[S],
   journal: EventJournal[F, K, E]
 )(implicit F: Sync[F])
     extends EventsourcedState[F, K, S, E] {
 
   override def recover(key: K, snapshot: Option[Versioned[S]]): F[Versioned[S]] = {
-    val from = snapshot.getOrElse(Versioned.zero(initialState))
+    val from = snapshot.getOrElse(Versioned.zero(create))
     journal
       .read(key, from.version)
       .scan(from.asRight[Throwable]) {
-        case (Right(x @ Versioned(version, value)), ee @ EntityEvent(_, _, event)) =>
-          update(value, event) match {
+        case (Right(version), ee @ EntityEvent(_, _, event)) =>
+          update(version.value, event) match {
             case Next(a) =>
-              Versioned(version + 1, a).asRight[Throwable]
+              version.withNextValue(a).asRight[Throwable]
             case Folded.Impossible =>
-              new IllegalStateException(s"Failed to apply event [$ee] to [$x]")
+              new IllegalStateException(s"Failed to apply event [$ee] to [$version]")
                 .asLeft[Versioned[S]]
           }
         case (other, _) => other
