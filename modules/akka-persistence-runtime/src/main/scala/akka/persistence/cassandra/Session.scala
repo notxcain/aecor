@@ -4,7 +4,6 @@ import java.util.concurrent.Executor
 import cats.data.Kleisli
 import cats.effect.{ Async, ContextShift }
 import com.datastax.driver.core.{ ResultSet, TypeCodec, Session => DatastaxSession }
-import cats.effect.implicits._
 
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
