@@ -2,8 +2,8 @@ package aecor.tests
 
 import java.time.{ Instant, LocalDateTime }
 
-import aecor.schedule.ScheduleEvent
-import aecor.schedule.protobuf.ScheduleEventCodec
+import aecor.old.schedule.ScheduleEvent
+import aecor.old.schedule.protobuf.ScheduleEventCodec
 import org.scalacheck.Shapeless._
 import org.scalacheck.{ Arbitrary, Gen }
 import org.scalatest.prop.PropertyChecks

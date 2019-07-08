@@ -1,6 +1,6 @@
 package aecor.tests
 
-import aecor.aggregate.CorrelationId
+import aecor.old.aggregate.CorrelationId
 import org.scalatest.{ FlatSpec, Matchers }
 
 class CompositeCorrelationIdSpec extends FlatSpec with Matchers {

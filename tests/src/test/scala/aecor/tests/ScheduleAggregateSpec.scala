@@ -3,7 +3,7 @@ package aecor.tests
 import java.time.{ Clock, Instant, LocalDateTime, ZoneId }
 
 import scala.collection.immutable._
-import aecor.schedule.{ DefaultScheduleAggregate, ScheduleEvent, ScheduleState }
+import aecor.old.schedule.{ DefaultScheduleAggregate, ScheduleEvent, ScheduleState }
 import org.scalatest.{ FlatSpec, Matchers }
 
 class ScheduleAggregateSpec extends FlatSpec with Matchers {

@@ -1,7 +1,7 @@
 package aecor.tests
 
-import aecor.aggregate.{ Correlation, CorrelationIdF, Folder, StateRuntime }
-import aecor.data.Handler
+import aecor.old.aggregate.{ Correlation, CorrelationIdF, Folder, StateRuntime }
+import aecor.old.data.Handler
 import cats.{ Id, Monad, ~> }
 import org.scalatest.{ FunSuite, Matchers }
 import cats.implicits._

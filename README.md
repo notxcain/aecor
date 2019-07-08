@@ -43,7 +43,7 @@ object SubscriptionOp {
 Entity events with persistent encoder and decoder:
 
 ```scala
-import aecor.data.Folded.syntax._
+import aecor.old.data.Folded.syntax._
 import cats.syntax.option._
 
 sealed trait SubscriptionEvent

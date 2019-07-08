@@ -8,9 +8,9 @@ lazy val buildSettings = Seq(
   crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.3-bin-typelevel-4")
 )
 
-lazy val akkaVersion = "2.5.7"
+lazy val akkaVersion = "2.5.8"
 lazy val akkaPersistenceCassandra = "0.59"
-lazy val catsVersion = "1.0.0"
+lazy val catsVersion = "1.6.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
@@ -19,7 +19,7 @@ lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.1"
 lazy val scalaCheckShapelessVersion = "1.1.4"
 lazy val shapelessVersion = "2.3.2"
-lazy val kindProjectorVersion = "0.9.4"
+lazy val kindProjectorVersion = "0.9.7"
 lazy val paradiseVersion = "2.1.0"
 
 lazy val commonSettings = Seq(
