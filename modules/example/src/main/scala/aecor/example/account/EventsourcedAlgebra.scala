@@ -63,7 +63,7 @@ object EventsourcedAlgebra {
     AccountState
   ], AccountEvent] =
     EventsourcedBehavior
-      .optionalRejectable(EventsourcedAlgebra.apply, AccountState.fromEvent, _.applyEvent(_))
+      .rejectable(EventsourcedAlgebra.apply, AccountState.eventAlgebra)
 
   val tagging: Tagging[AccountId] = Tagging.const[AccountId](EventTag("Account"))
 
@@ -94,5 +94,8 @@ object EventsourcedAlgebra {
       case AccountOpened(checkBalance) => AccountState(Amount.zero, Set.empty, checkBalance).next
       case _                           => impossible
     }
+
+    val eventAlgebra: Fold[Folded, Option[AccountState], AccountEvent] =
+      Fold.optional(fromEvent)(_.applyEvent(_))
   }
 }

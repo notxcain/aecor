@@ -49,8 +49,7 @@ object CounterBehavior {
   def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent] =
     EventsourcedBehavior(
       CounterActions[ActionT[F, CounterState, CounterEvent, ?]],
-      CounterState(0),
-      _.applyEvent(_)
+      Fold(CounterState(0), _.applyEvent(_))
     )
 }
 

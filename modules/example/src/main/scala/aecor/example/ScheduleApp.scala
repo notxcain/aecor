@@ -30,7 +30,7 @@ object ScheduleApp extends IOApp {
     val offsetStoreConfig = CassandraOffsetStore.Queries("aecor_example")
     val scheduleEntryRepositoryQueries =
       CassandraScheduleEntryRepository.Queries("aecor_example", "schedule_entries")
-    def createCassandraSession[F[_]: Effect] = DefaultJournalCassandraSession[F](
+    def createCassandraSession[F[_]: Effect: ContextShift] = DefaultJournalCassandraSession[F](
       system,
       "App",
       CassandraOffsetStore[F].createTable(offsetStoreConfig) >>
@@ -74,7 +74,7 @@ object ScheduleApp extends IOApp {
           .runWith(Sink.ignore)
       }.void
 
-    def mkApp[F[_]: Effect]: F[Unit] =
+    def mkApp[F[_]: Effect: ContextShift]: F[Unit] =
       for {
         session <- createCassandraSession
         schedule <- runSchedule[F](session)

@@ -1,7 +1,7 @@
 package aecor.data
 
 import aecor.data.Folded.{ Impossible, Next }
-import cats.kernel.Eq
+import cats.kernel.{ Eq, Monoid, Semigroup }
 import cats.{ Alternative, Applicative, CoflatMap, Eval, MonadError, Now, Show, Traverse }
 
 import scala.annotation.tailrec
@@ -145,6 +145,19 @@ trait FoldedInstances {
         case Impossible => "Impossible"
       }
     }
+
+  implicit def aecorDataMonoidForFolded[A](implicit A: Semigroup[A]) = new Monoid[Folded[A]] {
+    def empty = Folded.impossible
+    def combine(x: Folded[A], y: Folded[A]): Folded[A] =
+      x match {
+        case Impossible => y
+        case Next(a) =>
+          y match {
+            case Impossible => x
+            case Next(b)    => Next(A.combine(a, b))
+          }
+      }
+  }
 
   implicit def aecorDataEqForFolded[A](implicit A: Eq[A]): Eq[Folded[A]] =
     Eq.instance {

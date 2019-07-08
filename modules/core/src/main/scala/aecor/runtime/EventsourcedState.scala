@@ -1,8 +1,7 @@
-package aecor.runtime.eventsourced
+package aecor.runtime
 
 import aecor.data.Folded.Next
-import aecor.data.{ ActionT, EntityEvent, Folded }
-import aecor.runtime.EventJournal
+import aecor.data.{ ActionT, EntityEvent, Fold, Folded }
 import aecor.runtime.Eventsourced.Versioned
 import cats.data.{ Chain, NonEmptyChain }
 import cats.effect.Sync
@@ -14,26 +13,26 @@ private[aecor] trait EventsourcedState[F[_], K, S, E] {
 }
 
 private[aecor] object EventsourcedState {
-  def apply[F[_]: Sync, K, E, S](create: S,
-                                 update: (S, E) => Folded[S],
+  def apply[F[_]: Sync, K, E, S](fold: Fold[Folded, S, E],
                                  journal: EventJournal[F, K, E]): EventsourcedState[F, K, S, E] =
-    new DefaultEventsourcedState(create, update, journal)
+    new DefaultEventsourcedState(fold, journal)
 }
 
-private[aecor] final class DefaultEventsourcedState[F[_], K, E, S] private[eventsourced] (
-  create: S,
-  update: (S, E) => Folded[S],
+private[aecor] final class DefaultEventsourcedState[F[_], K, E, S](
+  fold: Fold[Folded, S, E],
   journal: EventJournal[F, K, E]
 )(implicit F: Sync[F])
     extends EventsourcedState[F, K, S, E] {
 
+  private val versionedFold = Versioned.fold(fold)
+
   override def recover(key: K, snapshot: Option[Versioned[S]]): F[Versioned[S]] = {
-    val from = snapshot.getOrElse(Versioned.zero(create))
+    val from = snapshot.getOrElse(versionedFold.initial)
     journal
       .read(key, from.version)
       .scan(from.asRight[Throwable]) {
         case (Right(version), ee @ EntityEvent(_, _, event)) =>
-          update(version.value, event) match {
+          fold.reduce(version.value, event) match {
             case Next(a) =>
               version.withNextValue(a).asRight[Throwable]
             case Folded.Impossible =>
@@ -56,9 +55,9 @@ private[aecor] final class DefaultEventsourcedState[F[_], K, E, S] private[event
                       action: ActionT[F, S, E, A]): F[(Versioned[S], A)] =
     for {
       result <- action
-                 .xmapState[Versioned[S]]((s2, s) => s2.copy(value = s))(_.value)
+                 .expand[Versioned[S]]((versioned, s) => versioned.copy(value = s))(_.value)
                  .zipWithRead
-                 .run(state, Versioned.update(update))
+                 .run(versionedFold.withInitial(state))
       (es, (a, nextState)) <- result match {
                                case Next(a) => a.pure[F]
                                case Folded.Impossible =>

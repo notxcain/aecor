@@ -3,7 +3,7 @@ package aecor.schedule
 import java.time.{ Instant, LocalDateTime, ZoneOffset, ZonedDateTime }
 
 import aecor.MonadActionLift
-import aecor.data.{ ActionT, EventsourcedBehavior, Folded }
+import aecor.data.{ ActionT, EventsourcedBehavior, Fold, Folded }
 import aecor.data.Folded.syntax._
 import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
 import aecor.runtime.akkapersistence.serialization.{
@@ -35,8 +35,7 @@ object DefaultScheduleBucket {
         Functor[F],
         ActionT.monadActionLiftInstance[F, ScheduleState, ScheduleEvent]
       ),
-      ScheduleState.initial,
-      _.update(_)
+      ScheduleState.fold
     )
 }
 
@@ -172,6 +171,9 @@ private[aecor] case class ScheduleState(unfired: Map[String, ScheduleEntry], fir
 }
 
 private[aecor] object ScheduleState {
+
+  def fold: Fold[Folded, ScheduleState, ScheduleEvent] =
+    Fold(initial, _.update(_))
 
   def initial: ScheduleState = ScheduleState(Map.empty, Set.empty)
 

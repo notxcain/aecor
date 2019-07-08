@@ -1,45 +1,37 @@
 package aecor.data
 
 import aecor.Has
+import aecor.encoding.WireProtocol.Invocation
 import cats.{ Monad, ~> }
-import cats.data.EitherT
+import cats.data.{ Chain, EitherT }
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
 
 final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F, S, E, ?]],
-                                                           create: S,
-                                                           update: (S, E) => Folded[S]) {
+                                                           fold: Fold[Folded, S, E]) {
   def enrich[Env](f: F[Env])(implicit M: FunctorK[M],
                              F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E]] =
     EventsourcedBehavior(
       actions.mapK(ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
-      create,
-      (s, e) => update(s, e.event)
+      fold.contramap(_.event)
     )
 
   def mapK[G[_]](m: F ~> G)(implicit M: FunctorK[M]): EventsourcedBehavior[M, G, S, E] =
     copy(actions.mapK(λ[ActionT[F, S, E, ?] ~> ActionT[G, S, E, ?]](_.mapK(m))))
+
+  def run[A](state: S, invocation: Invocation[M, A]): F[Folded[(Chain[E], A)]] =
+    invocation
+      .run(actions)
+      .run(fold.withInitial(state))
 }
 
 object EventsourcedBehavior extends EventsourcedBehaviourIntances {
-  def optionalRejectable[M[_[_]], F[_], State, Event, Rejection](
-    actions: M[EitherT[ActionT[F, Option[State], Event, ?], Rejection, ?]],
-    create: Event => Folded[State],
-    update: (State, Event) => Folded[State]
-  ): EventsourcedBehavior[EitherK[M, Rejection, ?[_]], F, Option[State], Event] =
-    EventsourcedBehavior
-      .optional[EitherK[M, Rejection, ?[_]], F, State, Event](EitherK(actions), create, update)
+  def rejectable[M[_[_]], F[_], S, E, R](
+    actions: M[EitherT[ActionT[F, S, E, ?], R, ?]],
+    eventAlgebra: Fold[Folded, S, E]
+  ): EventsourcedBehavior[EitherK[M, R, ?[_]], F, S, E] =
+    EventsourcedBehavior[EitherK[M, R, ?[_]], F, S, E](EitherK(actions), eventAlgebra)
 
-  def optional[M[_[_]], F[_], State, Event](
-    actions: M[ActionT[F, Option[State], Event, ?]],
-    create: Event => Folded[State],
-    update: (State, Event) => Folded[State]
-  ): EventsourcedBehavior[M, F, Option[State], Event] =
-    EventsourcedBehavior(
-      actions,
-      Option.empty[State],
-      (os, e) => os.map(s => update(s, e)).getOrElse(create(e)).map(Some(_))
-    )
 }
 
 trait EventsourcedBehaviourIntances {

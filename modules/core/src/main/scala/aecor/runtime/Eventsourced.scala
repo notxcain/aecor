@@ -1,9 +1,9 @@
 package aecor.runtime
 
 import aecor.data._
-import aecor.runtime.eventsourced.ActionRunner
 import cats.arrow.FunctionK
 import cats.effect.Sync
+import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
@@ -13,46 +13,75 @@ object Eventsourced {
     behavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
     snapshotting: Snapshotting[F, K, S]
-  ): K => F[M[F]] = { key =>
-    ActionRunner
-      .createCached(key, behavior.create, behavior.update, journal, snapshotting)
-      .map(behavior.actions.mapK(_))
+  ): K => F[M[F]] = {
+    val es = EventsourcedState(behavior.fold, journal)
+
+    { key =>
+      Ref[F].of(none[Versioned[S]]).map { cache =>
+        behavior.actions.mapK(Lambda[ActionT[F, S, E, ?] ~> F] { action =>
+          for {
+            (after, a) <- cache.get.flatMap {
+                           case Some(before) =>
+                             es.run(key, before, action)
+                               .flatTap {
+                                 case (after, _) =>
+                                   snapshotting.snapshot(key, before, after)
+                               }
+                           case None =>
+                             snapshotting
+                               .load(key)
+                               .flatMap(es.recover(key, _))
+                               .flatMap { before =>
+                                 es.run(key, before, action)
+                                   .flatTap {
+                                     case (after, _) =>
+                                       snapshotting.snapshot(key, before, after)
+                                   }
+                               }
+                         }
+            _ <- cache.set(after.some)
+          } yield a
+        })
+      }
+
+    }
   }
 
   def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E]
-  ): K => F[M[F]] = { key =>
-    ActionRunner
-      .createCached(key, behavior.create, behavior.update, journal, Snapshotting.disabled[F, K, S])
-      .map(behavior.actions.mapK(_))
-  }
+  ): K => F[M[F]] = createCached(behavior, journal, Snapshotting.disabled[F, K, S])
 
   def apply[M[_[_]]: FunctorK, F[_]: Monad, G[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, G, S, E],
     journal: EventJournal[G, K, E],
     journalBoundary: G ~> F,
     snapshotting: Snapshotting[F, K, S]
-  ): K => M[F] = { key =>
-    val run =
-      ActionRunner(key, behavior.create, behavior.update, journal, snapshotting, journalBoundary)
-    behavior.actions.mapK(run)
+  ): K => M[F] = {
+    val es = EventsourcedState(behavior.fold, journal)
+
+    { key =>
+      behavior.actions.mapK {
+        Lambda[ActionT[G, S, E, ?] ~> F] { action =>
+          for {
+            snapshot <- snapshotting.load(key)
+            (before, (after, a)) <- journalBoundary {
+                                     es.recover(key, snapshot)
+                                       .flatMap { state =>
+                                         es.run(key, state, action)
+                                           .map((state, _))
+                                       }
+                                   }
+            _ <- snapshotting.snapshot(key, before, after)
+          } yield a
+        }
+      }
+    }
   }
 
   def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
                                                     journal: EventJournal[F, K, E],
-  ): K => M[F] = { key =>
-    val run: ActionT[F, S, E, ?] ~> F =
-      ActionRunner(
-        key,
-        behavior.create,
-        behavior.update,
-        journal,
-        Snapshotting.disabled[F, K, S],
-        FunctionK.id
-      )
-    behavior.actions.mapK(run)
-  }
+  ): K => M[F] = apply(behavior, journal, FunctionK.id, Snapshotting.disabled[F, K, S])
 
   type Entities[K, M[_[_]], F[_]] = K => M[F]
 
@@ -61,10 +90,14 @@ object Eventsourced {
 
     def apply[K, M[_[_]], F[_]](kmf: K => M[F]): Entities[K, M, F] = kmf
 
-    def fromEitherK[K, M[_[_]]: FunctorK, F[_], R](
+    def rejectable[K, M[_[_]]: FunctorK, F[_], R](
       mfr: K => EitherK[M, R, F]
     ): Rejectable[K, M, F, R] = k => mfr(k).unwrap
 
+    @deprecated("Use rejectable", "0.19.0")
+    def fromEitherK[K, M[_[_]]: FunctorK, F[_], R](
+      mfr: K => EitherK[M, R, F]
+    ): Rejectable[K, M, F, R] = rejectable(mfr)
   }
 
   final case class Versioned[A](version: Long, value: A) {
@@ -76,6 +109,8 @@ object Eventsourced {
       (current, e) =>
         f(current.value, e).map(current.withNextValue)
     }
+    def fold[F[_]: Functor, E, S](inner: Fold[F, S, E]): Fold[F, Versioned[S], E] =
+      inner.expand(zero, _.value, _.withNextValue(_))
   }
 
   type EntityKey = String

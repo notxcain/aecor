@@ -1,7 +1,7 @@
 package aecor.tests
 
 import aecor.data.Folded.Next
-import aecor.data.{ ActionT, Folded }
+import aecor.data.{ ActionT, Fold, Folded }
 import aecor.runtime.Eventsourced.Versioned
 import cats.Id
 import cats.data.{ Chain, NonEmptyChain }
@@ -12,9 +12,9 @@ import org.scalatest.FunSuite
 class ActionTSpec extends FunSuite {
   def append(s: String): ActionT[Id, String, String, Unit] = ActionT.append(NonEmptyChain.one(s))
   def read[S]: ActionT[Id, S, String, S] = ActionT.read
-  val update = (l: String, r: String) => Folded.next(l ++ r)
+  def fold(s: String) = Fold(s, (l: String, r: String) => Folded.next(l ++ r))
   def run[A](action: ActionT[Id, String, String, A]): Folded[(Chain[String], A)] =
-    action.run("", update)
+    action.run(fold(""))
 
   test("ActionT.read associativity") {
     val n1 @ Next((es, out)) = run(append("a") >> (append("b") >> read))
@@ -27,9 +27,9 @@ class ActionTSpec extends FunSuite {
   test("xmapState") {
     val Next((es, (out, versioned))) =
       (append("a") >> append("b") >> read)
-        .xmapState[Versioned[String]]((s, v) => s.copy(value = v))(_.value)
+        .expand[Versioned[String]]((s, v) => s.copy(value = v))(_.value)
         .zipWithRead
-        .run(Versioned.zero(""), Versioned.update(update))
+        .run(Versioned.fold(fold("")))
     println(versioned)
     assert(versioned.version == 2)
     assert(es === Chain("a", "b"))

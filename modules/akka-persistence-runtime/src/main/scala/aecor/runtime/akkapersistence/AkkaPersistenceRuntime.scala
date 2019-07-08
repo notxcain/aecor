@@ -42,9 +42,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
       val props =
         AkkaPersistenceRuntimeActor.props(
           typeName,
-          behavior.actions,
-          behavior.create,
-          behavior.update,
+          behavior,
           snapshotPolicy,
           tagging,
           settings.idleTimeout,

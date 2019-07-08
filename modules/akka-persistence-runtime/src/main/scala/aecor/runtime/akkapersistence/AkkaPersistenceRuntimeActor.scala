@@ -39,9 +39,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   def props[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
     entityName: String,
-    actions: M[ActionT[F, State, Event, ?]],
-    initialState: State,
-    updateState: (State, Event) => Folded[State],
+    behavior: EventsourcedBehavior[M, F, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
     tagging: Tagging[I],
     idleTimeout: FiniteDuration,
@@ -51,9 +49,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
     Props(
       new AkkaPersistenceRuntimeActor(
         entityName,
-        actions,
-        initialState,
-        updateState,
+        behavior,
         snapshotPolicy,
         tagging,
         idleTimeout,
@@ -78,9 +74,7 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   */
 private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
   entityName: String,
-  actions: M[ActionT[F, State, Event, ?]],
-  initialState: State,
-  updateState: (State, Event) => Folded[State],
+  behavior: EventsourcedBehavior[M, F, State, Event],
   snapshotPolicy: SnapshotPolicy[State],
   tagger: Tagging[I],
   idleTimeout: FiniteDuration,
@@ -113,7 +107,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
 
   log.info("[{}] Starting...", persistenceId)
 
-  private var state: State = initialState
+  private var state: State = behavior.fold.initial
 
   private var eventCount = 0L
 
@@ -178,7 +172,12 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
     M.decoder
       .decodeValue(commandBytes) match {
       case Attempt.Successful(pair) =>
-        log.debug("[{}] [{}] Received invocation [{}]", self.path, persistenceId, pair.first.toString)
+        log.debug(
+          "[{}] [{}] Received invocation [{}]",
+          self.path,
+          persistenceId,
+          pair.first.toString
+        )
         performInvocation(pair.first, pair.second)
       case Attempt.Failure(cause) =>
         val decodingError = new IllegalArgumentException(cause.messageWithContext)
@@ -188,9 +187,8 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
 
   def performInvocation[A](invocation: Invocation[M, A], resultEncoder: Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
-    invocation
-      .run(actions)
-      .run(state, updateState)
+    behavior
+      .run(state, invocation)
       .flatMap {
         case Next((events, result)) =>
           F.delay(
@@ -261,7 +259,8 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
     }
 
   private def applyEvent(event: Event): Unit =
-    state = updateState(state, event)
+    state = behavior.fold
+      .reduce(state, event)
       .getOrElse {
         val error = new IllegalStateException(s"Illegal state after applying [$event] to [$state]")
         log.error(error, error.getMessage)
