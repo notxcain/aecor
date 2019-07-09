@@ -58,7 +58,7 @@ object Folded extends FoldedInstances {
   def impossible[A]: Folded[A] = Impossible
   def next[A](a: A): Folded[A] = Next(a)
   object syntax {
-    implicit class FoldedIdOps[A](val a: A) extends AnyVal {
+    implicit final class FoldedIdOps[A](val a: A) extends AnyVal {
       def next: Folded[A] = Folded.next(a)
     }
     def impossible[A]: Folded[A] = Folded.impossible

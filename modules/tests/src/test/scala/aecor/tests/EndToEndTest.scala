@@ -124,7 +124,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
       _ <- second.increment
     } yield ()
 
-    val Right((state, _)) = program
+    val (state, _) = program
       .run(
         SpecState(
           StateEventJournal.State.init,
@@ -136,7 +136,6 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Map.empty
         )
       )
-      .value
       .unsafeRunSync()
 
     println(state.counterJournalState)
@@ -167,7 +166,7 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
             }
       } yield ()
 
-    val Right((state, _)) = program(100)
+    val (state, _) = program(100)
       .run(
         SpecState(
           StateEventJournal.State.init,
@@ -179,7 +178,6 @@ class EndToEndTest extends FunSuite with Matchers with E2eSupport {
           Map.empty
         )
       )
-      .value
       .unsafeRunSync()
 
     state.scheduleEntries.exists(e => e.entryId == "e1" && e.fired) shouldBe true

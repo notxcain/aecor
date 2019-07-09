@@ -1,7 +1,7 @@
 package aecor.runtime
 
 import aecor.data.Folded.Next
-import aecor.data.{ ActionT, EntityEvent, Fold, Folded }
+import aecor.data.{ ActionT, Fold, Folded }
 import aecor.runtime.Eventsourced.Versioned
 import cats.data.{ Chain, NonEmptyChain }
 import cats.effect.Sync
@@ -30,24 +30,16 @@ private[aecor] final class DefaultEventsourcedState[F[_], K, E, S](
     val from = snapshot.getOrElse(versionedFold.initial)
     journal
       .read(key, from.version)
-      .scan(from.asRight[Throwable]) {
-        case (Right(version), ee @ EntityEvent(_, _, event)) =>
-          fold.reduce(version.value, event) match {
-            case Next(a) =>
-              version.withNextValue(a).asRight[Throwable]
-            case Folded.Impossible =>
-              new IllegalStateException(s"Failed to apply event [$ee] to [$version]")
-                .asLeft[Versioned[S]]
-          }
-        case (other, _) => other
+      .evalScan(from) { (s, e) =>
+        versionedFold.reduce(s, e.payload) match {
+          case Next(a) =>
+            F.pure(a)
+          case Folded.Impossible =>
+            F.raiseError(new IllegalStateException(s"Failed to apply event [$e] to [$s]"))
+        }
       }
-      .takeWhile(_.isRight, takeFailure = true)
       .compile
-      .last
-      .flatMap {
-        case Some(x) => F.fromEither(x)
-        case None    => F.pure(from)
-      }
+      .lastOrError
   }
 
   override def run[A](key: K,
@@ -57,7 +49,7 @@ private[aecor] final class DefaultEventsourcedState[F[_], K, E, S](
       result <- action
                  .expand[Versioned[S]]((versioned, s) => versioned.copy(value = s))(_.value)
                  .zipWithRead
-                 .run(versionedFold.withInitial(state))
+                 .run(versionedFold.init(state))
       (es, (a, nextState)) <- result match {
                                case Next(a) => a.pure[F]
                                case Folded.Impossible =>

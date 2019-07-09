@@ -1,9 +1,8 @@
 package aecor.testkit
 
 import aecor.data.{ EventsourcedBehavior, _ }
-import aecor.runtime.Eventsourced._
 import aecor.runtime.{ EventJournal, Eventsourced }
-import cats.data.{ EitherT, StateT }
+import cats.data.StateT
 import cats.effect.{ IO, Sync }
 import cats.implicits._
 import cats.mtl.MonadState
@@ -68,7 +67,7 @@ trait E2eSupport {
 
   type SpecState
 
-  type F[A] = StateT[EitherT[IO, BehaviorFailure, ?], SpecState, A]
+  type F[A] = StateT[IO, SpecState, A]
 
   final def mkJournal[I, E](lens: Lens[SpecState, StateEventJournal.State[I, E]],
                             tagging: Tagging[I]): StateEventJournal[F, I, SpecState, E] =

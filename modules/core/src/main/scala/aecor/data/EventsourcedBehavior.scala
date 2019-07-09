@@ -1,7 +1,7 @@
 package aecor.data
 
 import aecor.Has
-import aecor.encoding.WireProtocol.Invocation
+import aecor.arrow.Invocation
 import cats.{ Monad, ~> }
 import cats.data.{ Chain, EitherT }
 import cats.tagless.FunctorK
@@ -12,26 +12,25 @@ final case class EventsourcedBehavior[M[_[_]], F[_], S, E](actions: M[ActionT[F,
   def enrich[Env](f: F[Env])(implicit M: FunctorK[M],
                              F: Monad[F]): EventsourcedBehavior[M, F, S, Enriched[Env, E]] =
     EventsourcedBehavior(
-      actions.mapK(ActionT.sample[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
+      actions.mapK(ActionT.sampleK[F, S, E, Env, Enriched[Env, E]](f)(Enriched(_, _))(_.event)),
       fold.contramap(_.event)
     )
 
-  def mapK[G[_]](m: F ~> G)(implicit M: FunctorK[M]): EventsourcedBehavior[M, G, S, E] =
-    copy(actions.mapK(λ[ActionT[F, S, E, ?] ~> ActionT[G, S, E, ?]](_.mapK(m))))
+  def mapK[G[_]](fg: F ~> G)(implicit M: FunctorK[M]): EventsourcedBehavior[M, G, S, E] =
+    copy(actions.mapK(λ[ActionT[F, S, E, ?] ~> ActionT[G, S, E, ?]](_.mapK(fg))))
 
   def run[A](state: S, invocation: Invocation[M, A]): F[Folded[(Chain[E], A)]] =
     invocation
       .run(actions)
-      .run(fold.withInitial(state))
+      .run(fold.init(state))
 }
 
 object EventsourcedBehavior extends EventsourcedBehaviourIntances {
   def rejectable[M[_[_]], F[_], S, E, R](
     actions: M[EitherT[ActionT[F, S, E, ?], R, ?]],
-    eventAlgebra: Fold[Folded, S, E]
+    fold: Fold[Folded, S, E]
   ): EventsourcedBehavior[EitherK[M, R, ?[_]], F, S, E] =
-    EventsourcedBehavior[EitherK[M, R, ?[_]], F, S, E](EitherK(actions), eventAlgebra)
-
+    EventsourcedBehavior[EitherK[M, R, ?[_]], F, S, E](EitherK(actions), fold)
 }
 
 trait EventsourcedBehaviourIntances {

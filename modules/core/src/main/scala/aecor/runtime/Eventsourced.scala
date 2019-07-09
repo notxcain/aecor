@@ -7,7 +7,8 @@ import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
-import cats.{ Functor, Monad, ~> }
+
+import cats.{ Applicative, Monad, ~> }
 object Eventsourced {
   def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],
@@ -20,25 +21,19 @@ object Eventsourced {
       Ref[F].of(none[Versioned[S]]).map { cache =>
         behavior.actions.mapK(Lambda[ActionT[F, S, E, ?] ~> F] { action =>
           for {
-            (after, a) <- cache.get.flatMap {
-                           case Some(before) =>
-                             es.run(key, before, action)
-                               .flatTap {
-                                 case (after, _) =>
-                                   snapshotting.snapshot(key, before, after)
-                               }
-                           case None =>
-                             snapshotting
-                               .load(key)
-                               .flatMap(es.recover(key, _))
-                               .flatMap { before =>
-                                 es.run(key, before, action)
-                                   .flatTap {
-                                     case (after, _) =>
-                                       snapshotting.snapshot(key, before, after)
-                                   }
-                               }
-                         }
+            before <- cache.get.flatMap {
+                       case Some(before) => before.pure[F]
+                       case None =>
+                         snapshotting
+                           .load(key)
+                           .flatMap(es.recover(key, _))
+                     }
+            (after, a) <- es
+                           .run(key, before, action)
+                           .flatTap {
+                             case (after, _) =>
+                               snapshotting.snapshot(key, before, after)
+                           }
             _ <- cache.set(after.some)
           } yield a
         })
@@ -100,24 +95,10 @@ object Eventsourced {
     ): Rejectable[K, M, F, R] = rejectable(mfr)
   }
 
-  final case class Versioned[A](version: Long, value: A) {
-    def withNextValue(next: A): Versioned[A] = Versioned(version + 1L, next)
-  }
+  final case class Versioned[A](version: Long, value: A)
+
   object Versioned {
-    def zero[A](a: A): Versioned[A] = Versioned(0L, a)
-    def update[F[_]: Functor, S, E](f: (S, E) => F[S]): (Versioned[S], E) => F[Versioned[S]] = {
-      (current, e) =>
-        f(current.value, e).map(current.withNextValue)
-    }
-    def fold[F[_]: Functor, E, S](inner: Fold[F, S, E]): Fold[F, Versioned[S], E] =
-      inner.expand(zero, _.value, _.withNextValue(_))
-  }
-
-  type EntityKey = String
-
-  sealed abstract class BehaviorFailure extends Throwable with Product with Serializable
-  object BehaviorFailure {
-    def illegalFold(entityKey: EntityKey): BehaviorFailure = IllegalFold(entityKey)
-    final case class IllegalFold(entityKey: EntityKey) extends BehaviorFailure
+    def fold[F[_]: Applicative, E, S](inner: Fold[F, S, E]): Fold[F, Versioned[S], E] =
+      Fold.count[F, E].andWith(inner)(Versioned(_, _), v => (v.version, v.value))
   }
 }

@@ -1,12 +1,11 @@
 package aecor.data
+import aecor.data.Folded.syntax.{ impossible, _ }
 import aecor.data.Folded.{ Impossible, Next }
-import aecor.data.Folded.syntax.impossible
-import cats.{ Applicative, Functor, Monad, MonadError, ~> }
+import aecor.{ MonadActionLift, MonadActionLiftReject }
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
-import Folded.syntax._
-import aecor.{ MonadActionLift, MonadActionLiftReject }
 import cats.tagless.FunctorK
+import cats.{ Applicative, Functor, Monad, MonadError, ~> }
 
 final class ActionT[F[_], S, E, A] private (
   val unsafeRun: (Fold[Folded, S, E], Chain[E]) => F[Folded[(Chain[E], A)]]
@@ -37,8 +36,8 @@ final class ActionT[F[_], S, E, A] private (
     }
 
   def xmapEvents[E2](to: E => E2, from: E2 => E)(implicit F: Functor[F]): ActionT[F, S, E2, A] =
-    ActionT { (fold2, e2s) =>
-      unsafeRun(fold2.contramap(to), e2s.map(from)).map(_.map { x =>
+    ActionT { (fold, events) =>
+      unsafeRun(fold.contramap(to), events.map(from)).map(_.map { x =>
         (x._1.map(to), x._2)
       })
     }
@@ -82,7 +81,7 @@ trait ActionTFunctions {
   def pure[F[_]: Applicative, S, E, A](a: A): ActionT[F, S, E, A] =
     ActionT((_, es) => (es, a).next.pure[F])
 
-  def sample[F[_]: Monad, S, E1, Env, E2](
+  def sampleK[F[_]: Monad, S, E1, Env, E2](
     getEnv: F[Env]
   )(update: (Env, E1) => E2)(extract: E2 => E1): ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?] =
     new (ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?]) {
@@ -90,7 +89,7 @@ trait ActionTFunctions {
         fa.sample(getEnv)(update)(extract)
     }
 
-  def xmapEvents[F[_]: Functor, S, E1, E2, R](
+  def xmapEventsK[F[_]: Functor, S, E1, E2, R](
     to: E1 => E2,
     from: E2 => E1
   ): ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?] =
@@ -99,7 +98,7 @@ trait ActionTFunctions {
         fa.xmapEvents(to, from)
     }
 
-  def expand[F[_]: Functor, S1, S2, E](
+  def expandK[F[_]: Functor, S1, S2, E](
     update: (S2, S1) => S2
   )(extract: S2 => S1): ActionT[F, S1, E, ?] ~> ActionT[F, S2, E, ?] =
     new (ActionT[F, S1, E, ?] ~> ActionT[F, S2, E, ?]) {

@@ -3,7 +3,7 @@ package aecor.schedule
 import java.time.{ Instant, LocalDateTime, ZoneOffset, ZonedDateTime }
 
 import aecor.MonadActionLift
-import aecor.data.{ ActionT, EventsourcedBehavior, Fold, Folded }
+import aecor.data.{ EventsourcedBehavior, Fold, Folded }
 import aecor.data.Folded.syntax._
 import aecor.runtime.akkapersistence.serialization.PersistentDecoder.DecodingResult
 import aecor.runtime.akkapersistence.serialization.{
@@ -21,22 +21,10 @@ import cats.{ Functor, Monad }
 import scala.util.{ Failure, Try }
 
 object DefaultScheduleBucket {
-
-  def apply[I[_], F[_]: Functor](
-    clock: F[ZonedDateTime]
-  )(implicit F: MonadActionLift[I, F, ScheduleState, ScheduleEvent]): ScheduleBucket[I] =
-    new DefaultScheduleBucket(clock)
-
   def behavior[F[_]: Monad](
     clock: F[ZonedDateTime]
   ): EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent] =
-    EventsourcedBehavior(
-      DefaultScheduleBucket[ActionT[F, ScheduleState, ScheduleEvent, ?], F](clock)(
-        Functor[F],
-        ActionT.monadActionLiftInstance[F, ScheduleState, ScheduleEvent]
-      ),
-      ScheduleState.fold
-    )
+    EventsourcedBehavior(new DefaultScheduleBucket(clock), ScheduleState.fold)
 }
 
 class DefaultScheduleBucket[I[_], F[_]: Functor](clock: F[ZonedDateTime])(
@@ -173,9 +161,7 @@ private[aecor] case class ScheduleState(unfired: Map[String, ScheduleEntry], fir
 private[aecor] object ScheduleState {
 
   def fold: Fold[Folded, ScheduleState, ScheduleEvent] =
-    Fold(initial, _.update(_))
-
-  def initial: ScheduleState = ScheduleState(Map.empty, Set.empty)
+    Fold(ScheduleState(Map.empty, Set.empty), _.update(_))
 
   case class ScheduleEntry(id: String, correlationId: String, dueDate: LocalDateTime)
 }
