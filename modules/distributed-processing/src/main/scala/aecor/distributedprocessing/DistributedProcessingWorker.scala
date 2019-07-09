@@ -10,14 +10,16 @@ import cats.effect.Effect
 import cats.implicits._
 
 private[aecor] object DistributedProcessingWorker {
-  def props[F[_]: Effect](processWithId: Int => Process[F]): Props =
-    Props(new DistributedProcessingWorker[F](processWithId))
+  def props[F[_]: Effect](processWithId: Int => Process[F], processName: String): Props =
+    Props(new DistributedProcessingWorker[F](processWithId, processName))
 
   final case class KeepRunning(workerId: Int) extends Message
 }
 
-private[aecor] final class DistributedProcessingWorker[F[_]: Effect](processFor: Int => Process[F])
-    extends Actor
+private[aecor] final class DistributedProcessingWorker[F[_]: Effect](
+  processFor: Int => Process[F],
+  processName: String
+) extends Actor
     with ActorLogging {
   import context.dispatcher
 
@@ -31,26 +33,26 @@ private[aecor] final class DistributedProcessingWorker[F[_]: Effect](processFor:
 
   def receive: Receive = {
     case KeepRunning(workerId) =>
-      log.info("[{}] Starting process", workerId)
+      log.info("[{}] Starting process {}", workerId, processName)
       processFor(workerId).run
         .map(ProcessStarted)
         .toIO
         .unsafeToFuture() pipeTo self
       context.become {
         case ProcessStarted(RunningProcess(watchTermination, terminate)) =>
-          log.info("[{}] Process started", workerId)
+          log.info("[{}] Process started {}", workerId, processName)
           killSwitch = Some(terminate)
           watchTermination.toIO.map(_ => ProcessTerminated).unsafeToFuture() pipeTo self
           context.become {
             case Status.Failure(e) =>
-              log.error(e, "Process failed")
+              log.error(e, "Process failed {}", processName)
               throw e
             case ProcessTerminated =>
-              log.error("Process terminated")
-              throw new IllegalStateException("Process terminated")
+              log.error("Process terminated {}", processName)
+              throw new IllegalStateException(s"Process terminated $processName")
           }
         case Status.Failure(e) =>
-          log.error(e, "Process failed to start")
+          log.error(e, "Process failed to start {}", processName)
           throw e
         case KeepRunning(_) => ()
       }

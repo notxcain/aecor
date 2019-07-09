@@ -1,26 +1,82 @@
 package aecor.runtime
 
 import aecor.data._
-import aecor.runtime.eventsourced.{ ActionRunner, EventsourcedState }
-import cats.Applicative
+import cats.arrow.FunctionK
 import cats.effect.Sync
+import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
+
+import cats.{ Applicative, Monad, ~> }
 object Eventsourced {
-  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
-                                                    journal: EventJournal[F, K, E],
-                                                    snapshotting: Option[Snapshotting[F, K, S]] =
-                                                      none): K => F[M[F]] = {
-    val strategy = EventsourcedState(behavior.initial, behavior.update, journal)
-    val effectiveSnapshotting = snapshotting.getOrElse(Snapshotting.noSnapshot[F, K, S])
+  def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
+    behavior: EventsourcedBehavior[M, F, S, E],
+    journal: EventJournal[F, K, E],
+    snapshotting: Snapshotting[F, K, S]
+  ): K => F[M[F]] = {
+    val es = EventsourcedState(behavior.fold, journal)
 
     { key =>
-      ActionRunner
-        .cached(key, strategy, effectiveSnapshotting)
-        .map(behavior.actions.mapK(_))
+      Ref[F].of(none[Versioned[S]]).map { cache =>
+        behavior.actions.mapK(Lambda[ActionT[F, S, E, ?] ~> F] { action =>
+          for {
+            before <- cache.get.flatMap {
+                       case Some(before) => before.pure[F]
+                       case None =>
+                         snapshotting
+                           .load(key)
+                           .flatMap(es.recover(key, _))
+                     }
+            (after, a) <- es
+                           .run(key, before, action)
+                           .flatTap {
+                             case (after, _) =>
+                               snapshotting.snapshot(key, before, after)
+                           }
+            _ <- cache.set(after.some)
+          } yield a
+        })
+      }
+
     }
   }
+
+  def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
+    behavior: EventsourcedBehavior[M, F, S, E],
+    journal: EventJournal[F, K, E]
+  ): K => F[M[F]] = createCached(behavior, journal, Snapshotting.disabled[F, K, S])
+
+  def apply[M[_[_]]: FunctorK, F[_]: Monad, G[_]: Sync, S, E, K](
+    behavior: EventsourcedBehavior[M, G, S, E],
+    journal: EventJournal[G, K, E],
+    journalBoundary: G ~> F,
+    snapshotting: Snapshotting[F, K, S]
+  ): K => M[F] = {
+    val es = EventsourcedState(behavior.fold, journal)
+
+    { key =>
+      behavior.actions.mapK {
+        Lambda[ActionT[G, S, E, ?] ~> F] { action =>
+          for {
+            snapshot <- snapshotting.load(key)
+            (before, (after, a)) <- journalBoundary {
+                                     es.recover(key, snapshot)
+                                       .flatMap { state =>
+                                         es.run(key, state, action)
+                                           .map((state, _))
+                                       }
+                                   }
+            _ <- snapshotting.snapshot(key, before, after)
+          } yield a
+        }
+      }
+    }
+  }
+
+  def apply[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
+                                                    journal: EventJournal[F, K, E],
+  ): K => M[F] = apply(behavior, journal, FunctionK.id, Snapshotting.disabled[F, K, S])
 
   type Entities[K, M[_[_]], F[_]] = K => M[F]
 
@@ -29,60 +85,20 @@ object Eventsourced {
 
     def apply[K, M[_[_]], F[_]](kmf: K => M[F]): Entities[K, M, F] = kmf
 
-    def fromEitherK[K, M[_[_]]: FunctorK, F[_], R](
+    def rejectable[K, M[_[_]]: FunctorK, F[_], R](
       mfr: K => EitherK[M, R, F]
     ): Rejectable[K, M, F, R] = k => mfr(k).unwrap
 
+    @deprecated("Use rejectable", "0.19.0")
+    def fromEitherK[K, M[_[_]]: FunctorK, F[_], R](
+      mfr: K => EitherK[M, R, F]
+    ): Rejectable[K, M, F, R] = rejectable(mfr)
   }
 
-  final class SnapshotEach[F[_]: Applicative, K, S](interval: Long,
-                                                    store: KeyValueStore[F, K, Versioned[S]])
-      extends Snapshotting[F, K, S] {
-    def snapshotIfNeeded(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit] =
-      if (nextState.version % interval == 0 || ((currentState.version / interval) - (nextState.version / interval)) > 0)
-        store.setValue(key, nextState)
-      else
-        ().pure[F]
-    override def load(k: K): F[Option[Versioned[S]]] =
-      store.getValue(k)
-  }
+  final case class Versioned[A](version: Long, value: A)
 
-  final class NoSnapshot[F[_]: Applicative, K, S] extends Snapshotting[F, K, S] {
-    override def snapshotIfNeeded(key: K,
-                                  currentState: Versioned[S],
-                                  nextState: Versioned[S]): F[Unit] =
-      ().pure[F]
-    override def load(k: K): F[Option[Versioned[S]]] =
-      none[Versioned[S]].pure[F]
-  }
-
-  trait Snapshotting[F[_], K, S] {
-    def snapshotIfNeeded(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit]
-    def load(k: K): F[Option[Versioned[S]]]
-  }
-
-  object Snapshotting {
-    def snapshotEach[F[_]: Applicative, K, S](
-      interval: Long,
-      store: KeyValueStore[F, K, Versioned[S]]
-    ): Snapshotting[F, K, S] =
-      new SnapshotEach(interval, store)
-
-    def noSnapshot[F[_]: Applicative, K, S]: Snapshotting[F, K, S] = new NoSnapshot
-  }
-
-  final case class Versioned[A](version: Long, value: A) {
-    def withNextValue(s: A): Versioned[A] = Versioned(version + 1L, value)
-  }
   object Versioned {
-    def zero[A](a: A): Versioned[A] = Versioned(0L, a)
-  }
-
-  type EntityKey = String
-
-  sealed abstract class BehaviorFailure extends Throwable with Product with Serializable
-  object BehaviorFailure {
-    def illegalFold(entityKey: EntityKey): BehaviorFailure = IllegalFold(entityKey)
-    final case class IllegalFold(entityKey: EntityKey) extends BehaviorFailure
+    def fold[F[_]: Applicative, E, S](inner: Fold[F, S, E]): Fold[F, Versioned[S], E] =
+      Fold.count[F, E].andWith(inner)(Versioned(_, _), v => (v.version, v.value))
   }
 }

@@ -48,5 +48,5 @@ object notification {
 
   def behavior[F[_]: Monad]
     : EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent] =
-    EventsourcedBehavior(notificationActions, NotificationState(false), _.applyEvent(_))
+    EventsourcedBehavior(notificationActions, Fold(NotificationState(false), _.applyEvent(_)))
 }

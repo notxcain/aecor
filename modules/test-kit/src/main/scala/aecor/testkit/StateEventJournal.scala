@@ -29,6 +29,11 @@ object StateEventJournal {
       Chain.fromSeq(stream)
     }
 
+    def readEvents(key: K): Chain[EntityEvent[K, E]] =
+      eventsByKey
+        .getOrElse(key, Chain.empty)
+        .mapWithIndex((e, idx) => EntityEvent(key, idx + 1L, e))
+
     def appendEvents(key: K, offset: Long, events: NonEmptyChain[TaggedEvent[E]]): State[K, E] = {
       val updatedEventsById = eventsByKey
         .updated(key, eventsByKey.getOrElse(key, Chain.empty) ++ events.map(_.event).toChain)
@@ -65,20 +70,13 @@ final class StateEventJournal[F[_]: Monad, K, S, E](lens: Lens[S, State[K, E]], 
 ) extends EventJournal[F, K, E] {
   private final val F = lens.transformMonadState(MonadState[F, S])
 
-  override def append(key: K, sequenceNr: Long, events: NonEmptyChain[E]): F[Unit] =
-    F.modify(_.appendEvents(key, sequenceNr, events.map(e => TaggedEvent(e, tagging.tag(key)))))
+  override def append(key: K, offset: Long, events: NonEmptyChain[E]): F[Unit] =
+    F.modify(_.appendEvents(key, offset, events.map(e => TaggedEvent(e, tagging.tag(key)))))
 
-  override def loadEvents(key: K, offset: Long): Stream[F, EntityEvent[K, E]] =
+  override def read(key: K, offset: Long): Stream[F, EntityEvent[K, E]] =
     Stream
-      .eval(
-        F.inspect(
-          _.eventsByKey
-            .getOrElse(key, Chain.empty)
-        )
-      )
-      .flatMap(
-        x => Stream.emits(x.mapWithIndex((e, idx) => EntityEvent(key, idx + 1L, e)).toVector)
-      )
+      .eval(F.inspect(_.readEvents(key)))
+      .flatMap(x => Stream(x.toVector: _*))
       .drop(offset)
 
   def currentEventsByTag(tag: EventTag,

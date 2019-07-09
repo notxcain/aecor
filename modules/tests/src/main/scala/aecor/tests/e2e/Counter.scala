@@ -16,6 +16,7 @@ import io.circe.generic.auto._
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
+
   def value: F[Long]
 }
 
@@ -50,8 +51,7 @@ object CounterBehavior {
   def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent] =
     EventsourcedBehavior(
       CounterActions[ActionT[F, CounterState, CounterEvent, ?]],
-      CounterState(0),
-      _.applyEvent(_)
+      Fold(CounterState(0), _.applyEvent(_))
     )
 }
 
@@ -60,7 +60,8 @@ final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, Counte
 
   import F._
 
-  override def increment: F[Long] = append(CounterIncremented) >> read.map(_.value)
+  override def increment: F[Long] =
+    append(CounterIncremented) >> read.map(_.value)
 
   override def decrement: F[Long] = append(CounterDecremented) >> read.map(_.value)
 

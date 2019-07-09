@@ -138,7 +138,7 @@ Other stuff like state recovery and event persistence is held by Akka Persistenc
 So lets define `SubscriptionActions`
 
 ```scala
-import cats.implicits._ // needed for syntax like flatMap and unit
+import cats.implicits._
 
 final class SubscriptionActions[F[_]](
   implicit F: MonadAction[F, Option[SubscriptionState], SubscriptionEvent]
@@ -149,10 +149,9 @@ final class SubscriptionActions[F[_]](
   def createSubscription(userId: String, productId: String, planId: String): F[Unit] =
     read.flatMap {
       case Some(subscription) =>
-        // Do nothing reply with ()
-        unit
+        ignore
       case None =>
-        // Produce event and reply with ()
+        // Produce event
         append(SubscriptionCreated(userId, productId, planId))
     }
 
@@ -161,7 +160,7 @@ final class SubscriptionActions[F[_]](
       case Some(subscription) if subscription.status == Active =>
         append(SubscriptionPaused)
       case _ =>
-        unit
+        ignore
     }
 
   def resumeSubscription: F[Unit] =
@@ -169,7 +168,7 @@ final class SubscriptionActions[F[_]](
       case Some(subscription) if subscription.status == Paused =>
         append(SubscriptionResumed)
       case _ =>
-        unit
+        ignore
     }
    
   def cancelSubscription: F[Unit] =
@@ -177,7 +176,7 @@ final class SubscriptionActions[F[_]](
       case Some(subscription) if subscription.canCancel =>
         append(SubscriptionCancelled)
       case _ =>
-        unit
+        ignore
     }
 }
 ```
@@ -198,8 +197,7 @@ val runtime = AkkaPersistenceRuntime(system, journalAdapter)
 val behavior: EventsourcedBehavior[Subscription, IO, Option[SubscriptionState], SubscriptionEvent]  
   EventsourcedBehavior.optional(
     new SubscriptionActions,
-    SubscriptionState.create,
-    _.update(_)
+    Fold.optional(SubscriptionState.create)(_.update(_))
   )
 
 val deploySubscriptions: IO[SubscriptionId => Subscription[IO]] =
@@ -215,3 +213,9 @@ val deploySubscriptions: IO[SubscriptionId => Subscription[IO]] =
 ```
 val journalQuery = runtime.journal
 ```
+
+# Adopters
+
+Using Aecor in your organization? Send us a PR to list your company here:
+
++ [Evotor](https://evotor.ru/)

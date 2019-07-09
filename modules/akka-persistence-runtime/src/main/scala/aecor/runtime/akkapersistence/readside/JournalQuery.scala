@@ -12,26 +12,26 @@ final case class JournalEntry[O, K, A](offset: O, event: EntityEvent[K, A]) {
 }
 
 object JournalEntry {
-  implicit def aecorHasInstanceForEvent[X, O, I, A](
-    implicit A: Has[EntityEvent[I, A], X]
-  ): Has[JournalEntry[O, I, A], X] =
+  implicit def aecorHasInstanceForEvent[X, O, K, A](
+    implicit A: Has[EntityEvent[K, A], X]
+  ): Has[JournalEntry[O, K, A], X] =
     A.contramap(_.event)
 
-  implicit def aecorHasInstanceForOffset[X, O, I, A](
+  implicit def aecorHasInstanceForOffset[X, O, K, A](
     implicit A: Has[O, X]
-  ): Has[JournalEntry[O, I, A], X] = A.contramap(_.offset)
+  ): Has[JournalEntry[O, K, A], X] = A.contramap(_.offset)
 
 }
 
-trait JournalQuery[Offset, I, E] {
+trait JournalQuery[O, K, E] {
   def eventsByTag(tag: EventTag,
-                  offset: Option[Offset]): Source[JournalEntry[Offset, I, E], NotUsed]
+                  offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed]
 
   def currentEventsByTag(tag: EventTag,
-                         offset: Option[Offset]): Source[JournalEntry[Offset, I, E], NotUsed]
+                         offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed]
 
   def committable[F[_]: Effect](
-    offsetStore: KeyValueStore[F, TagConsumer, Offset]
-  ): CommittableEventJournalQuery[F, Offset, I, E] =
+    offsetStore: KeyValueStore[F, TagConsumer, O]
+  ): CommittableEventJournalQuery[F, O, K, E] =
     new CommittableEventJournalQuery(this, offsetStore)
 }

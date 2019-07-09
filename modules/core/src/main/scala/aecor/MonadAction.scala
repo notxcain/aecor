@@ -7,6 +7,7 @@ trait MonadAction[F[_], S, E] extends Monad[F] {
   def read: F[S]
   def append(es: E, other: E*): F[Unit]
   def reset: F[Unit]
+  def ignore: F[Unit] = unit
 }
 
 trait MonadActionReject[F[_], S, E, R] extends MonadAction[F, S, E] {

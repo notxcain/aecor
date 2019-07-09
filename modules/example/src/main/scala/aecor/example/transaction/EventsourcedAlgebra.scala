@@ -90,10 +90,9 @@ object EventsourcedAlgebra {
   def behavior[F[_]: Monad]
     : EventsourcedBehavior[EitherK[Algebra, String, ?[_]], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
-      .optionalRejectable[Algebra, F, State, TransactionEvent, String](
+      .rejectable[Algebra, F, Option[State], TransactionEvent, String](
         apply,
-        State.fromEvent,
-        _.applyEvent(_)
+        Fold.optional(State.fromEvent)(_.applyEvent(_))
       )
 
   def tagging: Tagging[TransactionId] =
