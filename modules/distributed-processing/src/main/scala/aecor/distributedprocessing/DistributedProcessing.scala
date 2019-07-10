@@ -30,7 +30,7 @@ final class DistributedProcessing private (system: ActorSystem) {
     Effect[F].delay {
       val opts = BackoffOpts
         .onFailure(
-          DistributedProcessingWorker.props(processes),
+          DistributedProcessingWorker.props(processes, name),
           "worker",
           settings.minBackoff,
           settings.maxBackoff,

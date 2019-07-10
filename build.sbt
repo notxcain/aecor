@@ -9,7 +9,7 @@ lazy val buildSettings = inThisBuild(
 )
 
 
-lazy val akkaVersion = "2.5.22"
+lazy val akkaVersion = "2.5.23"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
 lazy val catsVersion = "1.6.0"
@@ -24,7 +24,6 @@ lazy val fs2Version = "1.0.4"
 lazy val scodecBitsVersion = "1.1.10"
 lazy val scodecCoreVersion = "1.10.3"
 lazy val catsTaglessVersion = "0.6"
-lazy val log4catsVersion = "0.2.0-M1"
 
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.5"
