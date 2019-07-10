@@ -7,6 +7,7 @@ import cats.effect.concurrent.Ref
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
+import cats.{ Applicative, Functor, Monad, ~> }
 
 import cats.{ Applicative, Monad, ~> }
 object Eventsourced {
@@ -95,7 +96,11 @@ object Eventsourced {
     ): Rejectable[K, M, F, R] = rejectable(mfr)
   }
 
-  final case class Versioned[A](version: Long, value: A)
+  final case class Versioned[A](version: Long, value: A) {
+    def traverse[F[_], B](f: A => F[B])(implicit F: Functor[F]): F[Versioned[B]] =
+      f(value).map(Versioned(version, _))
+    def map[B](f: A => B): Versioned[B] = Versioned(version, f(value))
+  }
 
   object Versioned {
     def fold[F[_]: Applicative, E, S](inner: Fold[F, S, E]): Fold[F, Versioned[S], E] =

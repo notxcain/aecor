@@ -21,14 +21,14 @@ final class EventsourcedAlgebra[F[_]](
       case None =>
         append(AccountOpened(checkBalance))
       case Some(_) =>
-        ().pure[F]
+        ignore
     }
 
   override def credit(transactionId: AccountTransactionId, amount: Amount): F[Unit] =
     read.flatMap {
       case Some(account) =>
         if (account.hasProcessedTransaction(transactionId)) {
-          ().pure[F]
+          ignore
         } else {
           append(AccountCredited(transactionId, amount))
         }
@@ -40,7 +40,7 @@ final class EventsourcedAlgebra[F[_]](
     read.flatMap {
       case Some(account) =>
         if (account.hasProcessedTransaction(transactionId)) {
-          ().pure[F]
+          ignore
         } else {
           if (account.hasFunds(amount)) {
             append(AccountDebited(transactionId, amount))

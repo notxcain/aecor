@@ -146,18 +146,19 @@ trait FoldedInstances {
       }
     }
 
-  implicit def aecorDataMonoidForFolded[A](implicit A: Semigroup[A]) = new Monoid[Folded[A]] {
-    def empty = Folded.impossible
-    def combine(x: Folded[A], y: Folded[A]): Folded[A] =
-      x match {
-        case Impossible => y
-        case Next(a) =>
-          y match {
-            case Impossible => x
-            case Next(b)    => Next(A.combine(a, b))
-          }
-      }
-  }
+  implicit def aecorDataMonoidForFolded[A](implicit A: Semigroup[A]): Monoid[Folded[A]] =
+    new Monoid[Folded[A]] {
+      def empty = Folded.impossible
+      def combine(x: Folded[A], y: Folded[A]): Folded[A] =
+        x match {
+          case Impossible => y
+          case Next(a) =>
+            y match {
+              case Impossible => x
+              case Next(b)    => Next(A.combine(a, b))
+            }
+        }
+    }
 
   implicit def aecorDataEqForFolded[A](implicit A: Eq[A]): Eq[Folded[A]] =
     Eq.instance {
