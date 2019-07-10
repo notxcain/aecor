@@ -9,7 +9,6 @@ import cats.tagless.FunctorK
 import cats.tagless.implicits._
 import cats.{ Applicative, Functor, Monad, ~> }
 
-import cats.{ Applicative, Monad, ~> }
 object Eventsourced {
   def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],

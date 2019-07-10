@@ -14,17 +14,14 @@ trait Counter[F[_]] {
 }
 
 object Counter {
-
   def inmem[F[_]: Sync]: F[Counter[F]] =
-    Ref[F]
-      .of(0L)
-      .map { ref =>
-        new Counter[F] {
-          override def increment: F[Long] = ref.update(_ + 1L) >> value
-          override def decrement: F[Long] = ref.update(_ - 1L) >> value
-          override def value: F[Long] = ref.get
-        }
+    Ref[F].of(0L).map { ref =>
+      new Counter[F] {
+        override def increment: F[Long] = ref.update(_ + 1L) >> value
+        override def decrement: F[Long] = ref.update(_ - 1L) >> value
+        override def value: F[Long] = ref.get
       }
+    }
 
   import boopickle.Default._
 
