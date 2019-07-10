@@ -1,31 +1,34 @@
 package aecor.tests
 
-import aecor.encoding.WireProtocol
-import aecor.macros.boopickleWireProtocol
-import cats.{ Applicative, Functor, Id, ~> }
-import cats.implicits._
-import org.scalatest.{ FunSuite, Matchers }
 import java.util.UUID
 
-import BoopickleWireProtocolTest._
-import boopickle.Default._
-import cats.tagless.{ FunctorK, autoFunctorK }
+import aecor.encoding.WireProtocol
+import aecor.macros.boopickle.BoopickleWireProtocol
+import aecor.tests.BoopickleWireProtocolTest._
+import cats.implicits._
 import cats.tagless.syntax.functorK._
-import scodec.{ Attempt, Decoder }
+import cats.tagless.{ Derive, FunctorK }
+import cats.{ Applicative, Functor, Id, ~> }
+import org.scalatest.{ FunSuite, Matchers }
 import scodec.bits.BitVector
+import scodec.{ Attempt, Decoder }
 
 object BoopickleWireProtocolTest {
   final case class FooId(value: UUID) extends AnyVal
 }
 
 class BoopickleWireProtocolTest extends FunSuite with Matchers {
+  import boopickle.Default._
 
-  @boopickleWireProtocol
-  @autoFunctorK
-  trait Foo[F[_]] {
-    def include(i: Int): F[Unit]
-    def scdsc(s: String): F[Int]
+  trait Foo[K, F[_]] {
+    def include(i: K): F[Unit]
+    def scdsc(s: String): F[K]
     def id: F[FooId]
+  }
+
+  object Foo {
+    implicit def functorK[K]: FunctorK[Foo[K, ?[_]]] = Derive.functorK
+    implicit def wireProtocol[K: Pickler]: WireProtocol[Foo[K, ?[_]]] = BoopickleWireProtocol.derive
   }
 
   def server[M[_[_]], F[_]: Applicative](
@@ -55,7 +58,7 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
 
   test("encdec") {
     val uuid = UUID.randomUUID
-    val actions = new Foo[Id] {
+    val actions = new Foo[Int, Id] {
       override def include(i: Int): Id[Unit] = ()
       override def scdsc(s: String): Id[Int] = s.length
       override def id: Id[FooId] = FooId(uuid)
@@ -63,7 +66,7 @@ class BoopickleWireProtocolTest extends FunSuite with Matchers {
 
     val fooServer = server(actions)
 
-    val fooClient = client[Foo, Id](fooServer)
+    val fooClient = client[Foo[Int, ?[_]], Id](fooServer)
 
     fooClient.include(1).toEither shouldBe Right(())
     fooClient.scdsc("1234").toEither shouldBe Right(4)

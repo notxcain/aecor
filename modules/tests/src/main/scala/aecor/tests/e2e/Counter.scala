@@ -1,20 +1,18 @@
 package aecor.tests.e2e
 
 import aecor.MonadAction
-import aecor.data._
 import aecor.data.Folded.syntax._
-import aecor.macros.boopickleWireProtocol
+import aecor.data._
+import aecor.encoding.WireProtocol
+import aecor.macros.boopickle.BoopickleWireProtocol
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import aecor.tests.PersistentEncoderCirce
 import aecor.tests.e2e.CounterEvent.{ CounterDecremented, CounterIncremented }
-import io.circe.generic.auto._
 import cats.implicits._
-import boopickle.Default._
-import cats.tagless.autoFunctorK
+import cats.tagless.{ Derive, FunctorK }
 import cats.{ Eq, Monad }
+import io.circe.generic.auto._
 
-@boopickleWireProtocol
-@autoFunctorK(false)
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
@@ -22,7 +20,11 @@ trait Counter[F[_]] {
   def value: F[Long]
 }
 
-object Counter
+object Counter {
+  import boopickle.Default._
+  implicit def functorK: FunctorK[Counter] = Derive.functorK
+  implicit def wireProtocol: WireProtocol[Counter] = BoopickleWireProtocol.derive
+}
 
 final case class CounterId(value: String) extends AnyVal
 
