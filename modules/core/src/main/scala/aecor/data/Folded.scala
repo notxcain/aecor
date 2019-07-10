@@ -1,12 +1,12 @@
 package aecor.data
 
 import aecor.data.Folded.{ Impossible, Next }
-import cats.kernel.Eq
+import cats.kernel.{ Eq, Monoid, Semigroup }
 import cats.{ Alternative, Applicative, CoflatMap, Eval, MonadError, Now, Show, Traverse }
 
 import scala.annotation.tailrec
 
-sealed abstract class Folded[+A] extends Product with Serializable {
+sealed abstract class Folded[+A] extends Product with Serializable { self =>
   def fold[B](impossible: => B)(next: A => B): B = this match {
     case Impossible => impossible
     case Next(a)    => next(a)
@@ -38,17 +38,27 @@ sealed abstract class Folded[+A] extends Product with Serializable {
   def forall(f: A => Boolean): Boolean = fold(true)(f)
 
   def toOption: Option[A] = fold(Option.empty[A])(Some(_))
+  def toEither[E](error: => E): Either[E, A] = fold[Either[E, A]](Left(error))(Right(_))
+
+  def toMonadError[F[_], E]: ToMonadErrorPartiallyApplied[F, E] =
+    new ToMonadErrorPartiallyApplied[F, E]
+  final class ToMonadErrorPartiallyApplied[F[_], E] {
+    def apply[AA >: A](error: => E)(implicit F: MonadError[F, E]): F[AA] =
+      self match {
+        case Next(a) => F.pure(a)
+        case Folded.Impossible =>
+          F.raiseError[AA](error)
+      }
+  }
+
 }
 object Folded extends FoldedInstances {
   final case object Impossible extends Folded[Nothing]
   final case class Next[+A](a: A) extends Folded[A]
   def impossible[A]: Folded[A] = Impossible
   def next[A](a: A): Folded[A] = Next(a)
-  def collectNext[A]: PartialFunction[Folded[A], Next[A]] = {
-    case next @ Next(_) => next
-  }
   object syntax {
-    implicit class FoldedIdOps[A](val a: A) extends AnyVal {
+    implicit final class FoldedIdOps[A](val a: A) extends AnyVal {
       def next: Folded[A] = Folded.next(a)
     }
     def impossible[A]: Folded[A] = Folded.impossible
@@ -56,10 +66,10 @@ object Folded extends FoldedInstances {
 }
 
 trait FoldedInstances {
-  implicit val aecorDataInstancesForFolded
-    : Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded] with Alternative[
-      Folded
-    ] =
+  implicit val aecorDataInstancesForFolded: Traverse[Folded]
+    with MonadError[Folded, Unit]
+    with CoflatMap[Folded]
+    with Alternative[Folded] =
     new Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded]
     with Alternative[Folded] {
 
@@ -134,6 +144,20 @@ trait FoldedInstances {
         case Next(a)    => s"Next(${A.show(a)})"
         case Impossible => "Impossible"
       }
+    }
+
+  implicit def aecorDataMonoidForFolded[A](implicit A: Semigroup[A]): Monoid[Folded[A]] =
+    new Monoid[Folded[A]] {
+      def empty = Folded.impossible
+      def combine(x: Folded[A], y: Folded[A]): Folded[A] =
+        x match {
+          case Impossible => y
+          case Next(a) =>
+            y match {
+              case Impossible => x
+              case Next(b)    => Next(A.combine(a, b))
+            }
+        }
     }
 
   implicit def aecorDataEqForFolded[A](implicit A: Eq[A]): Eq[Folded[A]] =

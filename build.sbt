@@ -20,7 +20,7 @@ lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.1-cats"
-lazy val fs2Version = "1.0.0"
+lazy val fs2Version = "1.0.4"
 lazy val log4catsVersion = "0.2.0-M1"
 
 lazy val scalaCheckVersion = "1.13.4"
@@ -28,6 +28,7 @@ lazy val scalaTestVersion = "3.0.5"
 lazy val scalaCheckShapelessVersion = "1.1.8"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.9"
+lazy val betterMonadicForVersion = "0.3.0-M4"
 lazy val scalametaVersion = "1.8.0"
 
 // Example dependencies
@@ -43,16 +44,17 @@ lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
   scalacOptions ++= commonScalacOptions,
   addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
     .filter(_ != "-Xfatal-warnings"),
 ) ++ warnUnusedImport
 
 lazy val macroSettings = Seq(
-  scalacOptions += "-Xplugin-require:macroparadise",
+    scalacOptions += "-Xplugin-require:macroparadise",
   addCompilerPlugin(
     "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.full
-  ),
+    ),
   sources in (Compile, doc) := Nil // macroparadise doesn't work with scaladoc yet.
 )
 
@@ -143,7 +145,8 @@ lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
+    "co.fs2" %% "fs2-core" % fs2Version,
+    "org.typelevel" %% "cats-tagless-core" % catsTaglessVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
@@ -161,6 +164,7 @@ lazy val boopickleWireProtocolSettings = Seq(
 
 lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
     "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
   )
@@ -172,7 +176,7 @@ lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
-    "co.fs2" %% "fs2-core" % fs2Version,
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
@@ -181,7 +185,10 @@ lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
 )
 
 lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
-  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion
+  )
 )
 
 lazy val exampleSettings =
@@ -190,8 +197,8 @@ lazy val exampleSettings =
     resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
     libraryDependencies ++=
       Seq(
+        "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
         "com.github.krasserm" %% "streamz-converter" % "0.10-M2",
-        "co.fs2" %% "fs2-core" % "1.0.0",
         "org.typelevel" %% "cats-mtl-core" % catsMTLVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "org.http4s" %% "http4s-dsl" % http4sVersion,
@@ -215,6 +222,7 @@ lazy val testKitSettings = Seq(
 
 lazy val testingSettings = Seq(
   libraryDependencies ++= Seq(
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
