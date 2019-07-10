@@ -9,7 +9,7 @@ trait KeyValueStore[F[_], K, A] { self =>
   def getValue(key: K): F[Option[A]]
   def deleteValue(key: K): F[Unit]
   def takeValue(key: K)(implicit F: Monad[F]): F[Option[A]] =
-    getValue(key).flatTap(_ => deleteValue(key))
+    getValue(key) <* deleteValue(key)
 
   final def contramap[K2](f: K2 => K): KeyValueStore[F, K2, A] = new KeyValueStore[F, K2, A] {
     override def setValue(key: K2, value: A): F[Unit] = self.setValue(f(key), value)
