@@ -137,25 +137,29 @@ trait ActionTLowerPriorityInstances1 {
     override def flatMap[A, B](fa: ActionT[F, S, E, A])(
       f: A => ActionT[F, S, E, B]
     ): ActionT[F, S, E, B] = fa.flatMap(f)
+
     override def tailRecM[A, B](a: A)(f: A => ActionT[F, S, E, Either[A, B]]): ActionT[F, S, E, B] =
       ActionT { (fold, es) =>
-        F.tailRecM(a) { a =>
-          f(a).unsafeRun(fold, es).flatMap {
-            case Impossible            => impossible[(Chain[E], B)].asRight[A].pure[F]
-            case Next((es2, Right(b))) => (es2, b).next.asRight[A].pure[F]
-            case Next((es2, Left(na))) =>
-              es2 match {
-                case c if c.nonEmpty =>
-                  ActionT
-                    .append[F, S, E](NonEmptyChain.fromChainUnsafe(c))
-                    .unsafeRun(fold, es)
-                    .as(na.asLeft[Folded[(Chain[E], B)]])
-                case _ =>
-                  na.asLeft[Folded[(Chain[E], B)]].pure[F]
-              }
-          }
+        F.tailRecM((es, a)) {
+          case (es, a) =>
+            f(a).unsafeRun(fold, es).flatMap {
+              case Next((es2, Left(nextA))) =>
+                f(nextA).unsafeRun(fold, es2).map {
+                  case Next((es, Left(a))) =>
+                    (es, a).asLeft[Folded[(Chain[E], B)]]
+                  case Next((es, Right(b))) =>
+                    (es, b).next.asRight[(Chain[E], A)]
+                  case Folded.Impossible =>
+                    impossible[(Chain[E], B)].asRight[(Chain[E], A)]
+                }
+              case Next((es2, Right(b))) =>
+                (es2, b).next.asRight[(Chain[E], A)].pure[F]
+              case Impossible =>
+                impossible[(Chain[E], B)].asRight[(Chain[E], A)].pure[F]
+            }
         }
       }
+
     override def pure[A](x: A): ActionT[F, S, E, A] = ActionT.pure(x)
     override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
   }
