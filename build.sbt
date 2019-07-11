@@ -8,21 +8,20 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-
 lazy val akkaVersion = "2.5.23"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
+lazy val apacheKafkaClientsVersion = "2.1.0"
 lazy val catsVersion = "1.6.0"
 lazy val catsEffectVersion = "1.3.0"
-lazy val scodecVersion = "1.10.4"
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.1-cats"
 lazy val fs2Version = "1.0.4"
-lazy val scodecBitsVersion = "1.1.10"
-lazy val scodecCoreVersion = "1.10.3"
+lazy val scodecBitsVersion = "1.1.12"
+lazy val scodecCoreVersion = "1.11.4"
 lazy val catsTaglessVersion = "0.8"
 
 lazy val scalaCheckVersion = "1.13.4"
@@ -67,6 +66,7 @@ lazy val aecor = project
     akkaPersistence,
     akkaGeneric,
     distributedProcessing,
+    kafkaDistributedProcessing,
     example,
     schedule,
     testKit,
@@ -110,6 +110,12 @@ lazy val distributedProcessing =
     .settings(aecorSettings)
     .settings(distributedProcessingSettings)
 
+lazy val kafkaDistributedProcessing =
+  aecorModule("kafka-distributed-processing", "Aecor Distributed Processing based on Kafka partition assignment")
+    .dependsOn(core)
+    .settings(aecorSettings)
+    .settings(kafkaDistributedProcessingSettings)
+
 lazy val schedule = aecorModule("schedule", "Aecor Schedule")
   .dependsOn(akkaPersistence, distributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
@@ -121,13 +127,13 @@ lazy val testKit = aecorModule("test-kit", "Aecor Test Kit")
   .settings(testKitSettings)
 
 lazy val tests = aecorModule("tests", "Aecor Tests")
-  .dependsOn(core, schedule, testKit, akkaPersistence, distributedProcessing, boopickleWireProtocol)
+  .dependsOn(core, schedule, testKit, akkaPersistence, distributedProcessing, kafkaDistributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(testingSettings)
 
 lazy val example = aecorModule("example", "Aecor Example Application")
-  .dependsOn(core, schedule, distributedProcessing, boopickleWireProtocol)
+  .dependsOn(core, schedule, distributedProcessing, kafkaDistributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
   .settings(noPublishSettings)
   .settings(exampleSettings)
@@ -168,6 +174,14 @@ lazy val scheduleSettings = commonProtobufSettings ++ Seq(
 
 lazy val distributedProcessingSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+)
+
+lazy val kafkaDistributedProcessingSettings = commonProtobufSettings ++ Seq(
+  libraryDependencies ++= Seq(
+    "org.apache.kafka" % "kafka-clients" % apacheKafkaClientsVersion,
+    "co.fs2" %% "fs2-core" % fs2Version,
+    "co.fs2" %% "fs2-reactive-streams" % fs2Version
+  )
 )
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
@@ -228,7 +242,8 @@ lazy val testingSettings = Seq(
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
     "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
-    "org.typelevel" %% "cats-testkit" % catsVersion % Test
+    "org.typelevel" %% "cats-testkit" % catsVersion % Test,
+    "io.github.embeddedkafka" %% "embedded-kafka" % "2.2.0" % Test
   )
 ) ++ macroSettings
 
