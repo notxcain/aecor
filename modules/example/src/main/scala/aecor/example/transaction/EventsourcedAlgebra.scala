@@ -28,7 +28,7 @@ class EventsourcedAlgebra[F[_]](
       case None =>
         append(TransactionEvent.TransactionCreated(fromAccountId, toAccountId, amount))
       case Some(_) =>
-        ().pure[F]
+        ignore
     }
 
   override def authorize: F[Unit] =
@@ -37,7 +37,7 @@ class EventsourcedAlgebra[F[_]](
         if (transaction.status == Requested) {
           append(TransactionAuthorized)
         } else if (transaction.status == Authorized) {
-          ().pure[F]
+          ignore
         } else {
           reject("Illegal transition")
         }
@@ -49,7 +49,7 @@ class EventsourcedAlgebra[F[_]](
     read.flatMap {
       case Some(transaction) =>
         if (transaction.status == Failed) {
-          ().pure[F]
+          ignore
         } else {
           append(TransactionFailed(reason))
         }
@@ -61,7 +61,7 @@ class EventsourcedAlgebra[F[_]](
     read.flatMap {
       case Some(transaction) =>
         if (transaction.status == Succeeded) {
-          ().pure[F]
+          ignore
         } else if (transaction.status == Authorized) {
           append(TransactionSucceeded)
         } else {
@@ -90,10 +90,9 @@ object EventsourcedAlgebra {
   def behavior[F[_]: Monad]
     : EventsourcedBehavior[EitherK[Algebra, String, ?[_]], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
-      .optionalRejectable[Algebra, F, State, TransactionEvent, String](
+      .rejectable[Algebra, F, Option[State], TransactionEvent, String](
         apply,
-        State.fromEvent,
-        _.applyEvent(_)
+        Fold.optional(State.fromEvent)(_.applyEvent(_))
       )
 
   def tagging: Tagging[TransactionId] =

@@ -1,6 +1,5 @@
 import ReleaseTransformations._
 import sbtrelease.Version.Bump
-import pl.project13.scala.sbt._
 
 lazy val buildSettings = inThisBuild(
   Seq(
@@ -9,52 +8,48 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.21"
+lazy val akkaVersion = "2.5.23"
 lazy val akkaPersistenceCassandraVersion = "0.61"
 
 lazy val apacheKafkaClientsVersion = "2.1.0"
-lazy val catsVersion = "1.4.0"
-lazy val catsEffectVersion = "1.2.0"
-lazy val scodecVersion = "1.10.4"
+lazy val catsVersion = "1.6.0"
+lazy val catsEffectVersion = "1.3.0"
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 lazy val boopickleVersion = "1.3.0"
 lazy val monocleVersion = "1.5.1-cats"
 lazy val fs2Version = "1.0.4"
-lazy val log4catsVersion = "0.2.0-M1"
+lazy val scodecBitsVersion = "1.1.12"
+lazy val scodecCoreVersion = "1.11.4"
+lazy val catsTaglessVersion = "0.8"
 
 lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.5"
 lazy val scalaCheckShapelessVersion = "1.1.8"
 lazy val shapelessVersion = "2.3.3"
-lazy val kindProjectorVersion = "0.9.9"
-lazy val scalametaVersion = "1.8.0"
+lazy val kindProjectorVersion = "0.10.0"
+lazy val betterMonadicForVersion = "0.3.0"
 
 // Example dependencies
 
 lazy val circeVersion = "0.10.1"
 lazy val http4sVersion = "0.20.0-M3"
-lazy val scalametaParadiseVersion = "3.0.0-M11"
-
+lazy val log4catsVersion = "0.3.0"
 lazy val catsMTLVersion = "0.4.0"
-lazy val catsTaglessVersion = "0.2.0"
 
 lazy val commonSettings = Seq(
   resolvers += "jitpack" at "https://jitpack.io",
   scalacOptions ++= commonScalacOptions,
-  addCompilerPlugin("org.spire-math" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % kindProjectorVersion),
+  addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false,
   scalacOptions in (Compile, doc) := (scalacOptions in (Compile, doc)).value
     .filter(_ != "-Xfatal-warnings"),
 ) ++ warnUnusedImport
 
 lazy val macroSettings = Seq(
-  scalacOptions += "-Xplugin-require:macroparadise",
-  addCompilerPlugin(
-    "org.scalameta" % "paradise" % scalametaParadiseVersion cross CrossVersion.full
-  ),
-  sources in (Compile, doc) := Nil // macroparadise doesn't work with scaladoc yet.
+  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 )
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
@@ -151,24 +146,27 @@ lazy val benchmarks = aecorModule("benchmarks", "Aecor Benchmarks")
 
 lazy val coreSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
+    "co.fs2" %% "fs2-core" % fs2Version,
+    "org.typelevel" %% "cats-tagless-core" % catsTaglessVersion,
     "com.chuusai" %% "shapeless" % shapelessVersion,
     "org.typelevel" %% "cats-core" % catsVersion,
     "org.typelevel" %% "cats-effect" % catsEffectVersion,
-    "org.scodec" %% "scodec-bits" % "1.1.6",
-    "org.scodec" %% "scodec-core" % "1.10.3"
+    "org.scodec" %% "scodec-bits" % scodecBitsVersion,
+    "org.scodec" %% "scodec-core" % scodecCoreVersion
   )
 )
 
 lazy val boopickleWireProtocolSettings = Seq(
   libraryDependencies ++= Seq(
     "io.suzaku" %% "boopickle" % boopickleVersion,
-    "org.scalameta" %% "scalameta" % scalametaVersion
+    "org.scala-lang" % "scala-compiler" % scalaVersion.value % "provided",
+    "org.scala-lang" % "scala-reflect" % scalaVersion.value % "provided"
   )
 ) ++ macroSettings
 
 lazy val scheduleSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "com.datastax.cassandra" % "cassandra-driver-extras" % cassandraDriverExtrasVersion,
     "com.google.code.findbugs" % "jsr305" % jsr305Version % Compile
   )
@@ -188,7 +186,7 @@ lazy val kafkaDistributedProcessingSettings = commonProtobufSettings ++ Seq(
 
 lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
   libraryDependencies ++= Seq(
-    "co.fs2" %% "fs2-core" % fs2Version,
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
@@ -197,7 +195,10 @@ lazy val akkaPersistenceSettings = commonProtobufSettings ++ Seq(
 )
 
 lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
-  libraryDependencies ++= Seq("com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion)
+  libraryDependencies ++= Seq(
+    "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion % Test
+  )
 )
 
 lazy val exampleSettings =
@@ -206,8 +207,8 @@ lazy val exampleSettings =
     resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
     libraryDependencies ++=
       Seq(
+        "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
         "com.github.krasserm" %% "streamz-converter" % "0.10-M2",
-        "co.fs2" %% "fs2-core" % fs2Version,
         "org.typelevel" %% "cats-mtl-core" % catsMTLVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "org.http4s" %% "http4s-dsl" % http4sVersion,
@@ -231,6 +232,7 @@ lazy val testKitSettings = Seq(
 
 lazy val testingSettings = Seq(
   libraryDependencies ++= Seq(
+    "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,

@@ -2,22 +2,25 @@ package aecor.tests.e2e
 
 import aecor.MonadAction
 import aecor.data.Folded.syntax._
-import aecor.data._
-import aecor.data.EventsourcedBehavior
-import aecor.macros.boopickleWireProtocol
-import boopickle.Default._
+import aecor.data.{ EventsourcedBehavior, _ }
+import aecor.encoding.WireProtocol
+import aecor.macros.boopickle.BoopickleWireProtocol
 import aecor.tests.e2e.notification.NotificationEvent.{ NotificationCreated, NotificationSent }
 import cats.Monad
-import cats.tagless.autoFunctorK
+import cats.tagless.{ Derive, FunctorK }
 
 object notification {
   type NotificationId = String
 
-  @boopickleWireProtocol
-  @autoFunctorK
   trait Notification[F[_]] {
     def create(counterId: CounterId): F[Unit]
     def markAsSent: F[Unit]
+  }
+
+  object Notification {
+    import boopickle.Default._
+    implicit def functorK: FunctorK[Notification] = Derive.functorK
+    implicit def wireProtocol: WireProtocol[Notification] = BoopickleWireProtocol.derive
   }
 
   sealed abstract class NotificationEvent
@@ -44,5 +47,5 @@ object notification {
 
   def behavior[F[_]: Monad]
     : EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent] =
-    EventsourcedBehavior(notificationActions, NotificationState(false), _.applyEvent(_))
+    EventsourcedBehavior(notificationActions, Fold(NotificationState(false), _.applyEvent(_)))
 }

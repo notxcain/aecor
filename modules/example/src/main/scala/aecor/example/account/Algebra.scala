@@ -1,12 +1,12 @@
 package aecor.example.account
 
+import aecor.encoding.WireProtocol
 import aecor.example.AnyValCirceEncoding
 import aecor.example.common.Amount
 import aecor.example.transaction.TransactionId
-import aecor.macros.boopickleWireProtocol
+import aecor.macros.boopickle.BoopickleWireProtocol
+import cats.tagless.{ Derive, FunctorK }
 import io.circe.{ Decoder, Encoder }
-import boopickle.Default._
-import cats.tagless.autoFunctorK
 
 final case class AccountTransactionId(baseTransactionId: TransactionId,
                                       kind: AccountTransactionKind)
@@ -27,12 +27,15 @@ object AccountTransactionKind {
   }
   implicit val encoder: Encoder[AccountTransactionKind] = Encoder[String].contramap(_.toString)
 }
-@boopickleWireProtocol
-@autoFunctorK(false)
+
 trait Algebra[F[_]] {
   def open(checkBalance: Boolean): F[Unit]
   def credit(transactionId: AccountTransactionId, amount: Amount): F[Unit]
   def debit(transactionId: AccountTransactionId, amount: Amount): F[Unit]
 }
 
-object Algebra
+object Algebra {
+  import boopickle.Default._
+  implicit def functorK: FunctorK[Algebra] = Derive.functorK
+  implicit def wireProtocol: WireProtocol[Algebra] = BoopickleWireProtocol.derive
+}

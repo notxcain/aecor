@@ -1,15 +1,12 @@
 package aecor.runtime.akkageneric
 
-import aecor.encoding.{KeyDecoder, KeyEncoder}
-import aecor.macros.boopickleWireProtocol
-import boopickle.Default._
+import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
+import aecor.macros.boopickle.BoopickleWireProtocol
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
 import cats.implicits._
-import cats.tagless.autoFunctorK
+import cats.tagless.FunctorK
 
-@autoFunctorK(false)
-@boopickleWireProtocol
 trait Counter[F[_]] {
   def increment: F[Long]
   def decrement: F[Long]
@@ -25,6 +22,11 @@ object Counter {
         override def value: F[Long] = ref.get
       }
     }
+
+  import boopickle.Default._
+
+  implicit def wireProtocol: WireProtocol[Counter] = BoopickleWireProtocol.derive
+  implicit def functorK: FunctorK[Counter] = cats.tagless.Derive.functorK
 }
 
 final case class CounterId(value: String) extends AnyVal
