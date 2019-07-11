@@ -1,5 +1,7 @@
 package aecor.tests
 
+
+import java.time.temporal.{ ChronoField, Temporal }
 import java.time.{ Instant, LocalDateTime }
 
 import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
@@ -17,8 +19,13 @@ class ScheduleEventCodecSpec
   val encoder = PersistentEncoder[ScheduleEvent]
   val decoder = PersistentDecoder[ScheduleEvent]
 
-  implicit val arbitraryLocalDateTime = Arbitrary(Gen.lzy(Gen.const(LocalDateTime.now())))
-  implicit val arbitraryInstant = Arbitrary(Gen.lzy(Gen.const(Instant.now())))
+  // OpenJDK 9+ offers more precise system clock than millisecond.
+  // https://bugs.openjdk.java.net/browse/JDK-8068730
+  def dropBelowMillis[A <: Temporal](t: A): A =
+    t.`with`(ChronoField.MICRO_OF_SECOND, t.getLong(ChronoField.MILLI_OF_SECOND) * 1000L).asInstanceOf[A]
+
+  implicit val arbitraryLocalDateTime = Arbitrary(Gen.lzy(Gen.const(dropBelowMillis(LocalDateTime.now()))))
+  implicit val arbitraryInstant       = Arbitrary(Gen.lzy(Gen.const(dropBelowMillis(Instant.now()))))
 
   test("ScheduleEventCodec must be able to encode and decode ScheduleEvent") {
     forAll { e: ScheduleEvent =>
