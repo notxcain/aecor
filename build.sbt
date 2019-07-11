@@ -32,7 +32,7 @@ lazy val scalaCheckVersion = "1.13.4"
 lazy val scalaTestVersion = "3.0.5"
 lazy val scalaCheckShapelessVersion = "1.1.8"
 lazy val shapelessVersion = "2.3.3"
-lazy val kindProjectorVersion = "0.10.0"
+lazy val kindProjectorVersion = "0.10.3"
 lazy val betterMonadicForVersion = "0.3.0"
 
 // Example dependencies
