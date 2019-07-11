@@ -37,7 +37,7 @@ object ScheduleApp extends IOApp {
         CassandraScheduleEntryRepository.init[F](scheduleEntryRepositoryQueries)
     )
 
-    def runSchedule[F[_]: Effect](cassandraSession: CassandraSession) =
+    def runSchedule[F[_]: Effect: ContextShift](cassandraSession: CassandraSession) =
       Schedule.start(
         entityName = "Schedule",
         dayZero = LocalDate.of(2016, 5, 10),

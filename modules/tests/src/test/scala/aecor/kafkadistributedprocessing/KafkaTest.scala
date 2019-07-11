@@ -15,11 +15,11 @@ import cats.implicits._
 import fs2.Stream
 import fs2.concurrent.Queue
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
 
-class KafkaTest extends FunSuite with IOSupport with KafkaSupport {
+class KafkaTest extends AnyFunSuite with IOSupport with KafkaSupport {
   val topic = "test"
   val partitionCount = 4
 

@@ -7,9 +7,10 @@ import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ DefaultScheduleBucket, ScheduleState }
 import cats.Id
 import cats.data.Chain
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.Matchers
+import org.scalatest.flatspec.AnyFlatSpec
 
-class ScheduleBucketSpec extends FlatSpec with Matchers with StrictCatsEquality {
+class ScheduleBucketSpec extends AnyFlatSpec with Matchers with StrictCatsEquality {
   val clock = Clock.fixed(Instant.now, ZoneId.systemDefault())
   val aggregate = DefaultScheduleBucket.behavior[Id](ZonedDateTime.now(clock)).actions
 

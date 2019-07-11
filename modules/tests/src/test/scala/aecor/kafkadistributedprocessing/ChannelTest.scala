@@ -5,11 +5,11 @@ import aecor.tests.IOSupport
 import cats.effect.IO
 import cats.implicits._
 import fs2.concurrent.Queue
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 
 import scala.concurrent.duration._
 
-class ChannelTest extends FunSuite with IOSupport {
+class ChannelTest extends AnyFunSuite with IOSupport {
   test("Channel#call completes only after completion callback") {
     val out = Channel
       .create[IO]

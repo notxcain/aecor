@@ -10,7 +10,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.{ BackoffOpts, BackoffSupervisor, ask }
 import akka.util.Timeout
-import cats.effect.Effect
+import cats.effect.{ ContextShift, Effect }
 import cats.implicits._
 
 import scala.concurrent.duration.{ FiniteDuration, _ }
@@ -23,10 +23,11 @@ final class DistributedProcessing private (system: ActorSystem) {
     * @param processes - list of processes to distribute
     *
     */
-  def start[F[_]: Effect](name: String,
-                          processes: List[Process[F]],
-                          settings: DistributedProcessingSettings =
-                            DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
+  def start[F[_]: Effect: ContextShift](
+    name: String,
+    processes: List[Process[F]],
+    settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)
+  ): F[KillSwitch[F]] =
     Effect[F].delay {
       val opts = BackoffOpts
         .onFailure(

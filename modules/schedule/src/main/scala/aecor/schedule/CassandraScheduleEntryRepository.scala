@@ -10,7 +10,7 @@ import akka.persistence.cassandra._
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import akka.stream.Materializer
 import akka.stream.scaladsl.{ Sink, Source }
-import cats.effect.Effect
+import cats.effect.{ ContextShift, Effect }
 import com.datastax.driver.core.Row
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
@@ -21,7 +21,8 @@ import cats.implicits._
 
 class CassandraScheduleEntryRepository[F[_]](cassandraSession: CassandraSession, queries: Queries)(
   implicit materializer: Materializer,
-  F: Effect[F]
+  F: Effect[F],
+  cs: ContextShift[F]
 ) extends ScheduleEntryRepository[F] {
 
   private val log = LoggerFactory.getLogger(classOf[CassandraScheduleEntryRepository[F]])
@@ -135,7 +136,7 @@ class CassandraScheduleEntryRepository[F[_]](cassandraSession: CassandraSession,
 
 object CassandraScheduleEntryRepository {
 
-  def apply[F[_]: Effect](cassandraSession: CassandraSession, queries: Queries)(
+  def apply[F[_]: Effect: ContextShift](cassandraSession: CassandraSession, queries: Queries)(
     implicit materializer: Materializer
   ): CassandraScheduleEntryRepository[F] =
     new CassandraScheduleEntryRepository(cassandraSession, queries)

@@ -13,12 +13,13 @@ import aecor.tests.e2e.{ notification, _ }
 import cats.data.Chain
 import cats.implicits._
 import monocle.macros.GenLens
-import org.scalatest.{ FunSuite, Matchers }
+import org.scalatest.Matchers
+import org.scalatest.funsuite.AnyFunSuite
 import shapeless.Coproduct
 
 import scala.concurrent.duration._
 
-class EndToEndTest extends FunSuite with Matchers with E2eSupport {
+class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport {
   import cats.mtl.instances.all._
 
   case class SpecState(

@@ -1,15 +1,15 @@
 package aecor.kafkadistributedprocessing
 
 import aecor.tests.IOSupport
-import cats.effect.{ ExitCase, IO }
 import cats.effect.concurrent.{ Deferred, Ref }
+import cats.effect.{ ExitCase, IO }
 import cats.implicits._
 import fs2.concurrent.Queue
 import org.apache.kafka.clients.consumer.ConsumerConfig
-import org.scalatest.FunSuiteLike
+import org.scalatest.funsuite.AnyFunSuiteLike
 
 import scala.concurrent.duration._
-class KafkaDistributedProcessingTest extends FunSuiteLike with KafkaSupport with IOSupport {
+class KafkaDistributedProcessingTest extends AnyFunSuiteLike with KafkaSupport with IOSupport {
 
   val topicName = "process-distribution"
 

@@ -1,9 +1,10 @@
 package aecor.tests
 
 import aecor.data.Composer
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.Matchers
+import org.scalatest.flatspec.AnyFlatSpec
 
-class ComposerSpec extends FlatSpec with Matchers {
+class ComposerSpec extends AnyFlatSpec with Matchers {
   val components = List("fo\\-o-", "bar---baz\\", "weww,--12321d''xqw\\xqw---")
   "Composer.WithSeparator" should "concatenate provided components" in {
     val separatedEncoder = Composer.WithSeparator('-')

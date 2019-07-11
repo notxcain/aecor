@@ -4,7 +4,11 @@ import sbtrelease.Version.Bump
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    scalaVersion := "2.12.8"
+    crossScalaVersions := Seq(
+      "2.13.0",
+      "2.12.8"
+    ),
+    resolvers += Resolver.sonatypeRepo("releases")
   )
 )
 
@@ -13,32 +17,32 @@ lazy val akkaPersistenceCassandraVersion = "0.62"
 
 
 lazy val apacheKafkaClientsVersion = "2.1.0"
-lazy val catsVersion = "1.6.1"
-lazy val catsEffectVersion = "1.3.1"
+lazy val catsVersion = "2.0.0-M4"
+lazy val catsEffectVersion = "2.0.0-M4"
 
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.7.1"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
-lazy val monocleVersion = "1.5.1-cats"
+lazy val monocleVersion = "1.6.0-RC1"
 
-lazy val fs2Version = "1.0.5"
+lazy val fs2Version = "1.1.0-M1"
 lazy val scodecBitsVersion = "1.1.12"
 lazy val scodecCoreVersion = "1.11.4"
 
 lazy val catsTaglessVersion = "0.8"
 
-lazy val scalaCheckVersion = "1.13.4"
-lazy val scalaTestVersion = "3.0.5"
-lazy val scalaCheckShapelessVersion = "1.1.8"
+lazy val scalaCheckVersion = "1.14.0"
+lazy val scalaTestVersion = "3.0.8"
+lazy val scalaCheckShapelessVersion = "1.2.3"
 lazy val shapelessVersion = "2.3.3"
-lazy val kindProjectorVersion = "0.10.0"
+lazy val kindProjectorVersion = "0.10.3"
 lazy val betterMonadicForVersion = "0.3.0"
 
 // Example dependencies
 
-lazy val circeVersion = "0.11.1"
-lazy val http4sVersion = "0.20.3"
+lazy val circeVersion = "0.12.0-M4"
+lazy val http4sVersion = "0.21.0-M2"
 lazy val log4catsVersion = "0.3.0"
 lazy val catsMTLVersion = "0.5.0"
 
@@ -52,7 +56,17 @@ lazy val commonSettings = Seq(
 ) ++ warnUnusedImport
 
 lazy val macroSettings = Seq(
-  addCompilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
+  libraryDependencies ++= {
+    CrossVersion.partialVersion(scalaVersion.value) match {
+      // if scala 2.13+ is used, quasiquotes are merged into scala-reflect
+      case Some((2, scalaMajor)) if scalaMajor >= 13 => Seq()
+      // in Scala 2.10, quasiquotes are provided by macro paradise
+      case _ =>
+        Seq(
+          compilerPlugin("org.scalamacros" %% "paradise" % "2.1.0" cross CrossVersion.full)
+        )
+    }
+  }
 )
 
 lazy val aecorSettings = buildSettings ++ commonSettings ++ publishSettings
@@ -133,7 +147,7 @@ lazy val tests = aecorModule("tests", "Aecor Tests")
   .dependsOn(core, schedule, testKit, akkaPersistence, distributedProcessing, kafkaDistributedProcessing, boopickleWireProtocol)
   .settings(aecorSettings)
   .settings(noPublishSettings)
-  .settings(testingSettings)
+  .settings(testsSettings)
 
 lazy val example = aecorModule("example", "Aecor Example Application")
   .dependsOn(core, schedule, distributedProcessing, kafkaDistributedProcessing, boopickleWireProtocol)
@@ -206,12 +220,11 @@ lazy val akkaGenericSettings = commonProtobufSettings ++ Seq(
 
 lazy val exampleSettings =
   Seq(
-    resolvers += Resolver.sonatypeRepo("releases"),
     resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
     libraryDependencies ++=
       Seq(
         "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
-        "com.github.krasserm" %% "streamz-converter" % "0.10-M2",
+        "co.fs2" %% "fs2-reactive-streams" % fs2Version,
         "org.typelevel" %% "cats-mtl-core" % catsMTLVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "org.http4s" %% "http4s-dsl" % http4sVersion,
@@ -220,7 +233,6 @@ lazy val exampleSettings =
         "io.circe" %% "circe-core" % circeVersion,
         "io.circe" %% "circe-generic" % circeVersion,
         "io.circe" %% "circe-parser" % circeVersion,
-        "io.circe" %% "circe-java8" % circeVersion,
         "ch.qos.logback" % "logback-classic" % logbackVersion
       )
   ) ++ macroSettings
@@ -233,22 +245,15 @@ lazy val testKitSettings = Seq(
   )
 )
 
-lazy val testingSettings = Seq(
+lazy val testsSettings = Seq(
   libraryDependencies ++= Seq(
     "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
     "io.circe" %% "circe-core" % circeVersion,
     "io.circe" %% "circe-generic" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
-    "io.circe" %% "circe-java8" % circeVersion,
-    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
-    "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
-    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
-    "org.typelevel" %% "cats-testkit" % catsVersion % Test,
-    "io.github.embeddedkafka" %% "embedded-kafka" % "2.2.0" % Test
+    "io.github.embeddedkafka" %% "embedded-kafka" % "2.3.0" % Test
   )
-) ++ macroSettings
+) ++ macroSettings ++ commonTestSettings
 
 lazy val commonTestSettings =
   Seq(
@@ -257,7 +262,7 @@ lazy val commonTestSettings =
       "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
       "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
       "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
-      "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
+      "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % scalaCheckShapelessVersion % Test,
       "org.typelevel" %% "cats-testkit" % catsVersion % Test
     )
   )
@@ -281,7 +286,7 @@ lazy val commonScalacOptions = Seq(
   "-unchecked",
   "-Xfatal-warnings",
   "-Xlint",
-  "-Yno-adapted-args",
+  "-Ywarn-adapted-args",
   "-Ywarn-dead-code",
   "-Ywarn-numeric-widen",
   "-Ywarn-value-discard",

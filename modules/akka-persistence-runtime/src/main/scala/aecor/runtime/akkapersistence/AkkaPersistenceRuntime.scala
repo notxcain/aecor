@@ -13,7 +13,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
-import cats.effect.Effect
+import cats.effect.{ ContextShift, Effect }
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.~>
@@ -31,7 +31,7 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]]: FunctorK, F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]]: FunctorK, F[_]: ContextShift, State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
     typeName: String,
     behavior: EventsourcedBehavior[M, F, State, Event],
     tagging: Tagging[Key],

@@ -8,14 +8,15 @@ import akka.serialization.SerializationExtension
 import org.scalacheck.Arbitrary
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Prop.forAll
-import org.scalatest.prop.Checkers
-import org.scalatest.{ BeforeAndAfterAll, FunSuite }
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.Checkers
 import scodec.bits.BitVector
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class MessageSerializerTest extends FunSuite with BeforeAndAfterAll with Checkers {
+class MessageSerializerTest extends AnyFunSuite with BeforeAndAfterAll with Checkers {
 
   implicit val system: ActorSystem = ActorSystem("test")
   val serialization = SerializationExtension(system)
