@@ -12,7 +12,7 @@ lazy val akkaVersion = "2.5.23"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
 
-lazy val apacheKafkaClientsVersion = "2.1.1"
+lazy val apacheKafkaClientsVersion = "2.3.0"
 lazy val catsVersion = "1.6.1"
 lazy val catsEffectVersion = "1.3.1"
 
