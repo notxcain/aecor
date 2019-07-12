@@ -9,7 +9,7 @@ lazy val buildSettings = inThisBuild(
 )
 
 lazy val akkaVersion = "2.5.23"
-lazy val akkaPersistenceCassandraVersion = "0.62"
+lazy val akkaPersistenceCassandraVersion = "0.98"
 
 
 lazy val apacheKafkaClientsVersion = "2.1.1"
