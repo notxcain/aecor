@@ -29,7 +29,7 @@ lazy val scodecCoreVersion = "1.11.4"
 lazy val catsTaglessVersion = "0.9"
 
 lazy val scalaCheckVersion = "1.13.5"
-lazy val scalaTestVersion = "3.0.5"
+lazy val scalaTestVersion = "3.0.8"
 lazy val scalaCheckShapelessVersion = "1.1.8"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.10.3"
