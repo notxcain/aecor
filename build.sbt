@@ -20,7 +20,7 @@ lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.7.1"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
-lazy val monocleVersion = "1.5.1-cats"
+lazy val monocleVersion = "1.6.0-RC1"
 
 lazy val fs2Version = "1.0.5"
 lazy val scodecBitsVersion = "1.1.12"
