@@ -21,6 +21,7 @@ lazy val cassandraDriverExtrasVersion = "3.7.1"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "1.5.1-cats"
+lazy val embeddedKafkaVersion = "2.2.1"
 
 lazy val fs2Version = "1.0.5"
 lazy val scodecBitsVersion = "1.1.12"
@@ -246,7 +247,7 @@ lazy val testingSettings = Seq(
     "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test,
     "org.typelevel" %% "cats-testkit" % catsVersion % Test,
-    "io.github.embeddedkafka" %% "embedded-kafka" % "2.2.1" % Test
+    "io.github.embeddedkafka" %% "embedded-kafka" % embeddedKafkaVersion % Test
   )
 ) ++ macroSettings
 
