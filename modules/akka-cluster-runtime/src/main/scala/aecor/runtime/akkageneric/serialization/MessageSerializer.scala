@@ -18,7 +18,7 @@ class MessageSerializer(val system: ExtendedActorSystem)
   val CommandResultManifest = "C"
 
   private val fromBinaryMap =
-    HashMap[String, Array[Byte] ⇒ AnyRef](
+    HashMap[String, Array[Byte] => AnyRef](
       KeyedCommandManifest -> keyedCommandFromBinary,
       CommandManifest -> commandFromBinary,
       CommandResultManifest -> commandResultFromBinary

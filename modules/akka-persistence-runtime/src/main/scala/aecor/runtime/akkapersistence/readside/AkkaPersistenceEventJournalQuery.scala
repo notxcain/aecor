@@ -36,7 +36,6 @@ private[akkapersistence] final class AkkaPersistenceEventJournalQuery[
                   case Some(id) =>
                     decoder
                       .decode(repr)
-                      .right
                       .map { event =>
                         JournalEntry(offsetValue, EntityEvent(id, sequenceNr, event))
                       }

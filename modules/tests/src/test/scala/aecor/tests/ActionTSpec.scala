@@ -6,12 +6,12 @@ import aecor.runtime.Eventsourced.Versioned
 import cats.Id
 import cats.data.{ Chain, NonEmptyChain }
 import cats.instances.string._
-import cats.syntax.flatMap._
-import org.scalatest.FunSuite
-import cats.syntax.functor._
 import cats.syntax.either._
+import cats.syntax.flatMap._
+import cats.syntax.functor._
+import org.scalatest.funsuite.AnyFunSuite
 
-class ActionTSpec extends FunSuite {
+class ActionTSpec extends AnyFunSuite {
   def append(s: String): ActionT[Id, String, String, Unit] = ActionT.append(NonEmptyChain.one(s))
   def read[S]: ActionT[Id, S, String, S] = ActionT.read
   def pure[A](a: A): ActionT[Id, String, String, A] = ActionT.pure(a)
