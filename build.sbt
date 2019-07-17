@@ -17,7 +17,7 @@ lazy val catsVersion = "2.0.0-M4"
 lazy val catsEffectVersion = "2.0.0-M4"
 
 lazy val logbackVersion = "1.2.3"
-lazy val cassandraDriverExtrasVersion = "3.7.1"
+lazy val cassandraDriverExtrasVersion = "3.7.2"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "1.6.0-RC1"
@@ -26,7 +26,7 @@ lazy val fs2Version = "1.1.0-M1"
 lazy val scodecBitsVersion = "1.1.12"
 lazy val scodecCoreVersion = "1.11.4"
 
-lazy val catsTaglessVersion = "0.8"
+lazy val catsTaglessVersion = "0.9"
 
 lazy val scalaCheckVersion = "1.14.0"
 lazy val scalaTestVersion = "3.0.8"
