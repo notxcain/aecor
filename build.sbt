@@ -194,8 +194,6 @@ lazy val distributedProcessingSettings = Seq(
 )
 
 lazy val kafkaDistributedProcessingSettings = Seq(
-  scalaVersion := "2.12.8",
-  crossScalaVersions := Seq("2.12.8"),
   libraryDependencies ++= Seq(
     "org.apache.kafka" % "kafka-clients" % apacheKafkaClientsVersion,
     "co.fs2" %% "fs2-core" % fs2Version,
