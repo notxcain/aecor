@@ -4,15 +4,14 @@ import sbtrelease.Version.Bump
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    crossScalaVersions := Seq("2.13.0", "2.12.8"),
-    resolvers += Resolver.sonatypeRepo("releases")
+    crossScalaVersions := Seq("2.13.0", "2.12.8")
   )
 )
 
 lazy val akkaVersion = "2.5.23"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
-lazy val apacheKafkaClientsVersion = "2.1.0"
+lazy val apacheKafkaClientsVersion = "2.1.1"
 lazy val catsVersion = "2.0.0-M4"
 lazy val catsEffectVersion = "2.0.0-M4"
 
@@ -218,12 +217,11 @@ lazy val akkaGenericSettings = Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion % Test,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
+    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test
   )
 )
 
 lazy val exampleSettings = Seq(
-  resolvers += "krasserm at bintray" at "http://dl.bintray.com/krasserm/maven",
   libraryDependencies ++=
     Seq(
       "org.typelevel" %% "cats-tagless-macros" % catsTaglessVersion,
