@@ -80,7 +80,6 @@ lazy val aecor = project
     akkaPersistence,
     akkaGeneric,
     distributedProcessing,
-    kafkaDistributedProcessing,
     example,
     schedule,
     testKit,
