@@ -3,13 +3,12 @@ package aecor.kafkadistributedprocessing
 import java.util.Properties
 
 import aecor.kafkadistributedprocessing.internal.Kafka.UnitDeserializer
-import aecor.kafkadistributedprocessing.internal.{ Kafka, KafkaConsumer }
 import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent
 import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent.{
   PartitionsAssigned,
   PartitionsRevoked
 }
-import aecor.tests.IOSupport
+import aecor.kafkadistributedprocessing.internal.{ Kafka, KafkaConsumer }
 import cats.effect.IO
 import cats.implicits._
 import fs2.Stream

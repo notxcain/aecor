@@ -1,7 +1,6 @@
 package aecor.kafkadistributedprocessing
 
 import aecor.kafkadistributedprocessing.internal.Channel
-import aecor.tests.IOSupport
 import cats.effect.IO
 import cats.implicits._
 import fs2.concurrent.Queue

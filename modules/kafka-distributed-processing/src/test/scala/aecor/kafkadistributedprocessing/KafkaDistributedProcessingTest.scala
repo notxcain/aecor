@@ -1,13 +1,11 @@
 package aecor.kafkadistributedprocessing
 
-import aecor.tests.IOSupport
 import cats.effect.concurrent.{ Deferred, Ref }
 import cats.effect.{ ExitCase, IO }
 import cats.implicits._
 import fs2.concurrent.Queue
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.scalatest.funsuite.AnyFunSuiteLike
-
 import scala.concurrent.duration._
 class KafkaDistributedProcessingTest extends AnyFunSuiteLike with KafkaSupport with IOSupport {
 
@@ -69,7 +67,7 @@ class KafkaDistributedProcessingTest extends AnyFunSuiteLike with KafkaSupport w
             .map { n =>
               val idx = client * 10 + n
               (queue.enqueue1(idx) >> IO.cancelBoundary <* IO.never)
-                .guaranteeCase(x => queue.enqueue1(-idx))
+                .guarantee(queue.enqueue1(-idx))
             }
             .toList
         )
@@ -89,7 +87,7 @@ class KafkaDistributedProcessingTest extends AnyFunSuiteLike with KafkaSupport w
       } yield (s1, s2, s3, s4)
     }
 
-    val x @ (s1, s2, s3, s4) = test.timeout(20.seconds).unsafeRunSync()
+    val (s1, s2, s3, s4) = test.timeout(20.seconds).unsafeRunSync()
 
     assert(s1.toSet == Set(10, 11, 12, 13, 14, 15, 16, 17))
     assert((s1 ++ s2 ++ s3 ++ s4).sum == 0)
