@@ -186,6 +186,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
     }
 
   def performInvocation[A](invocation: Invocation[M, A], resultEncoder: Encoder[A]): Unit = {
+    println(invocation)
     val opId = UUID.randomUUID()
     behavior
       .run(state, invocation)
@@ -193,7 +194,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
         case Next((events, result)) =>
           F.delay(
             log.info(
-              "[{}] Command [{}] produced reply [{}] and events [{}]",
+              "[{}] [{}] produced reply [{}] and events [{}]",
               persistenceId,
               invocation,
               result,

@@ -9,7 +9,7 @@ import akka.persistence.cassandra.Session.Init
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.Functor
 import cats.data.Kleisli
-import cats.effect.{ ContextShift, Effect }
+import cats.effect.Effect
 import cats.implicits._
 
 object CassandraOffsetStore {
@@ -32,16 +32,15 @@ object CassandraOffsetStore {
     def createTable(config: Queries)(implicit F: Functor[F]): Init[F] =
       Kleisli(_.execute(config.createTableQuery).void)
 
-    def apply(
-      session: CassandraSession,
-      config: CassandraOffsetStore.Queries
-    )(implicit F: Effect[F], cs: ContextShift[F]): CassandraOffsetStore[F] =
+    def apply(session: CassandraSession, config: CassandraOffsetStore.Queries)(
+      implicit F: Effect[F]
+    ): CassandraOffsetStore[F] =
       new CassandraOffsetStore(session, config)
   }
 
 }
 
-class CassandraOffsetStore[F[_]: ContextShift] private[akkapersistence] (
+class CassandraOffsetStore[F[_]] private[akkapersistence] (
   session: CassandraSession,
   config: CassandraOffsetStore.Queries
 )(implicit F: Effect[F])

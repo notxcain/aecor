@@ -11,10 +11,10 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
-import cats.effect.{ ContextShift, Effect }
-import cats.tagless.syntax.functorK._
+import cats.effect.Effect
 import cats.implicits._
 import cats.tagless.FunctorK
+import cats.tagless.syntax.functorK._
 import cats.~>
 import scodec.bits.BitVector
 
@@ -25,7 +25,7 @@ object GenericAkkaRuntime {
 }
 
 final class GenericAkkaRuntime private (system: ActorSystem) {
-  def runBehavior[K: KeyEncoder: KeyDecoder, M[_[_]]: FunctorK, F[_]: ContextShift](
+  def runBehavior[K: KeyEncoder: KeyDecoder, M[_[_]]: FunctorK, F[_]](
     typeName: String,
     createBehavior: K => F[M[F]],
     settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
