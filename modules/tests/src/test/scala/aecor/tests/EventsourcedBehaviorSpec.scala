@@ -3,9 +3,10 @@ package aecor.tests
 import aecor.data._
 import aecor.tests.e2e.{ CounterEvent, CounterState }
 import cats.implicits._
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.Matchers
+import org.scalatest.flatspec.AnyFlatSpec
 
-class EventsourcedBehaviorSpec extends FlatSpec with Matchers {
+class EventsourcedBehaviorSpec extends AnyFlatSpec with Matchers {
 
   "EventsourcedBehavior.optional" should "correctly use init function applying events" in {
     val behavior: Fold[Folded, Option[CounterState], CounterEvent] =

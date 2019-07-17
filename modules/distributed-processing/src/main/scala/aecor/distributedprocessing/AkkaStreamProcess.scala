@@ -2,8 +2,8 @@ package aecor.distributedprocessing
 
 import aecor.distributedprocessing.DistributedProcessing._
 import aecor.util.effect._
-import akka.stream.scaladsl.{Keep, Sink, Source}
-import akka.stream.{KillSwitches, Materializer}
+import akka.stream.scaladsl.{ Keep, Sink, Source }
+import akka.stream.{ KillSwitches, Materializer }
 import cats.effect.Async
 import cats.implicits._
 

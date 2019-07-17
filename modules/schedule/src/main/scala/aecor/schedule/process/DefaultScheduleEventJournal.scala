@@ -21,7 +21,7 @@ object DefaultScheduleEventJournal {
     new DefaultScheduleEventJournal(consumerId, parallelism, aggregateJournal, eventTag)
 }
 
-class DefaultScheduleEventJournal[F[_]: Effect](
+final class DefaultScheduleEventJournal[F[_]: Effect](
   consumerId: ConsumerId,
   parallelism: Int,
   aggregateJournal: CommittableEventJournalQuery[F, UUID, ScheduleBucketId, ScheduleEvent],

@@ -88,8 +88,8 @@ trait ScheduleEventInstances {
       val ScheduleEntryFiredManifest = "B"
 
       private def manifest(o: ScheduleEvent): String = o match {
-        case e: ScheduleEvent.ScheduleEntryAdded => ScheduleEntryAddedManifest
-        case e: ScheduleEvent.ScheduleEntryFired => ScheduleEntryFiredManifest
+        case _: ScheduleEvent.ScheduleEntryAdded => ScheduleEntryAddedManifest
+        case _: ScheduleEvent.ScheduleEntryFired => ScheduleEntryFiredManifest
       }
 
       private def tryDecode(bytes: Array[Byte], manifest: String): Try[ScheduleEvent] =

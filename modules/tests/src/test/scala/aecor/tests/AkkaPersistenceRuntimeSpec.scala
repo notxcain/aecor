@@ -1,17 +1,19 @@
 package aecor.tests
 
 import aecor.data.Tagging
+import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import aecor.tests.e2e._
 import akka.actor.ActorSystem
-import akka.testkit.TestKit
-import com.typesafe.config.{ Config, ConfigFactory }
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.{ FunSuiteLike, Matchers }
-import aecor.runtime.akkapersistence.{ AkkaPersistenceRuntime, CassandraJournalAdapter }
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
+import akka.testkit.TestKit
 import cats.effect.IO
 import cats.implicits._
+import com.typesafe.config.{ Config, ConfigFactory }
+import org.scalatest.Matchers
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.funsuite.AnyFunSuiteLike
+
 import scala.concurrent.duration._
 
 object AkkaPersistenceRuntimeSpec {
@@ -38,7 +40,7 @@ object AkkaPersistenceRuntimeSpec {
 
 class AkkaPersistenceRuntimeSpec
     extends TestKit(ActorSystem("test", AkkaPersistenceRuntimeSpec.conf))
-    with FunSuiteLike
+    with AnyFunSuiteLike
     with Matchers
     with ScalaFutures
     with CassandraLifecycle {
@@ -48,7 +50,7 @@ class AkkaPersistenceRuntimeSpec
   override implicit val patienceConfig = PatienceConfig(30.seconds, 150.millis)
 
   val timer = IO.timer(system.dispatcher)
-
+  implicit val contextShift = IO.contextShift(system.dispatcher)
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll()

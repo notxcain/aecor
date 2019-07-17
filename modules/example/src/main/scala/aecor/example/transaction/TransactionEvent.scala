@@ -2,11 +2,11 @@ package aecor.example.transaction
 
 import aecor.data.Enriched
 import aecor.example.account.AccountId
-import aecor.example.common.{Amount, Timestamp}
+import aecor.example.common.{ Amount, Timestamp }
 import aecor.example.persistentEncoderUtil
-import aecor.runtime.akkapersistence.serialization.{PersistentDecoder, PersistentEncoder}
+import aecor.runtime.akkapersistence.serialization.{ PersistentDecoder, PersistentEncoder }
 import io.circe.generic.auto._
-import io.circe.java8.time._
+
 sealed abstract class TransactionEvent extends Product with Serializable
 
 object TransactionEvent {

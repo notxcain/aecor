@@ -22,7 +22,6 @@ object persistentEncoderUtil {
       repr =>
         jawn
           .parseByteBuffer(ByteBuffer.wrap(repr.payload))
-          .right
           .flatMap(decoder.decodeJson)
           .left
           .map(DecodingFailure.fromThrowable)

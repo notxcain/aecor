@@ -40,19 +40,21 @@ object CounterEvent {
     PersistentEncoderCirce.circePersistentDecoder[CounterEvent]
 }
 
-case class CounterState(value: Long) {
+final case class CounterState(value: Long) {
   def applyEvent(e: CounterEvent): Folded[CounterState] = e match {
     case CounterIncremented => CounterState(value + 1).next
     case CounterDecremented => CounterState(value - 1).next
   }
 }
 
+object CounterState {
+  def fold: Fold[Folded, CounterState, CounterEvent] =
+    Fold(CounterState(0), _.applyEvent(_))
+}
+
 object CounterBehavior {
   def instance[F[_]: Monad]: EventsourcedBehavior[Counter, F, CounterState, CounterEvent] =
-    EventsourcedBehavior(
-      CounterActions[ActionT[F, CounterState, CounterEvent, ?]],
-      Fold(CounterState(0), _.applyEvent(_))
-    )
+    EventsourcedBehavior(new CounterActions, CounterState.fold)
 }
 
 final class CounterActions[F[_]](implicit F: MonadAction[F, CounterState, CounterEvent])

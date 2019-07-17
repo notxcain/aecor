@@ -28,8 +28,8 @@ object TestActorSystem {
     val s = (Thread.currentThread.getStackTrace map (_.getClassName) drop 1)
       .dropWhile(_ matches "(java.lang.Thread|.*AkkaSpec.?$)")
     val reduced = s.lastIndexWhere(_ == clazz.getName) match {
-      case -1 ⇒ s
-      case z ⇒ s drop (z + 1)
+      case -1 => s
+      case z  => s drop (z + 1)
     }
     reduced.head.replaceFirst(""".*\.""", "").replaceAll("[^a-zA-Z_0-9]", "_")
   }

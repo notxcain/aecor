@@ -6,19 +6,21 @@ import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import cats.effect.Effect
+import cats.effect.{ ContextShift, Effect }
 
 import scala.collection.immutable._
 import scala.concurrent.duration.{ FiniteDuration, _ }
 
 object PeriodicProcessRuntime {
-  def apply[F[_]: Effect](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(
-    implicit materializer: Materializer
-  ): PeriodicProcessRuntime[F] =
+  def apply[F[_]: Effect: ContextShift](
+    name: String,
+    tickInterval: FiniteDuration,
+    processCycle: F[Unit]
+  )(implicit materializer: Materializer): PeriodicProcessRuntime[F] =
     new PeriodicProcessRuntime[F](name, tickInterval, processCycle)
 }
 
-class PeriodicProcessRuntime[F[_]: Effect](
+class PeriodicProcessRuntime[F[_]: Effect: ContextShift](
   name: String,
   tickInterval: FiniteDuration,
   processCycle: F[Unit]

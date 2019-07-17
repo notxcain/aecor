@@ -18,7 +18,7 @@ class MessageSerializer(val system: ExtendedActorSystem)
   val CommandResultManifest = "C"
 
   private val fromBinaryMap =
-    HashMap[String, Array[Byte] ⇒ AnyRef](
+    HashMap[String, Array[Byte] => AnyRef](
       HandleCommandManifest -> handleCommandFromBinary,
       EntityCommandManifest -> entityCommandFromBinary,
       CommandResultManifest -> commandResultFromBinary
@@ -34,7 +34,7 @@ class MessageSerializer(val system: ExtendedActorSystem)
   override def toBinary(o: AnyRef): Array[Byte] = o match {
     case x @ HandleCommand(_) =>
       x.commandBytes.toByteArray
-    case x @ CommandResult(resultBytes) =>
+    case _ @CommandResult(resultBytes) =>
       resultBytes.toByteArray
     case x @ EntityCommand(_, _) =>
       entityCommandToBinary(x)

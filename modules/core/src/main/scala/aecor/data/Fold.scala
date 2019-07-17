@@ -54,5 +54,5 @@ object Fold {
     })
 
   def count[F[_], A](implicit F: Applicative[F]): Fold[F, Long, A] =
-    Fold(0L, (c, _) => F.pure(c + 1l))
+    Fold(0L, (c, _) => F.pure(c + 1L))
 }

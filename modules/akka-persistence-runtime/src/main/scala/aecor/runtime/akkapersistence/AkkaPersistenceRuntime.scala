@@ -16,8 +16,8 @@ import akka.util.Timeout
 import cats.effect.Effect
 import cats.implicits._
 import cats.tagless.FunctorK
-import cats.~>
 import cats.tagless.syntax.functorK._
+import cats.~>
 import scodec.bits.BitVector
 
 object AkkaPersistenceRuntime {
@@ -31,13 +31,13 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]]: FunctorK, F[_], State, Event: PersistentEncoder: PersistentDecoder, Key: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]]: FunctorK, F[_], State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
     typeName: String,
     behavior: EventsourcedBehavior[M, F, State, Event],
-    tagging: Tagging[Key],
+    tagging: Tagging[K],
     snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
     settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Effect[F]): F[Key => M[F]] =
+  )(implicit M: WireProtocol[M], F: Effect[F]): F[K => M[F]] =
     F.delay {
       val props =
         AkkaPersistenceRuntimeActor.props(
@@ -71,7 +71,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
         extractShardId = extractShardId
       )
 
-      val keyEncoder = KeyEncoder[Key]
+      val keyEncoder = KeyEncoder[K]
 
       key =>
         M.encoder.mapK(new (Encoded ~> F) {

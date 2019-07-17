@@ -12,9 +12,9 @@ import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
 import cats.effect.Effect
-import cats.tagless.syntax.functorK._
 import cats.implicits._
 import cats.tagless.FunctorK
+import cats.tagless.syntax.functorK._
 import cats.~>
 import scodec.bits.BitVector
 
