@@ -11,7 +11,7 @@ lazy val buildSettings = inThisBuild(
 lazy val akkaVersion = "2.5.23"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
-lazy val apacheKafkaClientsVersion = "2.1.1"
+lazy val apacheKafkaClientsVersion = "2.3.0"
 lazy val catsVersion = "2.0.0-M4"
 lazy val catsEffectVersion = "2.0.0-M4"
 
