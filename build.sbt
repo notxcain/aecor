@@ -33,7 +33,7 @@ lazy val scalaCheckShapelessVersion = "1.2.3"
 lazy val embeddedKafkaVersion = "2.3.0"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.10.3"
-lazy val betterMonadicForVersion = "0.3.0"
+lazy val betterMonadicForVersion = "0.3.1"
 
 // Example dependencies
 
