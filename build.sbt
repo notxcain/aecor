@@ -28,8 +28,10 @@ lazy val scodecCoreVersion = "1.11.4"
 lazy val catsTaglessVersion = "0.9"
 
 lazy val scalaCheckVersion = "1.14.0"
-lazy val scalaTestVersion = "3.0.8"
+lazy val scalaTestVersion = "3.1.0-SNAP13"
+lazy val scalatestplusScalaCheckVersion = "1.0.0-SNAP8"
 lazy val scalaCheckShapelessVersion = "1.2.3"
+lazy val disciplineVersion = "0.12.0-M3"
 lazy val embeddedKafkaVersion = "2.3.0"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.10.3"
@@ -262,7 +264,9 @@ lazy val commonTestSettings = Seq(
     "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
     "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % scalaCheckShapelessVersion % Test,
-    "org.typelevel" %% "cats-testkit" % catsVersion % Test
+    "org.scalatestplus" %% "scalatestplus-scalacheck" % scalatestplusScalaCheckVersion % Test,
+    "org.typelevel" %% "discipline-scalatest" % disciplineVersion % Test,
+    "org.typelevel" %% "cats-laws" % catsVersion % Test
   )
 )
 
