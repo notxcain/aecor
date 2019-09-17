@@ -8,7 +8,7 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.23"
+lazy val akkaVersion = "2.5.25"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
 lazy val apacheKafkaClientsVersion = "2.3.0"
@@ -19,7 +19,7 @@ lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.7.2"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
-lazy val monocleVersion = "1.6.0"
+lazy val monocleVersion = "2.0.0"
 
 lazy val fs2Version = "1.1.0-M1"
 lazy val scodecBitsVersion = "1.1.12"
@@ -37,10 +37,10 @@ lazy val betterMonadicForVersion = "0.3.1"
 
 // Example dependencies
 
-lazy val circeVersion = "0.12.0-RC1"
+lazy val circeVersion = "0.12.1"
 lazy val http4sVersion = "0.21.0-M4"
 lazy val log4catsVersion = "0.3.0"
-lazy val catsMTLVersion = "0.6.0"
+lazy val catsMTLVersion = "0.7.0"
 
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
