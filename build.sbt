@@ -30,7 +30,7 @@ lazy val catsTaglessVersion = "0.9"
 
 lazy val scalaCheckVersion = "1.14.0"
 lazy val scalaTestVersion = "3.1.0-SNAP13"
-lazy val scalatestplusScalaCheckVersion = "1.0.0-SNAP8"
+lazy val scalatestplusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.3"
 lazy val disciplineVersion = "0.12.0-M3"
 lazy val embeddedKafkaVersion = "2.3.0"
