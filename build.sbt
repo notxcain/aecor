@@ -38,7 +38,7 @@ lazy val betterMonadicForVersion = "0.3.1"
 // Example dependencies
 
 lazy val circeVersion = "0.12.1"
-lazy val http4sVersion = "0.21.0-M2"
+lazy val http4sVersion = "0.21.0-M4"
 lazy val log4catsVersion = "0.3.0"
 lazy val catsMTLVersion = "0.7.0"
 
