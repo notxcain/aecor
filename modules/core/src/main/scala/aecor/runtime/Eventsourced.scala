@@ -10,7 +10,7 @@ import cats.tagless.implicits._
 import cats.{ Applicative, Functor, Monad, ~> }
 
 object Eventsourced {
-  def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
+  def cached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, F, S, E],
     journal: EventJournal[F, K, E],
     snapshotting: Snapshotting[F, K, S]
@@ -42,10 +42,9 @@ object Eventsourced {
     }
   }
 
-  def createCached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](
-    behavior: EventsourcedBehavior[M, F, S, E],
-    journal: EventJournal[F, K, E]
-  ): K => F[M[F]] = createCached(behavior, journal, Snapshotting.disabled[F, K, S])
+  def cached[M[_[_]]: FunctorK, F[_]: Sync, S, E, K](behavior: EventsourcedBehavior[M, F, S, E],
+                                                     journal: EventJournal[F, K, E]): K => F[M[F]] =
+    cached(behavior, journal, Snapshotting.disabled[F, K, S])
 
   def apply[M[_[_]]: FunctorK, F[_]: Monad, G[_]: Sync, S, E, K](
     behavior: EventsourcedBehavior[M, G, S, E],
