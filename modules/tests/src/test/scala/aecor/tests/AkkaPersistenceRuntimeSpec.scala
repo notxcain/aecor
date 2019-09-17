@@ -10,11 +10,11 @@ import akka.testkit.TestKit
 import cats.effect.IO
 import cats.implicits._
 import com.typesafe.config.{ Config, ConfigFactory }
-import org.scalatest.Matchers
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuiteLike
 
 import scala.concurrent.duration._
+import org.scalatest.matchers.should.Matchers
 
 object AkkaPersistenceRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""

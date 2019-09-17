@@ -7,8 +7,8 @@ import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ DefaultScheduleBucket, ScheduleState }
 import cats.Id
 import cats.data.Chain
-import org.scalatest.Matchers
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 class ScheduleBucketSpec extends AnyFlatSpec with Matchers with StrictCatsEquality {
   val clock = Clock.fixed(Instant.now, ZoneId.systemDefault())

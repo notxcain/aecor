@@ -9,10 +9,10 @@ import cats.implicits._
 import cats.tagless.syntax.functorK._
 import cats.tagless.{ Derive, FunctorK }
 import cats.{ Applicative, Functor, Id, ~> }
-import org.scalatest.Matchers
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
 import scodec.{ Attempt, Decoder }
+import org.scalatest.matchers.should.Matchers
 
 object BoopickleWireProtocolTest {
   final case class FooId(value: UUID) extends AnyVal

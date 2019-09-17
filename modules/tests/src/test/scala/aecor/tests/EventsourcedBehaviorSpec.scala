@@ -3,8 +3,8 @@ package aecor.tests
 import aecor.data._
 import aecor.tests.e2e.{ CounterEvent, CounterState }
 import cats.implicits._
-import org.scalatest.Matchers
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 class EventsourcedBehaviorSpec extends AnyFlatSpec with Matchers {
 

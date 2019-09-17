@@ -7,9 +7,10 @@ import cats.implicits._
 import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuiteLike
-import org.scalatest.{ BeforeAndAfterAll, Matchers }
+import org.scalatest.BeforeAndAfterAll
 
 import scala.concurrent.duration._
+import org.scalatest.matchers.should.Matchers
 
 object GenericRuntimeSpec {
   def conf: Config = ConfigFactory.parseString(s"""

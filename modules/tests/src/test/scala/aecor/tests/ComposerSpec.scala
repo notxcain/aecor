@@ -1,8 +1,8 @@
 package aecor.tests
 
 import aecor.data.Composer
-import org.scalatest.Matchers
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
 class ComposerSpec extends AnyFlatSpec with Matchers {
   val components = List("fo\\-o-", "bar---baz\\", "weww,--12321d''xqw\\xqw---")

@@ -13,11 +13,11 @@ import aecor.tests.e2e.{ notification, _ }
 import cats.data.Chain
 import cats.implicits._
 import monocle.macros.GenLens
-import org.scalatest.Matchers
 import org.scalatest.funsuite.AnyFunSuite
 import shapeless.Coproduct
 
 import scala.concurrent.duration._
+import org.scalatest.matchers.should.Matchers
 
 class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport {
   import cats.mtl.instances.all._
