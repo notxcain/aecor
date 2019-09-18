@@ -28,7 +28,7 @@ lazy val scodecCoreVersion = "1.11.4"
 
 lazy val catsTaglessVersion = "0.9"
 
-lazy val scalaCheckVersion = "1.14.0"
+lazy val scalaCheckVersion = "1.14.1"
 lazy val scalaTestVersion = "3.1.0-SNAP13"
 lazy val scalatestplusScalaCheckVersion = "1.0.0-SNAP8"
 lazy val scalaCheckShapelessVersion = "1.2.3"
