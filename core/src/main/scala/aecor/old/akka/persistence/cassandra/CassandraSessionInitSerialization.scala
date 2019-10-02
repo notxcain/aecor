@@ -1,4 +1,4 @@
-package akka.persistence.cassandra
+package aecor.old.akka.persistence.cassandra
 
 import akka.Done
 import akka.actor.{ ActorSystem, ExtendedActorSystem }
