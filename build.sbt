@@ -8,7 +8,7 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.25"
+lazy val akkaVersion = "2.5.26"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
 lazy val apacheKafkaClientsVersion = "2.3.0"
@@ -17,20 +17,20 @@ lazy val catsVersion = "2.0.0"
 lazy val catsEffectVersion = "2.0.0"
 
 lazy val logbackVersion = "1.2.3"
-lazy val cassandraDriverExtrasVersion = "3.7.2"
+lazy val cassandraDriverExtrasVersion = "3.8.0"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "2.0.0"
 
-lazy val fs2Version = "2.0.0"
+lazy val fs2Version = "2.0.1"
 lazy val scodecBitsVersion = "1.1.12"
 lazy val scodecCoreVersion = "1.11.4"
 
-lazy val catsTaglessVersion = "0.9"
+lazy val catsTaglessVersion = "0.10"
 
-lazy val scalaCheckVersion = "1.14.0"
+lazy val scalaCheckVersion = "1.14.2"
 lazy val scalaTestVersion = "3.1.0-SNAP13"
-lazy val scalatestplusScalaCheckVersion = "1.0.0-SNAP8"
+lazy val scalatestplusScalaCheckVersion = "1.0.0-M2"
 lazy val scalaCheckShapelessVersion = "1.2.3"
 lazy val disciplineVersion = "0.12.0-M3"
 lazy val embeddedKafkaVersion = "2.3.0"
@@ -40,8 +40,8 @@ lazy val betterMonadicForVersion = "0.3.1"
 
 // Example dependencies
 
-lazy val circeVersion = "0.12.1"
-lazy val http4sVersion = "0.21.0-M5"
+lazy val circeVersion = "0.12.3"
+lazy val http4sVersion = "0.21.0-M4"
 lazy val log4catsVersion = "0.3.0"
 lazy val catsMTLVersion = "0.7.0"
 
