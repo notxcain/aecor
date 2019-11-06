@@ -1,12 +1,13 @@
 package aecor.tests
 
-import aecor.old.aggregate.{ Correlation, CorrelationIdF, Folder, StateRuntime }
+import aecor.old.aggregate.{Correlation, CorrelationIdF, Folder, StateRuntime}
 import aecor.old.data.Handler
-import cats.{ Id, Monad, ~> }
-import org.scalatest.{ FunSuite, Matchers }
+import cats.{Id, Monad, ~>}
 import cats.implicits._
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.matchers.should.Matchers
 
-class StateRuntimeSpec extends FunSuite with Matchers {
+class StateRuntimeSpec extends AnyFunSuite with Matchers {
   sealed trait CounterOp[A] {
     def id: String
   }

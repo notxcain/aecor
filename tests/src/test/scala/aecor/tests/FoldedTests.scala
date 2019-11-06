@@ -1,14 +1,22 @@
 package aecor.tests
 
 import aecor.old.data.Folded
-import cats.{ Alternative, Semigroupal, CoflatMap, Eval, Later, Monad, MonadError }
-import cats.laws.{ ApplicativeLaws, CoflatMapLaws, FlatMapLaws, MonadLaws }
+import cats.{Alternative, CoflatMap, Eval, Later, Monad, MonadError, Semigroupal}
+import cats.laws.{ApplicativeLaws, CoflatMapLaws, FlatMapLaws, MonadLaws}
 import cats.laws.discipline._
 import Folded.syntax._
-import cats.tests.CatsSuite
-import org.scalacheck.{ Arbitrary, Cogen }
+import org.scalacheck.{Arbitrary, Cogen}
+import org.scalatest.matchers.should.Matchers
+import org.typelevel.discipline.scalatest.Discipline
+import cats.implicits._
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
-class FoldedTests extends CatsSuite {
+class FoldedTests
+    extends AnyFunSuite
+    with Matchers
+    with ScalaCheckDrivenPropertyChecks
+    with Discipline {
 
   implicit def arbitraryFolded[A](implicit A: Arbitrary[Option[A]]): Arbitrary[Folded[A]] =
     Arbitrary(A.arbitrary.map(_.map(_.next).getOrElse(impossible)))

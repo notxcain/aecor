@@ -5,13 +5,13 @@ import java.time.temporal.ChronoUnit
 
 import aecor.old.schedule.ScheduleEvent
 import aecor.old.schedule.protobuf.ScheduleEventCodec
-import org.scalacheck.Shapeless._
+import org.scalacheck.ScalacheckShapeless._
 import org.scalacheck.{ Arbitrary, Gen }
-import org.scalatest.prop.PropertyChecks
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
 import scala.util.Success
 
-class ScheduleEventCodecSpec extends AkkaSpec with PropertyChecks {
+class ScheduleEventCodecSpec extends AkkaSpec with ScalaCheckPropertyChecks {
   val codec = ScheduleEventCodec
 
   implicit val arbitraryLocalDateTime = Arbitrary(Gen.const(LocalDateTime.now().truncatedTo( ChronoUnit.MILLIS )))

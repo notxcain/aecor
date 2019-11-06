@@ -4,7 +4,9 @@ import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.testkit.TestKit
 import com.typesafe.config.{Config, ConfigFactory}
-import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
+import org.scalatest.wordspec.AnyWordSpecLike
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.matchers.should.Matchers
 
 object AkkaSpec {
   val testConf: Config = ConfigFactory.parseString("""
@@ -36,7 +38,7 @@ object AkkaSpec {
   }
 }
 
-abstract class AkkaSpec(_system: ActorSystem) extends TestKit(_system) with WordSpecLike with Matchers with BeforeAndAfterAll {
+abstract class AkkaSpec(_system: ActorSystem) extends TestKit(_system) with AnyWordSpecLike with Matchers with BeforeAndAfterAll {
 
   def this(config: Config) = this(ActorSystem(
     AkkaSpec.getCallerName(getClass),

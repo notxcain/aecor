@@ -4,9 +4,10 @@ import java.time.{ Clock, Instant, LocalDateTime, ZoneId }
 
 import scala.collection.immutable._
 import aecor.old.schedule.{ DefaultScheduleAggregate, ScheduleEvent, ScheduleState }
-import org.scalatest.{ FlatSpec, Matchers }
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers
 
-class ScheduleAggregateSpec extends FlatSpec with Matchers {
+class ScheduleAggregateSpec extends AnyFlatSpec with Matchers {
   val clock = Clock.fixed(Instant.now, ZoneId.systemDefault())
   val aggregate = DefaultScheduleAggregate(clock)
 

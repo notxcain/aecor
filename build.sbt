@@ -3,23 +3,23 @@ import sbtrelease.Version.Bump
 
 lazy val buildSettings = Seq(
   organization := "io.aecor",
-  scalaVersion := "2.11.11-bin-typelevel-4",
-  scalaOrganization := "org.typelevel",
-  crossScalaVersions := Seq("2.11.11-bin-typelevel-4", "2.12.3-bin-typelevel-4")
+  scalaVersion := "2.12.8"
 )
 
-lazy val akkaVersion = "2.5.8"
-lazy val akkaPersistenceCassandra = "0.59"
-lazy val catsVersion = "1.6.0"
+lazy val akkaVersion = "2.5.18"
+lazy val akkaPersistenceCassandra = "0.61"
+lazy val catsVersion = "2.0.0"
 lazy val logbackVersion = "1.1.7"
 lazy val cassandraDriverExtrasVersion = "3.1.0"
 lazy val jsr305Version = "3.0.1"
 
-lazy val scalaCheckVersion = "1.13.4"
-lazy val scalaTestVersion = "3.0.1"
-lazy val scalaCheckShapelessVersion = "1.1.4"
+lazy val scalaCheckVersion = "1.14.2"
+lazy val scalaTestVersion = "3.0.8"
+lazy val scalaCheckShapelessVersion = "1.2.3"
+lazy val disciplineVersion = "1.0.1"
+lazy val disciplineScalatestVersion = "1.0.0-RC1"
 lazy val shapelessVersion = "2.3.2"
-lazy val kindProjectorVersion = "0.9.7"
+lazy val kindProjectorVersion = "0.9.10"
 lazy val paradiseVersion = "2.1.0"
 
 lazy val commonSettings = Seq(
@@ -84,7 +84,9 @@ lazy val testingSettings = Seq(
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
     "org.typelevel" %% "cats-laws" % catsVersion % Test,
     "org.typelevel" %% "cats-testkit" % catsVersion % Test,
-    "com.github.alexarchambault" %% "scalacheck-shapeless_1.13" % scalaCheckShapelessVersion % Test
+    "org.typelevel" %% "discipline-core" % disciplineVersion % Test,
+    "org.typelevel" %% "discipline-scalatest" % disciplineScalatestVersion % Test,
+    "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % scalaCheckShapelessVersion % Test
   )
 )
 
