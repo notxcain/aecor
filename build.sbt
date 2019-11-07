@@ -18,7 +18,7 @@ lazy val scalaTestVersion = "3.0.8"
 lazy val scalaCheckShapelessVersion = "1.2.3"
 lazy val disciplineVersion = "1.0.1"
 lazy val disciplineScalatestVersion = "1.0.0-RC1"
-lazy val shapelessVersion = "2.3.2"
+lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.9.10"
 lazy val paradiseVersion = "2.1.0"
 
