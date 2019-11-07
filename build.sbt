@@ -28,8 +28,6 @@ lazy val scodecCoreVersion = "1.11.4"
 
 lazy val catsTaglessVersion = "0.10"
 
-lazy val scalaCheckVersion = "1.14.1"
-lazy val scalaTestVersion = "3.2.0-M1"
 lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.3"
 lazy val disciplineScalatestVersion = "1.0.0-RC1"
@@ -262,8 +260,6 @@ lazy val testsSettings = Seq(
 
 lazy val commonTestSettings = Seq(
   libraryDependencies ++= Seq(
-//    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
-//    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % scalaCheckShapelessVersion % Test,
     "org.scalatestplus" %% "scalatestplus-scalacheck" % scalatestPlusScalaCheckVersion % Test,
     "org.typelevel" %% "discipline-scalatest" % disciplineScalatestVersion % Test,
