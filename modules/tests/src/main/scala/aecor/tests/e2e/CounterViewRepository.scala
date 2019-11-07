@@ -21,13 +21,13 @@ object TestCounterViewRepository {
     def init: State = State(Map.empty)
   }
   final class Builder[F[_]] {
-    def apply[S: MonadState[F, ?]](lens: Lens[S, State]): TestCounterViewRepository[F, S] =
+    def apply[S: MonadState[F, *]](lens: Lens[S, State]): TestCounterViewRepository[F, S] =
       new TestCounterViewRepository(lens)
   }
   def apply[F[_]]: Builder[F] = new Builder[F]
 }
 
-class TestCounterViewRepository[F[_]: MonadState[?[_], S], S](lens: Lens[S, State])
+class TestCounterViewRepository[F[_]: MonadState[*[_], S], S](lens: Lens[S, State])
     extends CounterViewRepository[F] {
   private val F = lens.transformMonadState(MonadState[F, S])
   def getCounterState(id: CounterId): F[Option[Long]] =

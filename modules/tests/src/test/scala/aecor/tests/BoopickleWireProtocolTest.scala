@@ -28,8 +28,8 @@ class BoopickleWireProtocolTest extends AnyFunSuite with Matchers {
   }
 
   object Foo {
-    implicit def functorK[K]: FunctorK[Foo[K, ?[_]]] = Derive.functorK
-    implicit def wireProtocol[K: Pickler]: WireProtocol[Foo[K, ?[_]]] = BoopickleWireProtocol.derive
+    implicit def functorK[K]: FunctorK[Foo[K, *[_]]] = Derive.functorK
+    implicit def wireProtocol[K: Pickler]: WireProtocol[Foo[K, *[_]]] = BoopickleWireProtocol.derive
   }
 
   def server[M[_[_]], F[_]: Applicative](

@@ -13,13 +13,13 @@ import cats.implicits._
 import monocle.Lens
 
 object TestScheduleEntryRepository {
-  def apply[F[_]: MonadState[?[_], S], S](
+  def apply[F[_]: MonadState[*[_], S], S](
     lens: Lens[S, Vector[ScheduleEntry]]
   ): ScheduleEntryRepository[F] =
     new TestScheduleEntryRepository(lens)
 }
 
-class TestScheduleEntryRepository[F[_]: MonadState[?[_], S], S](
+class TestScheduleEntryRepository[F[_]: MonadState[*[_], S], S](
   lens: Lens[S, Vector[ScheduleEntry]]
 ) extends ScheduleEntryRepository[F] {
   val F = lens.transformMonadState(MonadState[F, S])
