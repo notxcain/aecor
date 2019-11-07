@@ -18,8 +18,8 @@ object Committable {
     B.contramap(_.value)
 
   implicit def catsMonadAndTraversInstance[F[_]: Applicative]
-    : Monad[Committable[F, ?]] with Traverse[Committable[F, ?]] =
-    new Monad[Committable[F, ?]] with Traverse[Committable[F, ?]] {
+    : Monad[Committable[F, *]] with Traverse[Committable[F, *]] =
+    new Monad[Committable[F, *]] with Traverse[Committable[F, *]] {
       override def traverse[G[_], A, B](
         fa: Committable[F, A]
       )(f: (A) => G[B])(implicit evidence$1: Applicative[G]): G[Committable[F, B]] =

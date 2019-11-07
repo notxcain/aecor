@@ -9,7 +9,7 @@ import cats.implicits._
 import cats.tagless.syntax.functorK._
 import cats.tagless.{ Derive, FunctorK }
 import cats.{ Applicative, Functor, Id, ~> }
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.funsuite.AnyFunSuite
 import scodec.bits.BitVector
 import scodec.{ Attempt, Decoder }
@@ -50,9 +50,9 @@ class BoopickleWireProtocolTest extends AnyFunSuite with Matchers {
 
   def client[M[_[_]], F[_]: Functor](
     server: BitVector => F[Attempt[BitVector]]
-  )(implicit M: WireProtocol[M], MI: FunctorK[M]): M[DecodingResultT[F, ?]] =
+  )(implicit M: WireProtocol[M], MI: FunctorK[M]): M[DecodingResultT[F, *]] =
     M.encoder
-      .mapK[DecodingResultT[F, ?]](new (WireProtocol.Encoded ~> DecodingResultT[F, ?]) {
+      .mapK[DecodingResultT[F, *]](new (WireProtocol.Encoded ~> DecodingResultT[F, *]) {
         override def apply[A](fa: (BitVector, Decoder[A])): F[Attempt[A]] =
           server(fa._1).map(_.flatMap(fa._2.decodeValue))
       })
@@ -67,7 +67,7 @@ class BoopickleWireProtocolTest extends AnyFunSuite with Matchers {
 
     val fooServer = server(actions)
 
-    val fooClient = client[Foo[Int, ?[_]], Id](fooServer)
+    val fooClient = client[Foo[Int, *[_]], Id](fooServer)
 
     fooClient.include(1).toEither shouldBe Right(())
     fooClient.scdsc("1234").toEither shouldBe Right(4)

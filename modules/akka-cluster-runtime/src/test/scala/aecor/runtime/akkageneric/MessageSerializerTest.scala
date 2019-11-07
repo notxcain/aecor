@@ -10,13 +10,12 @@ import org.scalacheck.Arbitrary._
 import org.scalacheck.Prop.forAll
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.funsuite.AnyFunSuite
-import org.scalatestplus.scalacheck.Checkers
 import scodec.bits.BitVector
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class MessageSerializerTest extends AnyFunSuite with BeforeAndAfterAll with Checkers {
+class MessageSerializerTest extends AnyFunSuite with BeforeAndAfterAll {
 
   implicit val system: ActorSystem = ActorSystem("test")
   val serialization = SerializationExtension(system)

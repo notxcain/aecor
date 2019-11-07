@@ -83,8 +83,8 @@ trait ActionTFunctions {
 
   def sampleK[F[_]: Monad, S, E1, Env, E2](
     getEnv: F[Env]
-  )(update: (Env, E1) => E2)(extract: E2 => E1): ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?] =
-    new (ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?]) {
+  )(update: (Env, E1) => E2)(extract: E2 => E1): ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *] =
+    new (ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *]) {
       override def apply[A](fa: ActionT[F, S, E1, A]): ActionT[F, S, E2, A] =
         fa.sample(getEnv)(update)(extract)
     }
@@ -92,16 +92,16 @@ trait ActionTFunctions {
   def xmapEventsK[F[_]: Functor, S, E1, E2, R](
     to: E1 => E2,
     from: E2 => E1
-  ): ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?] =
-    new (ActionT[F, S, E1, ?] ~> ActionT[F, S, E2, ?]) {
+  ): ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *] =
+    new (ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *]) {
       override def apply[A](fa: ActionT[F, S, E1, A]): ActionT[F, S, E2, A] =
         fa.xmapEvents(to, from)
     }
 
   def expandK[F[_]: Functor, S1, S2, E](
     update: (S2, S1) => S2
-  )(extract: S2 => S1): ActionT[F, S1, E, ?] ~> ActionT[F, S2, E, ?] =
-    new (ActionT[F, S1, E, ?] ~> ActionT[F, S2, E, ?]) {
+  )(extract: S2 => S1): ActionT[F, S1, E, *] ~> ActionT[F, S2, E, *] =
+    new (ActionT[F, S1, E, *] ~> ActionT[F, S2, E, *]) {
       override def apply[A](fa: ActionT[F, S1, E, A]): ActionT[F, S2, E, A] =
         fa.expand(update)(extract)
     }
@@ -110,22 +110,22 @@ trait ActionTFunctions {
 trait ActionTInstances extends ActionTLowerPriorityInstances1 {
   implicit def monadActionLiftRejectInstance[F[_], S, E, R](
     implicit F0: MonadError[F, R]
-  ): MonadActionLiftReject[ActionT[F, S, E, ?], F, S, E, R] =
-    new MonadActionLiftReject[ActionT[F, S, E, ?], F, S, E, R]
+  ): MonadActionLiftReject[ActionT[F, S, E, *], F, S, E, R] =
+    new MonadActionLiftReject[ActionT[F, S, E, *], F, S, E, R]
     with ActionTMonadActionLiftInstance[F, S, E] {
       override protected implicit def F: Monad[F] = F0
       override def reject[A](r: R): ActionT[F, S, E, A] = ActionT.liftF(F0.raiseError[A](r))
     }
 
-  implicit def actionTFunctorKInstance[S, E, A]: FunctorK[ActionT[?[_], S, E, A]] =
-    new FunctorK[ActionT[?[_], S, E, A]] {
+  implicit def actionTFunctorKInstance[S, E, A]: FunctorK[ActionT[*[_], S, E, A]] =
+    new FunctorK[ActionT[*[_], S, E, A]] {
       def mapK[F[_], G[_]](a: ActionT[F, S, E, A])(f: ~>[F, G]): ActionT[G, S, E, A] = a.mapK(f)
     }
 }
 
 trait ActionTLowerPriorityInstances1 {
   trait ActionTMonadActionLiftInstance[F[_], S, E]
-      extends MonadActionLift[ActionT[F, S, E, ?], F, S, E] {
+      extends MonadActionLift[ActionT[F, S, E, *], F, S, E] {
     protected implicit def F: Monad[F]
     override def read: ActionT[F, S, E, S] = ActionT.read
     override def append(e: E, es: E*): ActionT[F, S, E, Unit] =
@@ -166,7 +166,7 @@ trait ActionTLowerPriorityInstances1 {
 
   implicit def monadActionLiftInstance[F[_], S, E](
     implicit F0: Monad[F]
-  ): MonadActionLift[ActionT[F, S, E, ?], F, S, E] =
+  ): MonadActionLift[ActionT[F, S, E, *], F, S, E] =
     new ActionTMonadActionLiftInstance[F, S, E] {
       override protected implicit def F: Monad[F] = F0
     }

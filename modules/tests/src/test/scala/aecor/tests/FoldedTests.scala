@@ -6,7 +6,7 @@ import cats.laws.{ ApplicativeLaws, CoflatMapLaws, FlatMapLaws, MonadLaws }
 import cats.laws.discipline._
 import Folded.syntax._
 import org.scalacheck.{ Arbitrary, Cogen }
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.funsuite.AnyFunSuiteLike
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 import org.typelevel.discipline.scalatest.Discipline

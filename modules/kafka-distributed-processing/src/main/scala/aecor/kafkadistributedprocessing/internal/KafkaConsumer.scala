@@ -15,7 +15,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 private[kafkadistributedprocessing] final class KafkaConsumer[F[_], K, V](
-  withConsumer: (Consumer[K, V] => ?) ~> F
+  withConsumer: (Consumer[K, V] => *) ~> F
 ) {
 
   def subscribe(topics: Set[String], listener: ConsumerRebalanceListener): F[Unit] =
@@ -72,7 +72,7 @@ private[kafkadistributedprocessing] object KafkaConsumer {
             valueDeserializer
           )
           Thread.currentThread.setContextClassLoader(original)
-          val withConsumer = new ((Consumer[K, V] => ?) ~> F) {
+          val withConsumer = new ((Consumer[K, V] => *) ~> F) {
             def apply[A](f: Consumer[K, V] => A): F[A] =
               eval(f(consumer))
           }

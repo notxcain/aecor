@@ -19,7 +19,7 @@ object Eventsourced {
 
     { key =>
       Ref[F].of(none[Versioned[S]]).map { cache =>
-        behavior.actions.mapK(Lambda[ActionT[F, S, E, ?] ~> F] { action =>
+        behavior.actions.mapK(Lambda[ActionT[F, S, E, *] ~> F] { action =>
           for {
             before <- cache.get.flatMap {
                        case Some(before) => before.pure[F]
@@ -57,7 +57,7 @@ object Eventsourced {
 
     { key =>
       behavior.actions.mapK {
-        Lambda[ActionT[G, S, E, ?] ~> F] { action =>
+        Lambda[ActionT[G, S, E, *] ~> F] { action =>
           for {
             snapshot <- snapshotting.load(key)
             (before, (after, a)) <- journalBoundary {

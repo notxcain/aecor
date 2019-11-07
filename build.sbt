@@ -8,7 +8,7 @@ lazy val buildSettings = inThisBuild(
   )
 )
 
-lazy val akkaVersion = "2.5.25"
+lazy val akkaVersion = "2.5.26"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
 lazy val apacheKafkaClientsVersion = "2.3.0"
@@ -22,17 +22,17 @@ lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "2.0.0"
 
-lazy val fs2Version = "2.0.0"
+lazy val fs2Version = "2.1.0"
 lazy val scodecBitsVersion = "1.1.12"
 lazy val scodecCoreVersion = "1.11.4"
 
-lazy val catsTaglessVersion = "0.9"
+lazy val catsTaglessVersion = "0.10"
 
 lazy val scalaCheckVersion = "1.14.0"
-lazy val scalaTestVersion = "3.1.0-SNAP13"
-lazy val scalatestplusScalaCheckVersion = "1.0.0-SNAP8"
+lazy val scalaTestVersion = "3.1.0-RC3"
+lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.3"
-lazy val disciplineVersion = "0.12.0-M3"
+lazy val disciplineScalatestVersion = "1.0.0-RC1"
 lazy val embeddedKafkaVersion = "2.3.0"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.10.3"
@@ -262,11 +262,11 @@ lazy val testsSettings = Seq(
 
 lazy val commonTestSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
+//    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
+//    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % scalaCheckShapelessVersion % Test,
-    "org.scalatestplus" %% "scalatestplus-scalacheck" % scalatestplusScalaCheckVersion % Test,
-    "org.typelevel" %% "discipline-scalatest" % disciplineVersion % Test,
+    "org.scalatestplus" %% "scalatestplus-scalacheck" % scalatestPlusScalaCheckVersion % Test,
+    "org.typelevel" %% "discipline-scalatest" % disciplineScalatestVersion % Test,
     "org.typelevel" %% "cats-laws" % catsVersion % Test
   )
 )

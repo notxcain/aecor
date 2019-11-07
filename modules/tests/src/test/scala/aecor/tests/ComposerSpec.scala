@@ -1,7 +1,7 @@
 package aecor.tests
 
 import aecor.data.Composer
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.flatspec.AnyFlatSpec
 
 class ComposerSpec extends AnyFlatSpec with Matchers {
