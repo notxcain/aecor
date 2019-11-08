@@ -198,7 +198,6 @@ lazy val kafkaDistributedProcessingSettings = Seq(
     "org.apache.kafka" % "kafka-clients" % apacheKafkaClientsVersion,
     "co.fs2" %% "fs2-core" % fs2Version,
     "co.fs2" %% "fs2-reactive-streams" % fs2Version,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "io.github.embeddedkafka" %% "embedded-kafka" % embeddedKafkaVersion % Test
   )
 )
