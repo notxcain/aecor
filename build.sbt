@@ -22,17 +22,15 @@ lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "2.0.0"
 
-lazy val fs2Version = "2.0.1"
+lazy val fs2Version = "2.1.0"
 lazy val scodecBitsVersion = "1.1.12"
 lazy val scodecCoreVersion = "1.11.4"
 
 lazy val catsTaglessVersion = "0.10"
 
-lazy val scalaCheckVersion = "1.14.2"
-lazy val scalaTestVersion = "3.1.0-SNAP13"
-lazy val scalatestplusScalaCheckVersion = "1.0.0-M2"
+lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.3"
-lazy val disciplineVersion = "0.12.0-M3"
+lazy val disciplineScalatestVersion = "1.0.0-RC1"
 lazy val embeddedKafkaVersion = "2.3.0"
 lazy val shapelessVersion = "2.3.3"
 lazy val kindProjectorVersion = "0.10.3"
@@ -41,7 +39,7 @@ lazy val betterMonadicForVersion = "0.3.1"
 // Example dependencies
 
 lazy val circeVersion = "0.12.3"
-lazy val http4sVersion = "0.21.0-M4"
+lazy val http4sVersion = "0.21.0-M5"
 lazy val log4catsVersion = "0.3.0"
 lazy val catsMTLVersion = "0.7.0"
 
@@ -200,7 +198,6 @@ lazy val kafkaDistributedProcessingSettings = Seq(
     "org.apache.kafka" % "kafka-clients" % apacheKafkaClientsVersion,
     "co.fs2" %% "fs2-core" % fs2Version,
     "co.fs2" %% "fs2-reactive-streams" % fs2Version,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "io.github.embeddedkafka" %% "embedded-kafka" % embeddedKafkaVersion % Test
   )
 )
@@ -262,11 +259,9 @@ lazy val testsSettings = Seq(
 
 lazy val commonTestSettings = Seq(
   libraryDependencies ++= Seq(
-    "org.scalacheck" %% "scalacheck" % scalaCheckVersion % Test,
-    "org.scalatest" %% "scalatest" % scalaTestVersion % Test,
     "com.github.alexarchambault" %% "scalacheck-shapeless_1.14" % scalaCheckShapelessVersion % Test,
-    "org.scalatestplus" %% "scalatestplus-scalacheck" % scalatestplusScalaCheckVersion % Test,
-    "org.typelevel" %% "discipline-scalatest" % disciplineVersion % Test,
+    "org.scalatestplus" %% "scalatestplus-scalacheck" % scalatestPlusScalaCheckVersion % Test,
+    "org.typelevel" %% "discipline-scalatest" % disciplineScalatestVersion % Test,
     "org.typelevel" %% "cats-laws" % catsVersion % Test
   )
 )

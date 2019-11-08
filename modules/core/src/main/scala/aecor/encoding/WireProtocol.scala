@@ -6,7 +6,7 @@ import scodec.bits.BitVector
 import scodec.{ Decoder, Encoder }
 
 trait WireProtocol[M[_[_]]] {
-  def decoder: Decoder[PairE[Invocation[M, ?], Encoder]]
+  def decoder: Decoder[PairE[Invocation[M, *], Encoder]]
   def encoder: M[WireProtocol.Encoded]
 }
 

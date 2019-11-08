@@ -7,7 +7,7 @@ import aecor.schedule.ScheduleEvent.{ ScheduleEntryAdded, ScheduleEntryFired }
 import aecor.schedule.{ DefaultScheduleBucket, ScheduleState }
 import cats.Id
 import cats.data.Chain
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.flatspec.AnyFlatSpec
 
 class ScheduleBucketSpec extends AnyFlatSpec with Matchers with StrictCatsEquality {

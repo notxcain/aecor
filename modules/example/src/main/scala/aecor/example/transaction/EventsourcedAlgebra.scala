@@ -84,11 +84,11 @@ class EventsourcedAlgebra[F[_]](
 }
 
 object EventsourcedAlgebra {
-  def apply[F[_]: MonadActionReject[?[_], Option[State], TransactionEvent, String]]: Algebra[F] =
+  def apply[F[_]: MonadActionReject[*[_], Option[State], TransactionEvent, String]]: Algebra[F] =
     new EventsourcedAlgebra
 
   def behavior[F[_]: Monad]
-    : EventsourcedBehavior[EitherK[Algebra, String, ?[_]], F, Option[State], TransactionEvent] =
+    : EventsourcedBehavior[EitherK[Algebra, String, *[_]], F, Option[State], TransactionEvent] =
     EventsourcedBehavior
       .rejectable[Algebra, F, Option[State], TransactionEvent, String](
         apply,

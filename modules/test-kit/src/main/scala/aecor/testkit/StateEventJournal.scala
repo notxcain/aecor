@@ -61,7 +61,7 @@ object StateEventJournal {
     def init[I, E]: State[I, E] = State(Map.empty, Map.empty, Map.empty)
   }
 
-  def apply[F[_]: Monad: MonadState[?[_], A], K, A, E](
+  def apply[F[_]: Monad: MonadState[*[_], A], K, A, E](
     lens: Lens[A, State[K, E]],
     tagging: Tagging[K]
   ): StateEventJournal[F, K, A, E] =

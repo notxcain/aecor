@@ -13,7 +13,7 @@ import aecor.tests.e2e.{ notification, _ }
 import cats.data.Chain
 import cats.implicits._
 import monocle.macros.GenLens
-import org.scalatest.Matchers
+import org.scalatest.matchers.should.Matchers
 import org.scalatest.funsuite.AnyFunSuite
 import shapeless.Coproduct
 

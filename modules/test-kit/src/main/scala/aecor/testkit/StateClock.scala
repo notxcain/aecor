@@ -7,7 +7,7 @@ import aecor.util.Clock
 import cats.mtl.MonadState
 import monocle.Lens
 
-class StateClock[F[_]: MonadState[?[_], S], S](zoneId: ZoneId, S: Lens[S, Instant])
+class StateClock[F[_]: MonadState[*[_], S], S](zoneId: ZoneId, S: Lens[S, Instant])
     extends Clock[F] {
   private val F = S.transformMonadState(MonadState[F, S])
   override def zone: F[ZoneId] = F.monad.pure(zoneId)
