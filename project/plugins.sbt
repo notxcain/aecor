@@ -16,4 +16,4 @@ libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.9.0"
 
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.0.0")
 addSbtPlugin("com.timushev.sbt" % "sbt-updates" % "0.4.1")
-addSbtPlugin("io.github.davidgregory084" % "sbt-tpolecat" % "0.1.7")
+addSbtPlugin("io.github.davidgregory084" % "sbt-tpolecat" % "0.1.10")
