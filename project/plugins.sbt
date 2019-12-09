@@ -9,7 +9,7 @@ addSbtPlugin("com.jsuereth" % "sbt-pgp" % "1.1.2")
 addSbtPlugin("org.xerial.sbt" % "sbt-sonatype" % "2.0")
 
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.3.3")
-addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.3.14")
+addSbtPlugin("com.typesafe.sbt" % "sbt-native-packager" % "1.3.25")
 
 addSbtPlugin("com.lucidchart" % "sbt-scalafmt" % "1.16")
 addSbtPlugin("com.thesamet" % "sbt-protoc" % "0.99.23")
