@@ -26,7 +26,7 @@ lazy val fs2Version = "2.1.0"
 lazy val scodecBitsVersion = "1.1.12"
 lazy val scodecCoreVersion = "1.11.4"
 
-lazy val catsTaglessVersion = "0.10"
+lazy val catsTaglessVersion = "0.11"
 
 lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.3"
