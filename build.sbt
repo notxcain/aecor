@@ -41,7 +41,7 @@ lazy val betterMonadicForVersion = "0.3.1"
 lazy val circeVersion = "0.13.0"
 lazy val http4sVersion = "0.21.1"
 lazy val log4catsVersion = "0.3.0"
-lazy val catsMTLVersion = "0.7.0"
+lazy val catsMTLVersion = "0.7.1"
 
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
