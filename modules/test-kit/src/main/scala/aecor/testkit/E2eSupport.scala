@@ -4,7 +4,7 @@ import aecor.data.{ EventsourcedBehavior, _ }
 import aecor.runtime.{ EventJournal, Eventsourced }
 import cats.data.StateT
 import cats.effect.{ IO, Sync }
-import cats.implicits._
+import cats.syntax.all._
 import cats.mtl.MonadState
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._

@@ -4,7 +4,7 @@ import aecor.data._
 import cats.arrow.FunctionK
 import cats.effect.Sync
 import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._
 import cats.{ Applicative, Functor, Monad, ~> }

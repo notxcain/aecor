@@ -26,7 +26,7 @@ import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.data.Chain
 import cats.effect.Effect
-import cats.implicits._
+import cats.syntax.all._
 import scodec.bits.BitVector
 import scodec.{ Attempt, Encoder }
 

@@ -3,7 +3,7 @@ import aecor.data.Folded.syntax.{ impossible, _ }
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.{ MonadActionLift, MonadActionLiftReject }
 import cats.data.{ Chain, NonEmptyChain }
-import cats.implicits._
+import cats.syntax.all._
 import cats.tagless.FunctorK
 import cats.{ Applicative, Functor, Monad, MonadError, ~> }
 

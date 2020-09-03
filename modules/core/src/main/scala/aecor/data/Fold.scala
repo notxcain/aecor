@@ -1,6 +1,6 @@
 package aecor.data
 
-import cats.implicits._
+import cats.syntax.all._
 import cats.{ Applicative, Foldable, Functor, Monad }
 
 final case class Fold[F[_], A, X](initial: A, reduce: (A, X) => F[A]) {

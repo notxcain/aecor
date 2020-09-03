@@ -1,6 +1,6 @@
 package aecor.runtime
 
-import cats.implicits._
+import cats.syntax.all._
 import cats.tagless.FunctorK
 import cats.{ Contravariant, Functor, Invariant, Monad, ~> }
 
