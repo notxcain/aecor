@@ -2,8 +2,8 @@ package aecor.runtime
 
 import aecor.runtime.Eventsourced.Versioned
 import cats.Applicative
-import cats.implicits.none
-import cats.implicits._
+import cats.syntax.all._
+import cats.syntax.all._
 
 final class SnapshotEach[F[_]: Applicative, K, S](interval: Long,
                                                   store: KeyValueStore[F, K, Versioned[S]])

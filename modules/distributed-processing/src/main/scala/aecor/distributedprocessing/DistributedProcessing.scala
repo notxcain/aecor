@@ -11,7 +11,7 @@ import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.{ BackoffOpts, BackoffSupervisor, ask }
 import akka.util.Timeout
 import cats.effect.Effect
-import cats.implicits._
+import cats.syntax.all._
 
 import scala.concurrent.duration.{ FiniteDuration, _ }
 final class DistributedProcessing private (system: ActorSystem) {

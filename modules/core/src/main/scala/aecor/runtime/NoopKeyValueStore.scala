@@ -1,7 +1,7 @@
 package aecor.runtime
 
 import cats.Applicative
-import cats.implicits._
+import cats.syntax.all._
 
 final class NoopKeyValueStore[F[_]: Applicative, K, V] extends KeyValueStore[F, K, V] {
   override def setValue(key: K, value: V): F[Unit] = ().pure[F]

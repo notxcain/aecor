@@ -4,7 +4,7 @@ import aecor.encoding.WireProtocol
 import aecor.encoding.WireProtocol.{ Encoded, Invocation }
 import cats.data.EitherT
 import cats.~>
-import cats.implicits._
+import cats.syntax.all._
 import cats.tagless.FunctorK
 import scodec.{ Codec, Decoder, Encoder }
 import scodec.codecs._

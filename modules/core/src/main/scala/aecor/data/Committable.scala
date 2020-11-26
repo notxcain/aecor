@@ -1,7 +1,7 @@
 package aecor.data
 
 import aecor.Has
-import cats.implicits._
+import cats.syntax.all._
 import cats.{ Applicative, Eval, Functor, Monad, Traverse }
 
 import scala.util.{ Left, Right }

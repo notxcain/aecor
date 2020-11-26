@@ -7,7 +7,7 @@ import cats.effect.syntax.effect._
 import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
 import cats.effect.Effect
-import cats.implicits._
+import cats.syntax.all._
 
 private[aecor] object DistributedProcessingWorker {
   def props[F[_]: Effect](processWithId: Int => Process[F], processName: String): Props =

@@ -14,7 +14,7 @@ import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
 import cats.effect.Effect
-import cats.implicits._
+import cats.syntax.all._
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
 import cats.~>
