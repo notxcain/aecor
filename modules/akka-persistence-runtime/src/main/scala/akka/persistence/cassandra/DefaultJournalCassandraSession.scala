@@ -7,7 +7,7 @@ import akka.persistence.cassandra.Session.Init
 import akka.persistence.cassandra.session.CassandraSessionSettings
 import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.effect.{ ContextShift, Effect }
-import cats.implicits._
+import cats.syntax.all._
 
 object DefaultJournalCassandraSession {
 

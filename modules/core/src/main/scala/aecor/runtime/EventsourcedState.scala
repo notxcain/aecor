@@ -5,7 +5,7 @@ import aecor.data.{ ActionT, Fold, Folded }
 import aecor.runtime.Eventsourced.Versioned
 import cats.data.{ Chain, NonEmptyChain }
 import cats.effect.Sync
-import cats.implicits._
+import cats.syntax.all._
 
 private[aecor] trait EventsourcedState[F[_], K, S, E] {
   def recover(key: K, snapshot: Option[Versioned[S]]): F[Versioned[S]]

@@ -10,7 +10,7 @@ import akka.persistence.cassandra.session.scaladsl.CassandraSession
 import cats.Functor
 import cats.data.Kleisli
 import cats.effect.Effect
-import cats.implicits._
+import cats.syntax.all._
 
 object CassandraOffsetStore {
   final case class Queries(keyspace: String, tableName: String = "consumer_offset") {

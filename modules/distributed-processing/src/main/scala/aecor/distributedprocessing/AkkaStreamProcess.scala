@@ -5,7 +5,7 @@ import aecor.util.effect._
 import akka.stream.scaladsl.{ Keep, Sink, Source }
 import akka.stream.{ KillSwitches, Materializer }
 import cats.effect.Async
-import cats.implicits._
+import cats.syntax.all._
 
 object AkkaStreamProcess {
   final class Builder[F[_]] {
