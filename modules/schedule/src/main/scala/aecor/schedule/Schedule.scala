@@ -71,27 +71,32 @@ object Schedule {
           Tagging.const[ScheduleBucketId](eventTag)
         )
 
-    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
+    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.flatMap { zone =>
       val journal =
         DefaultScheduleEventJournal[F](
-          settings.consumerId,
-          8,
-          runtime.journal[ScheduleBucketId, ScheduleEvent].committable(offsetStore),
-          eventTag
+          consumerId = settings.consumerId,
+          parallelism = 8,
+          aggregateJournal = runtime.journal[ScheduleBucketId, ScheduleEvent].committable(offsetStore),
+          eventTag = eventTag
         )
 
       val process = ScheduleProcess(
-        journal,
-        dayZero,
-        settings.consumerId,
-        uuidToLocalDateTime(zone),
-        settings.eventualConsistencyDelay,
-        repository,
-        buckets,
-        clock.localDateTime,
-        8
+        journal = journal,
+        dayZero = dayZero,
+        consumerId = settings.consumerId,
+        offsetStore = uuidToLocalDateTime(zone),
+        eventualConsistencyDelay = settings.eventualConsistencyDelay,
+        repository = repository,
+        buckets = buckets,
+        clock = clock.localDateTime,
+        parallelism = 8
       )
-      PeriodicProcessRuntime(entityName, settings.refreshInterval, process).run(system)
+
+      PeriodicProcessRuntime(
+        name = entityName,
+        tickInterval = settings.refreshInterval,
+        processCycle = process
+      ).run(system)
     }
 
     def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[F]): Schedule[F] =
