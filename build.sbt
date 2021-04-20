@@ -23,7 +23,7 @@ lazy val boopickleVersion = "1.3.1"
 lazy val monocleVersion = "2.0.0"
 
 lazy val fs2Version = "2.2.2"
-lazy val scodecBitsVersion = "1.1.13"
+lazy val scodecBitsVersion = "1.1.26"
 lazy val scodecCoreVersion = "1.11.4"
 
 lazy val catsTaglessVersion = "0.10"
