@@ -32,7 +32,7 @@ lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.4"
 lazy val disciplineScalatestVersion = "1.0.0-RC1"
 lazy val embeddedKafkaVersion = "2.3.0"
-lazy val shapelessVersion = "2.3.3"
+lazy val shapelessVersion = "2.3.6"
 lazy val kindProjectorVersion = "0.10.3"
 lazy val betterMonadicForVersion = "0.3.1"
 
