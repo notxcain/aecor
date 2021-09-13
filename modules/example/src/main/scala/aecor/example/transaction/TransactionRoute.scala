@@ -5,13 +5,13 @@ import java.util.UUID
 import aecor.example.account
 import aecor.example.account.AccountId
 import aecor.example.common.Amount
-import cats.effect.{Effect, Sync}
-import cats.implicits._
-import org.http4s.HttpRoutes
+import cats.effect.Concurrent
+import cats.effect.kernel.Async
+import cats.syntax.all._
+import io.circe.generic.auto._
 import org.http4s.circe.CirceEntityDecoder
 import org.http4s.dsl.Http4sDsl
-import io.circe.generic.auto._
-
+import org.http4s.HttpRoutes
 
 trait TransactionService[F[_]] {
   def authorizePayment(transactionId: TransactionId,
@@ -36,18 +36,20 @@ object TransactionRoute {
     def unapply(arg: String): Option[TransactionId] = TransactionId(arg).some
   }
 
-  private final class Builder[F[_]: Sync](service: TransactionService[F]) extends Http4sDsl[F] with CirceEntityDecoder {
+  private final class Builder[F[_]: Concurrent](service: TransactionService[F])
+      extends Http4sDsl[F]
+      with CirceEntityDecoder {
     def routes: HttpRoutes[F] = HttpRoutes.of[F] {
       case req @ PUT -> Root / "transactions" / TransactionIdVar(transactionId) =>
         for {
           body <- req.as[CreateTransactionRequest]
           CreateTransactionRequest(from, to, amount) = body
           resp <- service.authorizePayment(transactionId, from, to, amount).flatMap {
-            case ApiResult.Authorized =>
-              Ok("Authorized")
-            case ApiResult.Declined(reason) =>
-              BadRequest(s"Declined: $reason")
-          }
+                   case ApiResult.Authorized =>
+                     Ok("Authorized")
+                   case ApiResult.Declined(reason) =>
+                     BadRequest(s"Declined: $reason")
+                 }
         } yield resp
       case POST -> Root / "test" =>
         service
@@ -58,15 +60,14 @@ object TransactionRoute {
             Amount(1)
           )
           .flatMap {
-          case ApiResult.Authorized =>
-            Ok("Authorized")
-          case ApiResult.Declined(reason) =>
-            BadRequest(s"Declined: $reason")
-        }
+            case ApiResult.Authorized =>
+              Ok("Authorized")
+            case ApiResult.Declined(reason) =>
+              BadRequest(s"Declined: $reason")
+          }
     }
   }
 
-  def apply[F[_]: Effect](api: TransactionService[F]): HttpRoutes[F] =
+  def apply[F[_]: Async](api: TransactionService[F]): HttpRoutes[F] =
     new Builder(api).routes
-
 }

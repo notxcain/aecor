@@ -2,11 +2,11 @@ package aecor.example.process
 
 import aecor.distributedprocessing.DistributedProcessing.{ Process, RunningProcess }
 import cats.effect.Concurrent
-import cats.effect.concurrent.Deferred
+import cats.effect.implicits._
+import cats.effect.kernel.Deferred
+import cats.effect.std.Queue
 import cats.implicits._
 import fs2._
-import fs2.concurrent.Queue
-import cats.effect.implicits._
 
 object FS2QueueProcess {
   def create[F[_]: Concurrent, A](
@@ -15,17 +15,17 @@ object FS2QueueProcess {
     for {
       queue <- Queue.bounded[F, Stream[F, A]](sources.length)
       processes = sources.map { s =>
-        Process {
+        Process[F] {
           Deferred[F, Either[Throwable, Unit]].flatMap { stopped =>
             queue
-              .enqueue1(s.interruptWhen(stopped))
+              .offer(s.interruptWhen(stopped))
               .flatTap(_ => stopped.get)
               .start
               .map { fiber =>
-                RunningProcess(fiber.join, stopped.complete(Right(())))
+                RunningProcess(fiber.join.void, stopped.complete(Right(())).void)
               }
           }
         }
       }
-    } yield (queue.dequeue, processes)
+    } yield (Stream.fromQueueUnterminated(queue), processes)
 }

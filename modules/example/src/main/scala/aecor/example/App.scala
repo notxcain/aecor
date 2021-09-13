@@ -3,6 +3,7 @@ package aecor.example
 import aecor.data._
 import aecor.distributedprocessing.DistributedProcessing
 import aecor.example.account.{ AccountRoute, Accounts }
+import aecor.example.common.Fs2AkkaStreamInterop._
 import aecor.example.common.Timestamp
 import aecor.example.process.{ FS2QueueProcess, TransactionProcessor }
 import aecor.example.transaction.transaction.Transactions
@@ -14,20 +15,18 @@ import akka.actor.ActorSystem
 import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.stream.{ ActorMaterializer, Materializer }
 import cats.effect._
+import cats.syntax.all._
 import com.typesafe.config.ConfigFactory
-
-import cats.implicits._
-
-import scala.concurrent.duration._
 import fs2._
+import org.http4s.blaze.server.BlazeServerBuilder
 import org.http4s.server.{ Router, Server }
-import org.http4s.server.blaze.BlazeServerBuilder
-import org.http4s.syntax.kleisli._
-import aecor.example.common.Fs2AkkaStreamInterop._
+
+import scala.concurrent.ExecutionContext
+import scala.concurrent.duration._
 
 object App extends IOApp {
 
-  override def run(args: List[String]): IO[ExitCode] = IO.suspend {
+  override def run(args: List[String]): IO[ExitCode] = IO.defer {
     val config = ConfigFactory.load()
     implicit val system: ActorSystem = ActorSystem(config.getString("cluster.system-name"))
     system.registerOnTermination {
@@ -60,39 +59,44 @@ object App extends IOApp {
       createOffsetStore.flatMap { offsetStore =>
         val processor =
           TransactionProcessor(transactions, accounts)
-        val journal = runtime
+        val journalF = runtime
           .journal[TransactionId, Enriched[Timestamp, TransactionEvent]]
           .committable(offsetStore)
         val consumerId = ConsumerId("processing")
-        val sources = transaction.EventsourcedAlgebra.tagging.tags.map { tag =>
-          journal
-            .eventsByTag(tag, consumerId)
-            .toStream[IO](materializer)
+        val sourcesF = transaction.EventsourcedAlgebra.tagging.tags.traverse { tag =>
+          journalF.map(
+            _.eventsByTag(tag, consumerId)
+              .toStream[IO](materializer)
+          )
         }
-        FS2QueueProcess.create(sources).flatMap {
-          case (stream, processes) =>
-            val run = distributedProcessing.start[IO]("TransactionProcessing", processes)
-            run.flatMap { ks =>
-              stream
-                .map { s =>
-                  val run = s
-                    .mapAsync(30)(_.traverse(processor.process(_)))
-                    .evalMap(_.commit)
+
+        sourcesF.flatMap(
+          sources =>
+            FS2QueueProcess.create(sources).flatMap {
+              case (stream, processes) =>
+                val run = distributedProcessing.start[IO]("TransactionProcessing", processes)
+                run.flatMap { ks =>
+                  stream
+                    .map { s =>
+                      val run = s
+                        .mapAsync(30)(_.traverse(processor.process(_)))
+                        .evalMap(_.commit)
+                        .compile
+                        .drain
+                      Stream.retry(run, 1.second, identity, Int.MaxValue)
+                    }
+                    .parJoin(processes.size)
                     .compile
                     .drain
-                  Stream.retry(run, 1.second, identity, Int.MaxValue)
+                    .start
+                    .as(ks)
                 }
-                .parJoin(processes.size)
-                .compile
-                .drain
-                .start
-                .as(ks)
-            }
-        }
+          }
+        )
       }
 
     def startHttpServer(accounts: Accounts[IO],
-                        transactions: Transactions[IO]): Resource[IO, Server[IO]] = {
+                        transactions: Transactions[IO]): Resource[IO, Server] = {
       val transactionService: transaction.TransactionService[IO] =
         transaction.DefaultTransactionService(transactions)
       val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
@@ -102,7 +106,7 @@ object App extends IOApp {
         "/" -> AccountRoute(accountService)
       ).orNotFound
 
-      BlazeServerBuilder[IO]
+      BlazeServerBuilder[IO](ExecutionContext.Implicits.global)
         .bindHttp(config.getInt("http.port"), config.getString("http.interface"))
         .withHttpApp(httpApp)
         .resource

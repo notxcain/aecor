@@ -3,14 +3,14 @@ import aecor.example.account.AccountId
 import aecor.example.common.Amount
 import aecor.example.transaction.TransactionRoute.ApiResult
 import aecor.example.transaction.transaction.Transactions
-import cats.effect.{ Concurrent, Timer }
+import cats.effect.{ Concurrent, Temporal }
 import cats.implicits._
 
 import scala.concurrent.duration._
 
 final class DefaultTransactionService[F[_]](transactions: Transactions[F])(
   implicit F: Concurrent[F],
-  timer: Timer[F]
+  T: Temporal[F]
 ) extends TransactionService[F] {
 
   def authorizePayment(transactionId: TransactionId,
@@ -28,9 +28,9 @@ final class DefaultTransactionService[F[_]](transactions: Transactions[F])(
           }
         def loop: F[Boolean] = getTransaction.flatMap {
           case Algebra.TransactionInfo(_, _, _, Some(value)) => value.pure[F]
-          case _                                             => timer.sleep(10.millis) >> loop
+          case _                                             => T.sleep(10.millis) >> loop
         }
-        Concurrent.timeout(loop, 10.seconds)
+        T.timeout(loop, 10.seconds)
       }
       .map { succeeded =>
         if (succeeded) {
@@ -42,7 +42,6 @@ final class DefaultTransactionService[F[_]](transactions: Transactions[F])(
 }
 
 object DefaultTransactionService {
-  def apply[F[_]](transactions: Transactions[F])(implicit F: Concurrent[F],
-                                                 timer: Timer[F]): TransactionService[F] =
+  def apply[F[_]: Concurrent: Temporal](transactions: Transactions[F]): TransactionService[F] =
     new DefaultTransactionService[F](transactions)
 }
