@@ -13,14 +13,13 @@ import akka.stream.scaladsl.{ Sink, Source }
 import cats.data.Kleisli
 import cats.effect.kernel.Async
 import cats.effect.std.Dispatcher
-import cats.effect.{ IO, LiftIO }
 import cats.Monad
 import cats.syntax.all._
 import com.datastax.driver.core.Row
 import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
 
-class CassandraScheduleEntryRepository[F[_]: Async: LiftIO](
+class CassandraScheduleEntryRepository[F[_]: Async](
   cassandraSession: CassandraSession,
   queries: Queries,
   dispatcher: Dispatcher[F]
@@ -35,7 +34,8 @@ class CassandraScheduleEntryRepository[F[_]: Async: LiftIO](
   override def insertScheduleEntry(id: ScheduleBucketId,
                                    entryId: String,
                                    dueDate: LocalDateTime): F[Unit] =
-    IO.fromFuture(IO(preparedInsertEntry))
+    Async[F]
+      .fromFuture(Async[F].delay(preparedInsertEntry))
       .map(
         _.bind()
           .setString("schedule_name", id.scheduleName)
@@ -45,23 +45,23 @@ class CassandraScheduleEntryRepository[F[_]: Async: LiftIO](
           .set("due_date", dueDate.toInstant(ZoneOffset.UTC), classOf[Instant])
           .setBool("fired", false)
       )
-      .flatMap(x => IO.fromFuture(IO(cassandraSession.executeWrite(x))))
-      .to[F]
+      .flatMap(x => Async[F].fromFuture(Async[F].delay(cassandraSession.executeWrite(x))))
       .void
 
   override def markScheduleEntryAsFired(id: ScheduleBucketId, entryId: String): F[Unit] =
-    IO.fromFuture(IO(preparedSelectEntry))
+    Async[F]
+      .fromFuture(Async[F].delay(preparedSelectEntry))
       .map(
         _.bind()
           .setString("schedule_name", id.scheduleName)
           .setString("schedule_bucket", id.scheduleBucket)
           .setString("entry_id", entryId)
       )
-      .flatMap(x => IO.fromFuture(IO(cassandraSession.selectOne(x))))
-      .to[F]
+      .flatMap(x => Async[F].fromFuture(Async[F].delay(cassandraSession.selectOne(x))))
       .flatMap {
         case Some(row) =>
-          IO.fromFuture(IO(preparedInsertEntry))
+          Async[F]
+            .fromFuture(Async[F].delay(preparedInsertEntry))
             .map(
               _.bind()
                 .setString("schedule_name", id.scheduleName)
@@ -71,8 +71,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: LiftIO](
                 .setTimestamp("due_date", row.getTimestamp("due_date"))
                 .setBool("fired", true)
             )
-            .flatMap(x => IO.fromFuture(IO(cassandraSession.executeWrite(x))))
-            .to[F]
+            .flatMap(x => Async[F].fromFuture(Async[F].delay(cassandraSession.executeWrite(x))))
             .void
 
         case None =>
@@ -143,7 +142,7 @@ class CassandraScheduleEntryRepository[F[_]: Async: LiftIO](
 }
 
 object CassandraScheduleEntryRepository {
-  def apply[F[_]: Async: LiftIO](cassandraSession: CassandraSession, queries: Queries)(
+  def apply[F[_]: Async](cassandraSession: CassandraSession, queries: Queries)(
     implicit materializer: Materializer
   ): F[CassandraScheduleEntryRepository[F]] =
     Dispatcher[F].allocated

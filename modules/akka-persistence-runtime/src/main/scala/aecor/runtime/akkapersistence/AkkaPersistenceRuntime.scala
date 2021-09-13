@@ -12,7 +12,6 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
-import cats.effect.{ IO, LiftIO }
 import cats.effect.kernel.Async
 import cats.syntax.all._
 import cats.tagless.FunctorK
@@ -31,7 +30,7 @@ object AkkaPersistenceRuntime {
 
 class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
                                                           journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]]: FunctorK, F[_]: LiftIO, State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]]: FunctorK, F[_], State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
     typeName: String,
     behavior: EventsourcedBehavior[M, F, State, Event],
     tagging: Tagging[K],
@@ -74,14 +73,17 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
 
         key =>
           M.encoder.mapK(new (Encoded ~> F) {
-
             implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
             override def apply[A](fa: Encoded[A]): F[A] = F.defer {
               val (bytes, decoder) = fa
 
-              IO.fromFuture(IO(shardRegion ? EntityCommand(keyEncoder(key), bytes)))
-                .to[F]
+              Async[F]
+                .fromFuture {
+                  Async[F].delay {
+                    shardRegion ? EntityCommand(keyEncoder(key), bytes)
+                  }
+                }
                 .flatMap {
                   case CommandResult(resultBytes) =>
                     decoder.decodeValue(resultBytes).lift[F]

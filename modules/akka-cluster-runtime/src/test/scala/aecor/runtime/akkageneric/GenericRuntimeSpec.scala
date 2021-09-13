@@ -3,7 +3,7 @@ package aecor.runtime.akkageneric
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
-import cats.implicits._
+import cats.effect.unsafe.IORuntime
 import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuiteLike
@@ -27,11 +27,9 @@ class GenericRuntimeSpec
     with ScalaFutures
     with BeforeAndAfterAll {
 
-  implicit val contextShift = IO.contextShift(system.dispatcher)
+  implicit val ioRuntime: IORuntime = IORuntime.global
 
   override implicit val patienceConfig = PatienceConfig(15.seconds, 150.millis)
-
-  val timer = IO.timer(system.dispatcher)
 
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
@@ -60,7 +58,7 @@ class GenericRuntimeSpec
       counters <- runCounters("CounterBar")
       first = counters(CounterId("1"))
       _1 <- first.increment
-      afterPassivation <- timer.sleep(2.seconds) >> first.value
+      afterPassivation <- IO.sleep(2.seconds) >> first.value
     } yield (_1, afterPassivation)
 
     val (beforePassivation, afterPassivation) = program.unsafeRunSync()
