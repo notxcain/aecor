@@ -13,12 +13,13 @@ import aecor.schedule.process.{
   ScheduleProcess
 }
 import aecor.util.Clock
-import akka.NotUsed
 import akka.actor.ActorSystem
+import akka.NotUsed
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
-import cats.effect.{ ContextShift, Effect }
-import cats.implicits._
+import cats.effect.kernel.Async
+import cats.effect.LiftIO
+import cats.syntax.all._
 import com.datastax.driver.core.utils.UUIDs
 
 import scala.concurrent.duration._
@@ -40,7 +41,7 @@ object Schedule {
                                     eventualConsistencyDelay: FiniteDuration,
                                     consumerId: ConsumerId)
 
-  def start[F[_]: Effect: ContextShift](
+  def start[F[_]: Async: LiftIO](
     entityName: String,
     dayZero: LocalDate,
     clock: Clock[F],
@@ -71,42 +72,46 @@ object Schedule {
           Tagging.const[ScheduleBucketId](eventTag)
         )
 
-    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.map { zone =>
-      val journal =
-        DefaultScheduleEventJournal[F](
+    def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.flatMap { zone =>
+      for {
+        committableJournal <- runtime
+                               .journal[ScheduleBucketId, ScheduleEvent]
+                               .committable(offsetStore)
+
+        scheduleEventJournal <- DefaultScheduleEventJournal[F](
+                                 settings.consumerId,
+                                 8,
+                                 committableJournal,
+                                 eventTag
+                               )
+
+        process = ScheduleProcess(
+          scheduleEventJournal,
+          dayZero,
           settings.consumerId,
-          8,
-          runtime.journal[ScheduleBucketId, ScheduleEvent].committable(offsetStore),
-          eventTag
+          uuidToLocalDateTime(zone),
+          settings.eventualConsistencyDelay,
+          repository,
+          buckets,
+          clock.localDateTime,
+          8
         )
 
-      val process = ScheduleProcess(
-        journal,
-        dayZero,
-        settings.consumerId,
-        uuidToLocalDateTime(zone),
-        settings.eventualConsistencyDelay,
-        repository,
-        buckets,
-        clock.localDateTime,
-        8
-      )
-      PeriodicProcessRuntime(entityName, settings.refreshInterval, process).run(system)
+        runtime <- PeriodicProcessRuntime(entityName, settings.refreshInterval, process)
+
+      } yield runtime.run(system)
     }
 
-    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[F]): Schedule[F] =
-      new DefaultSchedule(
-        clock,
-        buckets,
-        settings.bucketLength,
-        runtime.journal[ScheduleBucketId, ScheduleEvent].committable(offsetStore),
-        eventTag
-      )
+    def createSchedule(buckets: ScheduleBucketId => ScheduleBucket[F]): F[Schedule[F]] =
+      runtime
+        .journal[ScheduleBucketId, ScheduleEvent]
+        .committable(offsetStore)
+        .flatMap(j => DefaultSchedule(clock, buckets, settings.bucketLength, j, eventTag))
 
     for {
       buckets <- deployBuckets
       _ <- startProcess(buckets)
-    } yield createSchedule(buckets)
+      schedule <- createSchedule(buckets)
+    } yield schedule
   }
-
 }
