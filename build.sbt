@@ -47,6 +47,7 @@ lazy val commonSettings = Seq(
   addCompilerPlugin("org.typelevel" %% "kind-projector" % kindProjectorVersion),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false,
+  ThisBuild / scalacOptions += "-P:semanticdb:synthetics:on"
 )
 
 lazy val macroSettings =
