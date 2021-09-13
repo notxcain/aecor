@@ -4,7 +4,7 @@ import sbtrelease.Version.Bump
 lazy val buildSettings = inThisBuild(
   Seq(
     organization := "io.aecor",
-    crossScalaVersions := Seq("2.13.0", "2.12.8")
+    crossScalaVersions := Seq("2.13.6", "2.12.14")
   )
 )
 
