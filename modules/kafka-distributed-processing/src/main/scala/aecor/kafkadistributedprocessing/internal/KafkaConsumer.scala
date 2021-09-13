@@ -4,7 +4,8 @@ import java.time.Duration
 import java.util.Properties
 import java.util.concurrent.Executors
 
-import cats.effect.{ Async, ContextShift, Resource }
+import cats.effect.syntax.async._
+import cats.effect.{ Async, Resource }
 import cats.~>
 import org.apache.kafka.clients.consumer.{ Consumer, ConsumerRebalanceListener, ConsumerRecords }
 import org.apache.kafka.common.PartitionInfo
@@ -43,25 +44,23 @@ private[kafkadistributedprocessing] object KafkaConsumer {
       config: Properties,
       keyDeserializer: Deserializer[K],
       valueDeserializer: Deserializer[V]
-    )(implicit F: Async[F], contextShift: ContextShift[F]): Resource[F, KafkaConsumer[F, K, V]] = {
-      val create = F.suspend {
-
+    )(implicit F: Async[F]): Resource[F, KafkaConsumer[F, K, V]] = {
+      val create = F.defer {
         val executor = Executors.newSingleThreadExecutor()
 
         def eval[A](a: => A): F[A] =
-          contextShift.evalOn(ExecutionContext.fromExecutor(executor)) {
-            F.async[A] { cb =>
-              executor.execute(new Runnable {
-                override def run(): Unit =
+          F.async_[A] { cb =>
+              executor.execute(
+                () =>
                   cb {
                     try Right(a)
                     catch {
                       case e: Throwable => Left(e)
                     }
-                  }
-              })
+                }
+              )
             }
-          }
+            .evalOn(ExecutionContext.fromExecutor(executor))
 
         eval {
           val original = Thread.currentThread.getContextClassLoader
@@ -79,6 +78,7 @@ private[kafkadistributedprocessing] object KafkaConsumer {
           new KafkaConsumer[F, K, V](withConsumer)
         }
       }
+
       Resource.make(create)(_.close)
     }
   }

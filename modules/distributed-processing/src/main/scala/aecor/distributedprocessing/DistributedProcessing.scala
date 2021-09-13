@@ -3,17 +3,17 @@ package aecor.distributedprocessing
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
-import aecor.distributedprocessing.DistributedProcessing.{KillSwitch, Process}
+import aecor.distributedprocessing.DistributedProcessing.{ KillSwitch, Process }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import akka.actor.ActorSystem
-import akka.cluster.sharding.{ClusterSharding, ClusterShardingSettings}
-import akka.pattern.{BackoffOpts, BackoffSupervisor, ask}
+import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
+import akka.pattern.{ BackoffOpts, BackoffSupervisor, ask }
 import akka.util.Timeout
 import cats.effect.kernel.Async
-import cats.effect.{IO, LiftIO}
+import cats.effect.{ IO, LiftIO }
 import cats.syntax.functor._
 
-import scala.concurrent.duration.{FiniteDuration, _}
+import scala.concurrent.duration.{ FiniteDuration, _ }
 
 final class DistributedProcessing private (system: ActorSystem) {
 
@@ -24,10 +24,11 @@ final class DistributedProcessing private (system: ActorSystem) {
     * @param processes - list of processes to distribute
     *
     */
-  def start[F[_]: Async: LiftIO](name: String,
-                                 processes: List[Process[F]],
-                                 settings: DistributedProcessingSettings =
-                            DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
+  def start[F[_]: Async: LiftIO](
+    name: String,
+    processes: List[Process[F]],
+    settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)
+  ): F[KillSwitch[F]] =
     DistributedProcessingWorker.props(processes, name).map { childProps =>
       val opts = BackoffOpts
         .onFailure(
@@ -62,7 +63,9 @@ final class DistributedProcessing private (system: ActorSystem) {
       implicit val timeout = Timeout(settings.shutdownTimeout)
 
       KillSwitch {
-        IO.fromFuture(IO(regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown)).to[F].void
+        IO.fromFuture(IO(regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown))
+          .to[F]
+          .void
       }
     }
 }

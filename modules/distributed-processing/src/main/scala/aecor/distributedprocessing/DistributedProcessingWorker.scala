@@ -4,7 +4,7 @@ import aecor.distributedprocessing.DistributedProcessing._
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
 import aecor.distributedprocessing.serialization.Message
 import aecor.util.effect._
-import akka.actor.{Actor, ActorLogging, Props, Status}
+import akka.actor.{ Actor, ActorLogging, Props, Status }
 import akka.pattern._
 import cats.effect.kernel.Async
 import cats.effect.std.Dispatcher
@@ -15,18 +15,20 @@ import scala.concurrent.ExecutionContext
 
 private[aecor] object DistributedProcessingWorker {
   def props[F[_]: Async](processWithId: Int => Process[F], processName: String): F[Props] =
-    Dispatcher[F].allocated.map(_._1).map(dispatcher =>
-      Props(new DistributedProcessingWorker[F](processWithId, processName, dispatcher))
-    )
+    Dispatcher[F].allocated
+      .map(_._1)
+      .map(
+        dispatcher =>
+          Props(new DistributedProcessingWorker[F](processWithId, processName, dispatcher))
+      )
 
   final case class KeepRunning(workerId: Int) extends Message
 }
 
-private[aecor] final class DistributedProcessingWorker[F[_]: Async](
-  processFor: Int => Process[F],
-  processName: String,
-  dispatcher: Dispatcher[F]
-) extends Actor
+private[aecor] final class DistributedProcessingWorker[F[_]: Async](processFor: Int => Process[F],
+                                                                    processName: String,
+                                                                    dispatcher: Dispatcher[F])
+    extends Actor
     with ActorLogging {
 
   private implicit val ioRuntime: IORuntime = IORuntime.global

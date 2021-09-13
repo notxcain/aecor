@@ -6,7 +6,8 @@ import java.util.Properties
 import aecor.data.Committable
 import aecor.kafkadistributedprocessing.internal.Channel.CompletionCallback
 import aecor.kafkadistributedprocessing.internal.RebalanceEvents.RebalanceEvent
-import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
+import cats.effect.kernel.Async
+import cats.effect.Temporal
 import cats.implicits._
 import fs2.Stream
 import org.apache.kafka.common.serialization.Deserializer
@@ -22,12 +23,12 @@ private[kafkadistributedprocessing] object Kafka {
                                            watchRevocation: F[CompletionCallback[F]],
                                            release: F[Unit])
 
-  def watchRebalanceEvents[F[_]: ConcurrentEffect](
+  def watchRebalanceEvents[F[_]: Async](
     consumer: KafkaConsumer[F, Unit, Unit],
     topic: String,
     pollingInterval: FiniteDuration,
     pollTimeout: FiniteDuration
-  )(implicit timer: Timer[F]): Stream[F, Committable[F, RebalanceEvent]] =
+  )(implicit T: Temporal[F]): Stream[F, Committable[F, RebalanceEvent]] =
     Stream
       .force(
         RebalanceEvents[F]
@@ -35,12 +36,12 @@ private[kafkadistributedprocessing] object Kafka {
           .map(
             _.onFinalize(consumer.unsubscribe)
               .concurrently(
-                Stream.repeatEval(consumer.poll(pollTimeout) >> timer.sleep(pollingInterval))
+                Stream.repeatEval(consumer.poll(pollTimeout) >> T.sleep(pollingInterval))
               )
           )
       )
 
-  def assignPartitions[F[_]: ConcurrentEffect: Timer: ContextShift](
+  def assignPartitions[F[_]: Async: Temporal](
     config: Properties,
     topic: String,
     pollingInterval: FiniteDuration,
