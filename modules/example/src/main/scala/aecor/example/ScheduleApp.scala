@@ -8,7 +8,6 @@ import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
 import aecor.runtime.akkapersistence.readside.CassandraOffsetStore
 import aecor.schedule.{ CassandraScheduleEntryRepository, Schedule }
 import aecor.util.JavaTimeClock
-import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.persistence.cassandra.DefaultJournalCassandraSession
 import akka.persistence.cassandra.session.scaladsl.CassandraSession

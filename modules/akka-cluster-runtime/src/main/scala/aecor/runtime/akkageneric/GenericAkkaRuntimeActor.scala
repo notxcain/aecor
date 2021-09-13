@@ -4,43 +4,57 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
+import aecor.encoding.syntax._
 import aecor.encoding.WireProtocol.Invocation
 import aecor.encoding.{ KeyDecoder, WireProtocol }
 import aecor.runtime.akkageneric.GenericAkkaRuntimeActor.{ Command, CommandResult }
 import aecor.runtime.akkageneric.serialization.Message
+import aecor.util.effect._
 import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
-import cats.effect.{ Effect, IO }
-import cats.effect.syntax.effect._
-import scodec.{ Attempt, Encoder }
-import scodec.bits.BitVector
-import aecor.encoding.syntax._
+import cats.effect.IO
+import cats.effect.kernel.Async
+import cats.effect.std.Dispatcher
+import cats.effect.unsafe.IORuntime
+import cats.syntax.all._
 
 import scala.concurrent.duration.FiniteDuration
+import scodec.bits.BitVector
+import scodec.{ Attempt, Encoder }
+
+import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
-import cats.syntax.apply._
 
 private[aecor] object GenericAkkaRuntimeActor {
-  def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Effect](
+  def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Async](
     createBehavior: K => F[M[F]],
     idleTimeout: FiniteDuration
-  ): Props =
-    Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout))
+  ): F[Props] =
+    Dispatcher[F].allocated
+      .map(_._1)
+      .map(
+        dispatcher =>
+          Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout, dispatcher))
+      )
 
   private[akkageneric] final case class Command(bytes: BitVector) extends Message
   private[akkageneric] final case class CommandResult(bytes: BitVector) extends Message
   private[akkageneric] case object Stop
 }
 
-private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]: Effect](
+private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]: Async](
   createBehavior: K => F[M[F]],
-  idleTimeout: FiniteDuration
+  idleTimeout: FiniteDuration,
+  dispatcher: Dispatcher[F]
 )(implicit M: WireProtocol[M])
     extends Actor
     with Stash
     with ActorLogging {
+
+  private implicit val ioRuntime: IORuntime = IORuntime.global
+  private implicit val executionContext: ExecutionContext = ioRuntime.compute
 
   import context._
 
@@ -60,7 +74,7 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
 
   setIdleTimeout()
 
-  createBehavior(key).toIO.map(Actions).unsafeToFuture() pipeTo self
+  createBehavior(key).unsafeToIO(dispatcher).unsafeToFuture() pipeTo self
 
   override def receive: Receive = {
     case Actions(actions) =>
@@ -95,12 +109,14 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
                            invocation: Invocation[M, A],
                            resultEncoder: Encoder[A]): Unit = {
     val opId = UUID.randomUUID()
+
     invocation
       .run(actions)
-      .toIO
-      .flatMap(a =>
-        IO(log.debug("[{}] [{}] Invocation result [{}]", self.path, key, a.toString)) *>
-          resultEncoder.encode(a).lift[IO]
+      .unsafeToIO(dispatcher)
+      .flatMap(
+        a =>
+          IO(log.debug("[{}] [{}] Invocation result [{}]", self.path, key, a.toString)) *>
+            resultEncoder.encode(a).lift[IO]
       )
       .map { responseBytes =>
         Result(opId, Success(responseBytes))

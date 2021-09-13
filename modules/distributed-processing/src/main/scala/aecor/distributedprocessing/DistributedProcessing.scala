@@ -5,7 +5,6 @@ import java.nio.charset.StandardCharsets
 
 import aecor.distributedprocessing.DistributedProcessing.{ KillSwitch, Process }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
-import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.{ BackoffOpts, BackoffSupervisor, ask }

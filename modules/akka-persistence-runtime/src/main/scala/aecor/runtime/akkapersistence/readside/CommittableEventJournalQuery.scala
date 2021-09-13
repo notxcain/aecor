@@ -2,16 +2,17 @@ package aecor.runtime.akkapersistence.readside
 
 import aecor.data.{ Committable, ConsumerId, EventTag, TagConsumer }
 import aecor.runtime.KeyValueStore
-import aecor.util.effect._
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import cats.effect.Effect
+import cats.effect.kernel.Async
+import cats.effect.std.Dispatcher
+import cats.syntax.functor._
 
-final class CommittableEventJournalQuery[F[_]: Effect, O, K, E] private[akkapersistence] (
+final class CommittableEventJournalQuery[F[_]: Async, O, K, E] private[akkapersistence] (
   underlying: JournalQuery[O, K, E],
-  offsetStore: KeyValueStore[F, TagConsumer, O]
+  offsetStore: KeyValueStore[F, TagConsumer, O],
+  dispatcher: Dispatcher[F]
 ) {
-
   private def mkCommittableSource(tag: EventTag,
                                   consumerId: ConsumerId,
                                   inner: Option[O] => Source[JournalEntry[O, K, E], NotUsed]) = {
@@ -19,7 +20,7 @@ final class CommittableEventJournalQuery[F[_]: Effect, O, K, E] private[akkapers
     Source
       .single(NotUsed)
       .mapAsync(1) { _ =>
-        offsetStore.getValue(tagConsumerId).unsafeToFuture()
+        dispatcher.unsafeToFuture(offsetStore.getValue(tagConsumerId))
       }
       .flatMapConcat(inner)
       .map(x => Committable(offsetStore.setValue(tagConsumerId, x.offset), x))
@@ -37,9 +38,11 @@ final class CommittableEventJournalQuery[F[_]: Effect, O, K, E] private[akkapers
 }
 
 private[akkapersistence] object CommittableEventJournalQuery {
-  def apply[F[_]: Effect, Offset, K, E](
+  def apply[F[_]: Async, Offset, K, E](
     underlying: JournalQuery[Offset, K, E],
     offsetStore: KeyValueStore[F, TagConsumer, Offset]
-  ): CommittableEventJournalQuery[F, Offset, K, E] =
-    new CommittableEventJournalQuery(underlying, offsetStore)
+  ): F[CommittableEventJournalQuery[F, Offset, K, E]] =
+    Dispatcher[F].allocated
+      .map(_._1)
+      .map(dispatcher => new CommittableEventJournalQuery(underlying, offsetStore, dispatcher))
 }

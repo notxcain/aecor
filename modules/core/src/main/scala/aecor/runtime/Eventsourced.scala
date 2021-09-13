@@ -3,7 +3,7 @@ package aecor.runtime
 import aecor.data._
 import cats.arrow.FunctionK
 import cats.effect.Sync
-import cats.effect.concurrent.Ref
+import cats.effect.kernel.Ref
 import cats.implicits._
 import cats.tagless.FunctorK
 import cats.tagless.implicits._

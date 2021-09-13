@@ -1,7 +1,6 @@
 package aecor.schedule.process
 
 import aecor.distributedprocessing.{ AkkaStreamProcess, DistributedProcessing }
-import aecor.util.effect._
 import akka.NotUsed
 import akka.actor.ActorSystem
 import akka.stream.Materializer

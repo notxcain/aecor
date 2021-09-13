@@ -10,7 +10,6 @@ import akka.NotUsed
 import akka.stream.scaladsl.Source
 import cats.effect.Effect
 import cats.implicits._
-import aecor.util.effect._
 
 import scala.concurrent.duration.FiniteDuration
 
