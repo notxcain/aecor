@@ -79,22 +79,22 @@ object Schedule {
                                .committable(offsetStore)
 
         scheduleEventJournal <- DefaultScheduleEventJournal[F](
-                                 settings.consumerId,
-                                 8,
-                                 committableJournal,
-                                 eventTag
+                                 consumerId = settings.consumerId,
+                                 parallelism = 8,
+                                 aggregateJournal = committableJournal,
+                                 eventTag = eventTag
                                )
 
         process = ScheduleProcess(
-          scheduleEventJournal,
-          dayZero,
-          settings.consumerId,
-          uuidToLocalDateTime(zone),
-          settings.eventualConsistencyDelay,
-          repository,
-          buckets,
-          clock.localDateTime,
-          8
+          journal = scheduleEventJournal,
+          dayZero = dayZero,
+          consumerId = settings.consumerId,
+          offsetStore = uuidToLocalDateTime(zone),
+          eventualConsistencyDelay = settings.eventualConsistencyDelay,
+          repository = repository,
+          buckets = buckets,
+          clock = clock.localDateTime,
+          parallelism = 8
         )
 
         runtime <- PeriodicProcessRuntime(entityName, settings.refreshInterval, process)
