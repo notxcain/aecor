@@ -11,7 +11,7 @@ import aecor.testkit.{ E2eSupport, StateClock, StateEventJournal, StateKeyValueS
 import aecor.tests.e2e.notification.{ NotificationEvent, NotificationId }
 import aecor.tests.e2e.{ notification, _ }
 import cats.data.Chain
-import cats.implicits._
+import cats.syntax.all._
 import monocle.macros.GenLens
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.funsuite.AnyFunSuite
@@ -19,7 +19,7 @@ import shapeless.Coproduct
 
 import scala.concurrent.duration._
 
-class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport {
+class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport with IOSupport {
   import cats.mtl.instances.all._
 
   case class SpecState(

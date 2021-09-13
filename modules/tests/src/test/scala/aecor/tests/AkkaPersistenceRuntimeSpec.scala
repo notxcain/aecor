@@ -8,11 +8,10 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
 import cats.effect.IO
-import cats.implicits._
 import com.typesafe.config.{ Config, ConfigFactory }
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuiteLike
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration._
 
@@ -43,14 +42,13 @@ class AkkaPersistenceRuntimeSpec
     with AnyFunSuiteLike
     with Matchers
     with ScalaFutures
-    with CassandraLifecycle {
+    with CassandraLifecycle
+    with IOSupport {
 
   override def systemName = system.name
 
   override implicit val patienceConfig = PatienceConfig(30.seconds, 150.millis)
 
-  val timer = IO.timer(system.dispatcher)
-  implicit val contextShift = IO.contextShift(system.dispatcher)
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll()
@@ -74,7 +72,7 @@ class AkkaPersistenceRuntimeSpec
       _2 <- second.value
       _ <- first.decrement
       _1 <- first.value
-      afterPassivation <- timer.sleep(2.seconds) >> second.value
+      afterPassivation <- IO.sleep(2.seconds) >> second.value
     } yield (_1, _2, afterPassivation)
 
     program.unsafeRunSync() shouldEqual ((0L, 1L, 1L))
