@@ -12,8 +12,10 @@ import cats.implicits._
 import scodec.codecs.implicits._
 
 object deployment {
-  def deploy[F[_]: Async](runtime: AkkaPersistenceRuntime[UUID],
-                          clock: Clock[F]): F[Transactions[F]] =
+  def deploy[F[_]: Async](
+      runtime: AkkaPersistenceRuntime[UUID],
+      clock: Clock[F]
+  ): F[Transactions[F]] =
     runtime
       .deploy(
         "Transaction",

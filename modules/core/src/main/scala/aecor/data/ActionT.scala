@@ -8,7 +8,7 @@ import cats.tagless.FunctorK
 import cats.{ Applicative, Functor, Monad, MonadError, ~> }
 
 final class ActionT[F[_], S, E, A] private (
-  val unsafeRun: (Fold[Folded, S, E], Chain[E]) => F[Folded[(Chain[E], A)]]
+    val unsafeRun: (Fold[Folded, S, E], Chain[E]) => F[Folded[(Chain[E], A)]]
 ) extends AnyVal {
 
   def run(fold: Fold[Folded, S, E]): F[Folded[(Chain[E], A)]] =
@@ -29,7 +29,7 @@ final class ActionT[F[_], S, E, A] private (
     }
 
   def sample[Env, E2](
-    getEnv: F[Env]
+      getEnv: F[Env]
   )(update: (Env, E) => E2)(extract: E2 => E)(implicit F: Monad[F]): ActionT[F, S, E2, A] =
     ActionT.liftF[F, S, E2, Env](getEnv).flatMap { env =>
       xmapEvents(update(env, _), extract)
@@ -61,7 +61,7 @@ final class ActionT[F[_], S, E, A] private (
 
 object ActionT extends ActionTFunctions with ActionTInstances {
   private[data] def apply[F[_], S, E, A](
-    unsafeRun: (Fold[Folded, S, E], Chain[E]) => F[Folded[(Chain[E], A)]]
+      unsafeRun: (Fold[Folded, S, E], Chain[E]) => F[Folded[(Chain[E], A)]]
   ): ActionT[F, S, E, A] = new ActionT(unsafeRun)
 }
 
@@ -82,7 +82,7 @@ trait ActionTFunctions {
     ActionT((_, es) => (es, a).next.pure[F])
 
   def sampleK[F[_]: Monad, S, E1, Env, E2](
-    getEnv: F[Env]
+      getEnv: F[Env]
   )(update: (Env, E1) => E2)(extract: E2 => E1): ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *] =
     new (ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *]) {
       override def apply[A](fa: ActionT[F, S, E1, A]): ActionT[F, S, E2, A] =
@@ -90,8 +90,8 @@ trait ActionTFunctions {
     }
 
   def xmapEventsK[F[_]: Functor, S, E1, E2, R](
-    to: E1 => E2,
-    from: E2 => E1
+      to: E1 => E2,
+      from: E2 => E1
   ): ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *] =
     new (ActionT[F, S, E1, *] ~> ActionT[F, S, E2, *]) {
       override def apply[A](fa: ActionT[F, S, E1, A]): ActionT[F, S, E2, A] =
@@ -99,7 +99,7 @@ trait ActionTFunctions {
     }
 
   def expandK[F[_]: Functor, S1, S2, E](
-    update: (S2, S1) => S2
+      update: (S2, S1) => S2
   )(extract: S2 => S1): ActionT[F, S1, E, *] ~> ActionT[F, S2, E, *] =
     new (ActionT[F, S1, E, *] ~> ActionT[F, S2, E, *]) {
       override def apply[A](fa: ActionT[F, S1, E, A]): ActionT[F, S2, E, A] =
@@ -108,11 +108,11 @@ trait ActionTFunctions {
 }
 
 trait ActionTInstances extends ActionTLowerPriorityInstances1 {
-  implicit def monadActionLiftRejectInstance[F[_], S, E, R](
-    implicit F0: MonadError[F, R]
+  implicit def monadActionLiftRejectInstance[F[_], S, E, R](implicit
+      F0: MonadError[F, R]
   ): MonadActionLiftReject[ActionT[F, S, E, *], F, S, E, R] =
     new MonadActionLiftReject[ActionT[F, S, E, *], F, S, E, R]
-    with ActionTMonadActionLiftInstance[F, S, E] {
+      with ActionTMonadActionLiftInstance[F, S, E] {
       override protected implicit def F: Monad[F] = F0
       override def reject[A](r: R): ActionT[F, S, E, A] = ActionT.liftF(F0.raiseError[A](r))
     }
@@ -135,28 +135,27 @@ trait ActionTLowerPriorityInstances1 {
       fa.map(f)
 
     override def flatMap[A, B](fa: ActionT[F, S, E, A])(
-      f: A => ActionT[F, S, E, B]
+        f: A => ActionT[F, S, E, B]
     ): ActionT[F, S, E, B] = fa.flatMap(f)
 
     override def tailRecM[A, B](a: A)(f: A => ActionT[F, S, E, Either[A, B]]): ActionT[F, S, E, B] =
       ActionT { (fold, es) =>
-        F.tailRecM((es, a)) {
-          case (es, a) =>
-            f(a).unsafeRun(fold, es).flatMap {
-              case Next((es2, Left(nextA))) =>
-                f(nextA).unsafeRun(fold, es2).map {
-                  case Next((es, Left(a))) =>
-                    (es, a).asLeft[Folded[(Chain[E], B)]]
-                  case Next((es, Right(b))) =>
-                    (es, b).next.asRight[(Chain[E], A)]
-                  case Folded.Impossible =>
-                    impossible[(Chain[E], B)].asRight[(Chain[E], A)]
-                }
-              case Next((es2, Right(b))) =>
-                (es2, b).next.asRight[(Chain[E], A)].pure[F]
-              case Impossible =>
-                impossible[(Chain[E], B)].asRight[(Chain[E], A)].pure[F]
-            }
+        F.tailRecM((es, a)) { case (es, a) =>
+          f(a).unsafeRun(fold, es).flatMap {
+            case Next((es2, Left(nextA))) =>
+              f(nextA).unsafeRun(fold, es2).map {
+                case Next((es, Left(a))) =>
+                  (es, a).asLeft[Folded[(Chain[E], B)]]
+                case Next((es, Right(b))) =>
+                  (es, b).next.asRight[(Chain[E], A)]
+                case Folded.Impossible =>
+                  impossible[(Chain[E], B)].asRight[(Chain[E], A)]
+              }
+            case Next((es2, Right(b))) =>
+              (es2, b).next.asRight[(Chain[E], A)].pure[F]
+            case Impossible =>
+              impossible[(Chain[E], B)].asRight[(Chain[E], A)].pure[F]
+          }
         }
       }
 
@@ -164,8 +163,8 @@ trait ActionTLowerPriorityInstances1 {
     override def liftF[A](fa: F[A]): ActionT[F, S, E, A] = ActionT.liftF(fa)
   }
 
-  implicit def monadActionLiftInstance[F[_], S, E](
-    implicit F0: Monad[F]
+  implicit def monadActionLiftInstance[F[_], S, E](implicit
+      F0: Monad[F]
   ): MonadActionLift[ActionT[F, S, E, *], F, S, E] =
     new ActionTMonadActionLiftInstance[F, S, E] {
       override protected implicit def F: Monad[F] = F0

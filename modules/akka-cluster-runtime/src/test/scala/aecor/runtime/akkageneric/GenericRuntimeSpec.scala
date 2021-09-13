@@ -13,11 +13,13 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
 object GenericRuntimeSpec {
-  def conf: Config = ConfigFactory.parseString(s"""
+  def conf: Config = ConfigFactory
+    .parseString(s"""
         cluster.system-name=test
         cluster.port = 51001
         aecor.generic-akka-runtime.idle-timeout = 1s
-     """).withFallback(ConfigFactory.load())
+     """)
+    .withFallback(ConfigFactory.load())
 }
 
 class GenericRuntimeSpec

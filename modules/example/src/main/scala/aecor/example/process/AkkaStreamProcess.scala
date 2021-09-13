@@ -7,8 +7,9 @@ import cats.syntax.all._
 
 object AkkaStreamProcess {
   final class Builder[F[_]] {
-    def apply[M](source: Source[Unit, M],
-                 materializer: Materializer)(implicit F: Async[F]): F[Unit] =
+    def apply[M](source: Source[Unit, M], materializer: Materializer)(implicit
+        F: Async[F]
+    ): F[Unit] =
       F.bracket(
         F.delay(
           source

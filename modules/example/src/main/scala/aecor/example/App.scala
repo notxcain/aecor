@@ -53,8 +53,8 @@ object App extends IOApp {
       createCassandraSession.map(CassandraOffsetStore[IO](_, offsetStoreConfig))
 
     def startTransactionProcessing(
-      accounts: Accounts[IO],
-      transactions: Transactions[IO]
+        accounts: Accounts[IO],
+        transactions: Transactions[IO]
     ): IO[DistributedProcessing.KillSwitch[IO]] =
       createOffsetStore.flatMap { offsetStore =>
         val processor =
@@ -70,33 +70,33 @@ object App extends IOApp {
           )
         }
 
-        sourcesF.flatMap(
-          sources =>
-            FS2QueueProcess.create(sources).flatMap {
-              case (stream, processes) =>
-                val run = distributedProcessing.start[IO]("TransactionProcessing", processes)
-                run.flatMap { ks =>
-                  stream
-                    .map { s =>
-                      val run = s
-                        .mapAsync(30)(_.traverse(processor.process(_)))
-                        .evalMap(_.commit)
-                        .compile
-                        .drain
-                      Stream.retry(run, 1.second, identity, Int.MaxValue)
-                    }
-                    .parJoin(processes.size)
+        sourcesF.flatMap(sources =>
+          FS2QueueProcess.create(sources).flatMap { case (stream, processes) =>
+            val run = distributedProcessing.start[IO]("TransactionProcessing", processes)
+            run.flatMap { ks =>
+              stream
+                .map { s =>
+                  val run = s
+                    .mapAsync(30)(_.traverse(processor.process(_)))
+                    .evalMap(_.commit)
                     .compile
                     .drain
-                    .start
-                    .as(ks)
+                  Stream.retry(run, 1.second, identity, Int.MaxValue)
                 }
+                .parJoin(processes.size)
+                .compile
+                .drain
+                .start
+                .as(ks)
+            }
           }
         )
       }
 
-    def startHttpServer(accounts: Accounts[IO],
-                        transactions: Transactions[IO]): Resource[IO, Server] = {
+    def startHttpServer(
+        accounts: Accounts[IO],
+        transactions: Transactions[IO]
+    ): Resource[IO, Server] = {
       val transactionService: transaction.TransactionService[IO] =
         transaction.DefaultTransactionService(transactions)
       val accountService: account.AccountService[IO] = account.DefaultAccountService(accounts)
@@ -117,8 +117,8 @@ object App extends IOApp {
       accounts <- account.deployment.deploy[IO](runtime, taskClock)
       _ <- startTransactionProcessing(accounts, transactions)
       _ <- startHttpServer(accounts, transactions).use { _ =>
-            IO.fromFuture(IO(system.whenTerminated))
-          }
+             IO.fromFuture(IO(system.whenTerminated))
+           }
     } yield ExitCode.Success
   }
 

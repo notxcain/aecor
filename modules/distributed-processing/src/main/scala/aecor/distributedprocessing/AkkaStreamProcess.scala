@@ -8,8 +8,9 @@ import cats.syntax.functor._
 
 object AkkaStreamProcess {
   final class Builder[F[_]] {
-    def apply[M](source: Source[Unit, M])(implicit F: Async[F],
-                                          materializer: Materializer): Process[F] =
+    def apply[M](
+        source: Source[Unit, M]
+    )(implicit F: Async[F], materializer: Materializer): Process[F] =
       Process(run = F.delay {
         val (killSwitch, terminated) = source
           .viaMat(KillSwitches.single)(Keep.right)

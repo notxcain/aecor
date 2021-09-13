@@ -15,20 +15,20 @@ import scala.concurrent.duration._
 
 object PeriodicProcessRuntime {
   def apply[F[_]: Async: LiftIO](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(
-    implicit materializer: Materializer
+      implicit materializer: Materializer
   ): F[PeriodicProcessRuntime[F]] =
     Dispatcher[F].allocated
       .map(_._1)
-      .map(
-        dispatcher => new PeriodicProcessRuntime[F](name, tickInterval, processCycle, dispatcher)
+      .map(dispatcher =>
+        new PeriodicProcessRuntime[F](name, tickInterval, processCycle, dispatcher)
       )
 }
 
 class PeriodicProcessRuntime[F[_]: Async: LiftIO](
-  name: String,
-  tickInterval: FiniteDuration,
-  processCycle: F[Unit],
-  dispatcher: Dispatcher[F]
+    name: String,
+    tickInterval: FiniteDuration,
+    processCycle: F[Unit],
+    dispatcher: Dispatcher[F]
 )(implicit materializer: Materializer) {
   private def source =
     Source

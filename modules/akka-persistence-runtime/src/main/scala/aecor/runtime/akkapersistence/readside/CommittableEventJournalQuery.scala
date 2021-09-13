@@ -9,13 +9,15 @@ import cats.effect.std.Dispatcher
 import cats.syntax.functor._
 
 final class CommittableEventJournalQuery[F[_]: Async, O, K, E] private[akkapersistence] (
-  underlying: JournalQuery[O, K, E],
-  offsetStore: KeyValueStore[F, TagConsumer, O],
-  dispatcher: Dispatcher[F]
+    underlying: JournalQuery[O, K, E],
+    offsetStore: KeyValueStore[F, TagConsumer, O],
+    dispatcher: Dispatcher[F]
 ) {
-  private def mkCommittableSource(tag: EventTag,
-                                  consumerId: ConsumerId,
-                                  inner: Option[O] => Source[JournalEntry[O, K, E], NotUsed]) = {
+  private def mkCommittableSource(
+      tag: EventTag,
+      consumerId: ConsumerId,
+      inner: Option[O] => Source[JournalEntry[O, K, E], NotUsed]
+  ) = {
     val tagConsumerId = TagConsumer(tag, consumerId)
     Source
       .single(NotUsed)
@@ -26,21 +28,23 @@ final class CommittableEventJournalQuery[F[_]: Async, O, K, E] private[akkapersi
       .map(x => Committable(offsetStore.setValue(tagConsumerId, x.offset), x))
   }
 
-  def eventsByTag(tag: EventTag,
-                  consumerId: ConsumerId): Source[Committable[F, JournalEntry[O, K, E]], NotUsed] =
+  def eventsByTag(
+      tag: EventTag,
+      consumerId: ConsumerId
+  ): Source[Committable[F, JournalEntry[O, K, E]], NotUsed] =
     mkCommittableSource(tag, consumerId, underlying.eventsByTag(tag, _))
 
   def currentEventsByTag(
-    tag: EventTag,
-    consumerId: ConsumerId
+      tag: EventTag,
+      consumerId: ConsumerId
   ): Source[Committable[F, JournalEntry[O, K, E]], NotUsed] =
     mkCommittableSource(tag, consumerId, underlying.currentEventsByTag(tag, _))
 }
 
 private[akkapersistence] object CommittableEventJournalQuery {
   def apply[F[_]: Async, Offset, K, E](
-    underlying: JournalQuery[Offset, K, E],
-    offsetStore: KeyValueStore[F, TagConsumer, Offset]
+      underlying: JournalQuery[Offset, K, E],
+      offsetStore: KeyValueStore[F, TagConsumer, Offset]
   ): F[CommittableEventJournalQuery[F, Offset, K, E]] =
     Dispatcher[F].allocated
       .map(_._1)

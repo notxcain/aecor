@@ -29,14 +29,13 @@ import scala.util.{ Failure, Success, Try }
 
 private[aecor] object GenericAkkaRuntimeActor {
   def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Async](
-    createBehavior: K => F[M[F]],
-    idleTimeout: FiniteDuration
+      createBehavior: K => F[M[F]],
+      idleTimeout: FiniteDuration
   ): F[Props] =
     Dispatcher[F].allocated
       .map(_._1)
-      .map(
-        dispatcher =>
-          Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout, dispatcher))
+      .map(dispatcher =>
+        Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout, dispatcher))
       )
 
   private[akkageneric] final case class Command(bytes: BitVector) extends Message
@@ -45,9 +44,9 @@ private[aecor] object GenericAkkaRuntimeActor {
 }
 
 private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]: Async](
-  createBehavior: K => F[M[F]],
-  idleTimeout: FiniteDuration,
-  dispatcher: Dispatcher[F]
+    createBehavior: K => F[M[F]],
+    idleTimeout: FiniteDuration,
+    dispatcher: Dispatcher[F]
 )(implicit M: WireProtocol[M])
     extends Actor
     with Stash
@@ -105,25 +104,26 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
       )
   }
 
-  def performInvocation[A](actions: M[F],
-                           invocation: Invocation[M, A],
-                           resultEncoder: Encoder[A]): Unit = {
+  def performInvocation[A](
+      actions: M[F],
+      invocation: Invocation[M, A],
+      resultEncoder: Encoder[A]
+  ): Unit = {
     val opId = UUID.randomUUID()
 
     invocation
       .run(actions)
       .unsafeToIO(dispatcher)
-      .flatMap(
-        a =>
-          IO(log.debug("[{}] [{}] Invocation result [{}]", self.path, key, a.toString)) *>
-            resultEncoder.encode(a).lift[IO]
+      .flatMap(a =>
+        IO(log.debug("[{}] [{}] Invocation result [{}]", self.path, key, a.toString)) *>
+          resultEncoder.encode(a).lift[IO]
       )
       .map { responseBytes =>
         Result(opId, Success(responseBytes))
       }
       .unsafeToFuture()
-      .recover {
-        case NonFatal(e) => Result(opId, Failure(e))
+      .recover { case NonFatal(e) =>
+        Result(opId, Failure(e))
       }
       .pipeTo(self)(sender)
 

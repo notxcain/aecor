@@ -17,17 +17,16 @@ object AccountRoute {
       extends Http4sDsl[F]
       with CirceEntityDecoder {
     def routes: HttpRoutes[F] =
-      HttpRoutes.of[F] {
-        case req @ POST -> Root / "accounts" =>
-          for {
-            openAccountRequest <- req.as[OpenAccountRequest]
-            resp <- service
-                     .openAccount(openAccountRequest.accountId, openAccountRequest.checkBalance)
-                     .flatMap {
-                       case Left(e)  => BadRequest(e.toString)
-                       case Right(_) => Ok("")
-                     }
-          } yield resp
+      HttpRoutes.of[F] { case req @ POST -> Root / "accounts" =>
+        for {
+          openAccountRequest <- req.as[OpenAccountRequest]
+          resp <- service
+                    .openAccount(openAccountRequest.accountId, openAccountRequest.checkBalance)
+                    .flatMap {
+                      case Left(e)  => BadRequest(e.toString)
+                      case Right(_) => Ok("")
+                    }
+        } yield resp
       }
   }
 

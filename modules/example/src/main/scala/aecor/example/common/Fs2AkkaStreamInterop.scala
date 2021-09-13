@@ -10,7 +10,7 @@ import fs2.Stream
 object Fs2AkkaStreamInterop {
   implicit final class SourceToStream[A, Mat](val self: Source[A, Mat]) extends AnyVal {
     def materializeToStream[F[_]](
-      materializer: Materializer
+        materializer: Materializer
     )(implicit F: Async[F]): F[(Mat, Stream[F, A])] = F.delay {
       val (mat, publisher) = self.toMat(Sink.asPublisher(false))(Keep.both).run()(materializer)
       (mat, publisher.toStream[F])

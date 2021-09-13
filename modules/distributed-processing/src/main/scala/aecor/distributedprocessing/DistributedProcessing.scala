@@ -16,17 +16,18 @@ import scala.concurrent.duration._
 
 final class DistributedProcessing private (system: ActorSystem) {
 
-  /**
-    * Starts `processes` distributed over underlying akka cluster.
+  /** Starts `processes` distributed over underlying akka cluster.
     *
-    * @param name - type name of underlying cluster sharding
-    * @param processes - list of processes to distribute
-    *
+    * @param name
+    *   - type name of underlying cluster sharding
+    * @param processes
+    *   - list of processes to distribute
     */
-  def start[F[_]: Async](name: String,
-                         processes: List[Process[F]],
-                         settings: DistributedProcessingSettings =
-                           DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
+  def start[F[_]: Async](
+      name: String,
+      processes: List[Process[F]],
+      settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)
+  ): F[KillSwitch[F]] =
     DistributedProcessingWorker.props(processes, name).map { childProps =>
       val opts = BackoffOpts
         .onFailure(
@@ -43,12 +44,12 @@ final class DistributedProcessing private (system: ActorSystem) {
         typeName = name,
         entityProps = props,
         settings = settings.clusterShardingSettings,
-        extractEntityId = {
-          case c @ KeepRunning(workerId) => (workerId.toString, c)
+        extractEntityId = { case c @ KeepRunning(workerId) =>
+          (workerId.toString, c)
         },
         extractShardId = {
           case KeepRunning(workerId) => (workerId % settings.numberOfShards).toString
-          case other                 => throw new IllegalArgumentException(s"Unexpected message [$other]")
+          case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
         }
       )
 
@@ -77,13 +78,15 @@ object DistributedProcessing {
   final case class Process[F[_]](run: F[RunningProcess[F]]) extends AnyVal
 }
 
-final case class DistributedProcessingSettings(minBackoff: FiniteDuration,
-                                               maxBackoff: FiniteDuration,
-                                               randomFactor: Double,
-                                               shutdownTimeout: FiniteDuration,
-                                               numberOfShards: Int,
-                                               heartbeatInterval: FiniteDuration,
-                                               clusterShardingSettings: ClusterShardingSettings)
+final case class DistributedProcessingSettings(
+    minBackoff: FiniteDuration,
+    maxBackoff: FiniteDuration,
+    randomFactor: Double,
+    shutdownTimeout: FiniteDuration,
+    numberOfShards: Int,
+    heartbeatInterval: FiniteDuration,
+    clusterShardingSettings: ClusterShardingSettings
+)
 
 object DistributedProcessingSettings {
   def default(clusterShardingSettings: ClusterShardingSettings): DistributedProcessingSettings =

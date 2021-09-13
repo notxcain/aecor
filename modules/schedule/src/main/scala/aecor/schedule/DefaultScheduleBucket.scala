@@ -22,20 +22,22 @@ import scala.util.{ Failure, Try }
 
 object DefaultScheduleBucket {
   def behavior[F[_]: Monad](
-    clock: F[ZonedDateTime]
+      clock: F[ZonedDateTime]
   ): EventsourcedBehavior[ScheduleBucket, F, ScheduleState, ScheduleEvent] =
     EventsourcedBehavior(new DefaultScheduleBucket(clock), ScheduleState.fold)
 }
 
-class DefaultScheduleBucket[I[_], F[_]: Functor](clock: F[ZonedDateTime])(
-  implicit F: MonadActionLift[I, F, ScheduleState, ScheduleEvent]
+class DefaultScheduleBucket[I[_], F[_]: Functor](clock: F[ZonedDateTime])(implicit
+    F: MonadActionLift[I, F, ScheduleState, ScheduleEvent]
 ) extends ScheduleBucket[I] {
 
   import F._
 
-  override def addScheduleEntry(entryId: String,
-                                correlationId: String,
-                                dueDate: LocalDateTime): I[Unit] =
+  override def addScheduleEntry(
+      entryId: String,
+      correlationId: String,
+      dueDate: LocalDateTime
+  ): I[Unit] =
     read.flatMap { state =>
       liftF(clock).flatMap { zdt =>
         val timestamp = zdt.toInstant
@@ -68,11 +70,12 @@ sealed abstract class ScheduleEvent extends Product with Serializable {
 }
 
 object ScheduleEvent extends ScheduleEventInstances {
-  final case class ScheduleEntryAdded(entryId: String,
-                                      correlationId: String,
-                                      dueDate: LocalDateTime,
-                                      timestamp: Instant)
-      extends ScheduleEvent
+  final case class ScheduleEntryAdded(
+      entryId: String,
+      correlationId: String,
+      dueDate: LocalDateTime,
+      timestamp: Instant
+  ) extends ScheduleEvent
 
   final case class ScheduleEntryFired(entryId: String, correlationId: String, timestamp: Instant)
       extends ScheduleEvent
@@ -82,7 +85,7 @@ object ScheduleEvent extends ScheduleEventInstances {
 
 trait ScheduleEventInstances {
   implicit val persistentEncoderDecoder
-    : PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] =
+      : PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] =
     new PersistentEncoder[ScheduleEvent] with PersistentDecoder[ScheduleEvent] {
       val ScheduleEntryAddedManifest = "A"
       val ScheduleEntryFiredManifest = "B"

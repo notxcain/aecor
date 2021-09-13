@@ -25,16 +25,15 @@ object GenericAkkaRuntime {
 
 final class GenericAkkaRuntime private (system: ActorSystem) {
   def runBehavior[K: KeyEncoder: KeyDecoder, M[_[_]]: FunctorK, F[_]](
-    typeName: String,
-    createBehavior: K => F[M[F]],
-    settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
+      typeName: String,
+      createBehavior: K => F[M[F]],
+      settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
   )(implicit M: WireProtocol[M], F: Async[F]): F[K => M[F]] =
     GenericAkkaRuntimeActor
       .props[K, M, F](createBehavior, settings.idleTimeout)
       .map { props =>
-        val extractEntityId: ShardRegion.ExtractEntityId = {
-          case KeyedCommand(entityId, c) =>
-            (entityId, GenericAkkaRuntimeActor.Command(c))
+        val extractEntityId: ShardRegion.ExtractEntityId = { case KeyedCommand(entityId, c) =>
+          (entityId, GenericAkkaRuntimeActor.Command(c))
         }
 
         val numberOfShards = settings.numberOfShards

@@ -8,15 +8,17 @@ import cats.implicits._
 
 import scala.concurrent.duration._
 
-final class DefaultTransactionService[F[_]](transactions: Transactions[F])(
-  implicit F: Concurrent[F],
-  T: Temporal[F]
+final class DefaultTransactionService[F[_]](transactions: Transactions[F])(implicit
+    F: Concurrent[F],
+    T: Temporal[F]
 ) extends TransactionService[F] {
 
-  def authorizePayment(transactionId: TransactionId,
-                       from: From[AccountId],
-                       to: To[AccountId],
-                       amount: Amount): F[TransactionRoute.ApiResult] =
+  def authorizePayment(
+      transactionId: TransactionId,
+      from: From[AccountId],
+      to: To[AccountId],
+      amount: Amount
+  ): F[TransactionRoute.ApiResult] =
     transactions(transactionId)
       .create(from, to, amount)
       .flatMap { _ =>

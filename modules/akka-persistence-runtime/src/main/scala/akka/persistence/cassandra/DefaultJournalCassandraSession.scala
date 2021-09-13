@@ -12,14 +12,14 @@ import cats.syntax.functor._
 
 object DefaultJournalCassandraSession {
 
-  /**
-    * Creates CassandraSession using settings of default cassandra journal.
-    *
+  /** Creates CassandraSession using settings of default cassandra journal.
     */
-  def apply[F[_]: Async](system: ActorSystem,
-                         metricsCategory: String,
-                         init: Init[F],
-                         sessionProvider: Option[SessionProvider] = None): F[CassandraSession] =
+  def apply[F[_]: Async](
+      system: ActorSystem,
+      metricsCategory: String,
+      init: Init[F],
+      sessionProvider: Option[SessionProvider] = None
+  ): F[CassandraSession] =
     Dispatcher[F].allocated.map(_._1).map { dispatcher =>
       val log = Logging(system, classOf[CassandraSession])
 
@@ -32,9 +32,16 @@ object DefaultJournalCassandraSession {
 
       val settings = CassandraSessionSettings(system.settings.config.getConfig("cassandra-journal"))
 
-      new CassandraSession(system, provider, settings, system.dispatcher, log, metricsCategory, {
-        x =>
+      new CassandraSession(
+        system,
+        provider,
+        settings,
+        system.dispatcher,
+        log,
+        metricsCategory,
+        { x =>
           dispatcher.unsafeToFuture(init(Session[F](x)).as(Done))
-      })
+        }
+      )
     }
 }

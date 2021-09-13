@@ -13,15 +13,17 @@ import cats.implicits._
 import scala.concurrent.duration.FiniteDuration
 
 object ScheduleProcess {
-  def apply[F[_]: Monad](journal: ScheduleEventJournal[F],
-                         dayZero: LocalDate,
-                         consumerId: ConsumerId,
-                         offsetStore: KeyValueStore[F, TagConsumer, LocalDateTime],
-                         eventualConsistencyDelay: FiniteDuration,
-                         repository: ScheduleEntryRepository[F],
-                         buckets: ScheduleBucketId => ScheduleBucket[F],
-                         clock: F[LocalDateTime],
-                         parallelism: Int): F[Unit] = {
+  def apply[F[_]: Monad](
+      journal: ScheduleEventJournal[F],
+      dayZero: LocalDate,
+      consumerId: ConsumerId,
+      offsetStore: KeyValueStore[F, TagConsumer, LocalDateTime],
+      eventualConsistencyDelay: FiniteDuration,
+      repository: ScheduleEntryRepository[F],
+      buckets: ScheduleBucketId => ScheduleBucket[F],
+      clock: F[LocalDateTime],
+      parallelism: Int
+  ): F[Unit] = {
     val scheduleEntriesTag = EventTag("io.aecor.ScheduleDueEntries")
 
     val tagConsumerId = TagConsumer(scheduleEntriesTag, consumerId)
@@ -33,16 +35,18 @@ object ScheduleProcess {
             _ <- repository.insertScheduleEntry(id, entryId, dueDate)
             now <- clock
             _ <- if (dueDate.isEqual(now) || dueDate.isBefore(now)) {
-                  buckets(id).fireEntry(entryId)
-                } else {
-                  ().pure[F]
-                }
+                   buckets(id).fireEntry(entryId)
+                 } else {
+                   ().pure[F]
+                 }
           } yield ()
         case EntityEvent(id, _, ScheduleEntryFired(entryId, _, _)) =>
           repository.markScheduleEntryAsFired(id, entryId)
       }
-    def fireEntries(from: LocalDateTime,
-                    to: LocalDateTime): F[Option[ScheduleEntryRepository.ScheduleEntry]] =
+    def fireEntries(
+        from: LocalDateTime,
+        to: LocalDateTime
+    ): F[Option[ScheduleEntryRepository.ScheduleEntry]] =
       repository.processEntries(from, to, parallelism) { entry =>
         if (entry.fired)
           ().pure[F]

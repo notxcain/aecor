@@ -46,7 +46,7 @@ object ScheduleApp extends IOApp {
             clock = clock,
             repository = scheduleEntryRepository,
             offsetStore = CassandraOffsetStore[F](cassandraSession, offsetStoreConfig)
-        )
+          )
       )
 
     def runAdder[F[_]: Async](schedule: Schedule[F], dispatcher: Dispatcher[F]): F[Unit] =

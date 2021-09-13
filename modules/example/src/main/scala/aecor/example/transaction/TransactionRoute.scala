@@ -14,10 +14,12 @@ import org.http4s.dsl.Http4sDsl
 import org.http4s.HttpRoutes
 
 trait TransactionService[F[_]] {
-  def authorizePayment(transactionId: TransactionId,
-                       from: From[AccountId],
-                       to: To[AccountId],
-                       amount: Amount): F[TransactionRoute.ApiResult]
+  def authorizePayment(
+      transactionId: TransactionId,
+      from: From[AccountId],
+      to: To[AccountId],
+      amount: Amount
+  ): F[TransactionRoute.ApiResult]
 }
 
 object TransactionRoute {
@@ -28,9 +30,11 @@ object TransactionRoute {
     case class Declined(reason: String) extends ApiResult
   }
 
-  final case class CreateTransactionRequest(from: From[AccountId],
-                                            to: To[AccountId],
-                                            amount: Amount)
+  final case class CreateTransactionRequest(
+      from: From[AccountId],
+      to: To[AccountId],
+      amount: Amount
+  )
 
   object TransactionIdVar {
     def unapply(arg: String): Option[TransactionId] = TransactionId(arg).some
@@ -45,11 +49,11 @@ object TransactionRoute {
           body <- req.as[CreateTransactionRequest]
           CreateTransactionRequest(from, to, amount) = body
           resp <- service.authorizePayment(transactionId, from, to, amount).flatMap {
-                   case ApiResult.Authorized =>
-                     Ok("Authorized")
-                   case ApiResult.Declined(reason) =>
-                     BadRequest(s"Declined: $reason")
-                 }
+                    case ApiResult.Authorized =>
+                      Ok("Authorized")
+                    case ApiResult.Declined(reason) =>
+                      BadRequest(s"Declined: $reason")
+                  }
         } yield resp
       case POST -> Root / "test" =>
         service

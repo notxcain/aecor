@@ -25,34 +25,38 @@ import com.datastax.driver.core.utils.UUIDs
 import scala.concurrent.duration._
 
 trait Schedule[F[_]] {
-  def addScheduleEntry(scheduleName: String,
-                       entryId: String,
-                       correlationId: String,
-                       dueDate: LocalDateTime): F[Unit]
+  def addScheduleEntry(
+      scheduleName: String,
+      entryId: String,
+      correlationId: String,
+      dueDate: LocalDateTime
+  ): F[Unit]
   def committableScheduleEvents(
-    scheduleName: String,
-    consumerId: ConsumerId
+      scheduleName: String,
+      consumerId: ConsumerId
   ): Source[Committable[F, JournalEntry[UUID, ScheduleBucketId, ScheduleEvent]], NotUsed]
 }
 
 object Schedule {
-  final case class ScheduleSettings(bucketLength: FiniteDuration,
-                                    refreshInterval: FiniteDuration,
-                                    eventualConsistencyDelay: FiniteDuration,
-                                    consumerId: ConsumerId)
+  final case class ScheduleSettings(
+      bucketLength: FiniteDuration,
+      refreshInterval: FiniteDuration,
+      eventualConsistencyDelay: FiniteDuration,
+      consumerId: ConsumerId
+  )
 
   def start[F[_]: Async: LiftIO](
-    entityName: String,
-    dayZero: LocalDate,
-    clock: Clock[F],
-    repository: ScheduleEntryRepository[F],
-    offsetStore: KeyValueStore[F, TagConsumer, UUID],
-    settings: ScheduleSettings = ScheduleSettings(
-      1.day,
-      10.seconds,
-      40.seconds,
-      ConsumerId("io.aecor.schedule.ScheduleProcess")
-    )
+      entityName: String,
+      dayZero: LocalDate,
+      clock: Clock[F],
+      repository: ScheduleEntryRepository[F],
+      offsetStore: KeyValueStore[F, TagConsumer, UUID],
+      settings: ScheduleSettings = ScheduleSettings(
+        1.day,
+        10.seconds,
+        40.seconds,
+        ConsumerId("io.aecor.schedule.ScheduleProcess")
+      )
   )(implicit system: ActorSystem, materializer: Materializer): F[Schedule[F]] = {
 
     val eventTag = EventTag(entityName)
@@ -60,8 +64,8 @@ object Schedule {
     val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
     def uuidToLocalDateTime(zoneId: ZoneId): KeyValueStore[F, TagConsumer, LocalDateTime] =
-      offsetStore.imap(
-        uuid => LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId)
+      offsetStore.imap(uuid =>
+        LocalDateTime.ofInstant(Instant.ofEpochMilli(UUIDs.unixTimestamp(uuid)), zoneId)
       )(value => UUIDs.startOf(value.atZone(zoneId).toInstant.toEpochMilli))
 
     def deployBuckets =
@@ -75,27 +79,27 @@ object Schedule {
     def startProcess(buckets: ScheduleBucketId => ScheduleBucket[F]) = clock.zone.flatMap { zone =>
       for {
         committableJournal <- runtime
-                               .journal[ScheduleBucketId, ScheduleEvent]
-                               .committable(offsetStore)
+                                .journal[ScheduleBucketId, ScheduleEvent]
+                                .committable(offsetStore)
 
         scheduleEventJournal <- DefaultScheduleEventJournal[F](
-                                 consumerId = settings.consumerId,
-                                 parallelism = 8,
-                                 aggregateJournal = committableJournal,
-                                 eventTag = eventTag
-                               )
+                                  consumerId = settings.consumerId,
+                                  parallelism = 8,
+                                  aggregateJournal = committableJournal,
+                                  eventTag = eventTag
+                                )
 
         process = ScheduleProcess(
-          journal = scheduleEventJournal,
-          dayZero = dayZero,
-          consumerId = settings.consumerId,
-          offsetStore = uuidToLocalDateTime(zone),
-          eventualConsistencyDelay = settings.eventualConsistencyDelay,
-          repository = repository,
-          buckets = buckets,
-          clock = clock.localDateTime,
-          parallelism = 8
-        )
+                    journal = scheduleEventJournal,
+                    dayZero = dayZero,
+                    consumerId = settings.consumerId,
+                    offsetStore = uuidToLocalDateTime(zone),
+                    eventualConsistencyDelay = settings.eventualConsistencyDelay,
+                    repository = repository,
+                    buckets = buckets,
+                    clock = clock.localDateTime,
+                    parallelism = 8
+                  )
 
         runtime <- PeriodicProcessRuntime(entityName, settings.refreshInterval, process)
 

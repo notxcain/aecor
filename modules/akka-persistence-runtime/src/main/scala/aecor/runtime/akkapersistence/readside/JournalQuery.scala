@@ -14,13 +14,13 @@ final case class JournalEntry[O, K, A](offset: O, event: EntityEvent[K, A]) {
 }
 
 object JournalEntry {
-  implicit def aecorHasInstanceForEvent[X, O, K, A](
-    implicit A: Has[EntityEvent[K, A], X]
+  implicit def aecorHasInstanceForEvent[X, O, K, A](implicit
+      A: Has[EntityEvent[K, A], X]
   ): Has[JournalEntry[O, K, A], X] =
     A.contramap(_.event)
 
-  implicit def aecorHasInstanceForOffset[X, O, K, A](
-    implicit A: Has[O, X]
+  implicit def aecorHasInstanceForOffset[X, O, K, A](implicit
+      A: Has[O, X]
   ): Has[JournalEntry[O, K, A], X] = A.contramap(_.offset)
 
 }
@@ -31,7 +31,7 @@ trait JournalQuery[O, K, E] {
   def currentEventsByTag(tag: EventTag, offset: Option[O]): Source[JournalEntry[O, K, E], NotUsed]
 
   def committable[F[_]: Async](
-    offsetStore: KeyValueStore[F, TagConsumer, O]
+      offsetStore: KeyValueStore[F, TagConsumer, O]
   ): F[CommittableEventJournalQuery[F, O, K, E]] =
     Dispatcher[F].allocated
       .map(_._1)

@@ -23,19 +23,24 @@ object AkkaPersistenceRuntime {
   def apply[O](system: ActorSystem, journalAdapter: JournalAdapter[O]): AkkaPersistenceRuntime[O] =
     new AkkaPersistenceRuntime(system, journalAdapter)
 
-  private[akkapersistence] final case class EntityCommand(entityKey: String,
-                                                          commandBytes: BitVector)
-      extends Message
+  private[akkapersistence] final case class EntityCommand(
+      entityKey: String,
+      commandBytes: BitVector
+  ) extends Message
 }
 
-class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
-                                                          journalAdapter: JournalAdapter[O]) {
-  def deploy[M[_[_]]: FunctorK, F[_], State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
-    typeName: String,
-    behavior: EventsourcedBehavior[M, F, State, Event],
-    tagging: Tagging[K],
-    snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
-    settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
+class AkkaPersistenceRuntime[O] private[akkapersistence] (
+    system: ActorSystem,
+    journalAdapter: JournalAdapter[O]
+) {
+  def deploy[M[_[_]]: FunctorK, F[
+      _
+  ], State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
+      typeName: String,
+      behavior: EventsourcedBehavior[M, F, State, Event],
+      tagging: Tagging[K],
+      snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
+      settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
   )(implicit M: WireProtocol[M], F: Async[F]): F[K => M[F]] =
     AkkaPersistenceRuntimeActor
       .props(
@@ -48,9 +53,8 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (system: ActorSystem,
         snapshotPolicy.pluginId
       )
       .map { props =>
-        val extractEntityId: ShardRegion.ExtractEntityId = {
-          case EntityCommand(entityId, bytes) =>
-            (entityId, AkkaPersistenceRuntimeActor.HandleCommand(bytes))
+        val extractEntityId: ShardRegion.ExtractEntityId = { case EntityCommand(entityId, bytes) =>
+          (entityId, AkkaPersistenceRuntimeActor.HandleCommand(bytes))
         }
 
         val numberOfShards = settings.numberOfShards

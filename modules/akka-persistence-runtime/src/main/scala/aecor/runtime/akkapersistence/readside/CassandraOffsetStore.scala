@@ -31,15 +31,16 @@ object CassandraOffsetStore {
     def createTable(config: Queries)(implicit F: Functor[F]): Init[F] =
       Kleisli(_.execute(config.createTableQuery).void)
 
-    def apply(session: CassandraSession,
-              config: CassandraOffsetStore.Queries)(implicit F: Async[F]): CassandraOffsetStore[F] =
+    def apply(session: CassandraSession, config: CassandraOffsetStore.Queries)(implicit
+        F: Async[F]
+    ): CassandraOffsetStore[F] =
       new CassandraOffsetStore(session, config)
   }
 }
 
 class CassandraOffsetStore[F[_]: Async] private[akkapersistence] (
-  session: CassandraSession,
-  config: CassandraOffsetStore.Queries
+    session: CassandraSession,
+    config: CassandraOffsetStore.Queries
 ) extends KeyValueStore[F, TagConsumer, UUID] {
 
   private val selectOffsetStatement =

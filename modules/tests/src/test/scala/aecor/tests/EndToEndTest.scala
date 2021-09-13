@@ -23,13 +23,13 @@ class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport with IOSupp
   import cats.mtl.instances.all._
 
   case class SpecState(
-    counterJournalState: StateEventJournal.State[CounterId, CounterEvent],
-    notificationJournalState: StateEventJournal.State[NotificationId, NotificationEvent],
-    scheduleJournalState: StateEventJournal.State[ScheduleBucketId, ScheduleEvent],
-    counterViewState: TestCounterViewRepository.State,
-    time: Instant,
-    scheduleEntries: Vector[ScheduleEntry],
-    offsetStoreState: Map[TagConsumer, LocalDateTime]
+      counterJournalState: StateEventJournal.State[CounterId, CounterEvent],
+      notificationJournalState: StateEventJournal.State[NotificationId, NotificationEvent],
+      scheduleJournalState: StateEventJournal.State[ScheduleBucketId, ScheduleEvent],
+      counterViewState: TestCounterViewRepository.State,
+      time: Instant,
+      scheduleEntries: Vector[ScheduleEntry],
+      offsetStoreState: Map[TagConsumer, LocalDateTime]
   )
 
   val clock = StateClock[F, SpecState](ZoneOffset.UTC, GenLens[SpecState](_.time))
@@ -58,7 +58,7 @@ class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport with IOSupp
   val scheduleProcessConsumerId: ConsumerId = ConsumerId("NotificationProcess")
   val wrappedEventJournal = new ScheduleEventJournal[F] {
     override def processNewEvents(
-      f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
+        f: EntityEvent[ScheduleBucketId, ScheduleEvent] => F[Unit]
     ): F[Unit] =
       schduleEventJournal
         .currentEventsByTag(EventTag("Schedule"), scheduleProcessConsumerId)
@@ -161,10 +161,10 @@ class EndToEndTest extends AnyFunSuite with Matchers with E2eSupport with IOSupp
         _ <- sleepSeconds(3)
         _ <- sleepSeconds(2)
         _ <- if (n == 0) {
-              ().pure[F]
-            } else {
-              program(n - 1)
-            }
+               ().pure[F]
+             } else {
+               program(n - 1)
+             }
       } yield ()
 
     val (state, _) = program(100)

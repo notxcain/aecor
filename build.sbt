@@ -2,10 +2,7 @@ import ReleaseTransformations._
 import sbtrelease.Version.Bump
 
 lazy val buildSettings = inThisBuild(
-  Seq(
-    organization := "io.aecor",
-    crossScalaVersions := Seq("2.13.6", "2.12.14")
-  )
+  Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.6", "2.12.14"))
 )
 
 lazy val akkaVersion = "2.5.26"
@@ -176,9 +173,8 @@ lazy val coreSettings = Seq(
   )
 )
 
-lazy val boopickleWireProtocolSettings = macroSettings ++ Seq(
-  libraryDependencies ++= Seq("io.suzaku" %% "boopickle" % boopickleVersion)
-)
+lazy val boopickleWireProtocolSettings =
+  macroSettings ++ Seq(libraryDependencies ++= Seq("io.suzaku" %% "boopickle" % boopickleVersion))
 
 lazy val scheduleSettings = Seq(
   libraryDependencies ++= Seq(
@@ -207,7 +203,7 @@ lazy val akkaPersistenceSettings = Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion,
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion
   )
 )
 
@@ -252,7 +248,7 @@ lazy val testsSettings = Seq(
     "io.circe" %% "circe-generic" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
+    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test
   )
 )
 

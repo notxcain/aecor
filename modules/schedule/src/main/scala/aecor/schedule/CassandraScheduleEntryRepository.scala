@@ -20,9 +20,9 @@ import com.datastax.driver.extras.codecs.jdk8.InstantCodec
 import org.slf4j.LoggerFactory
 
 class CassandraScheduleEntryRepository[F[_]: Async](
-  cassandraSession: CassandraSession,
-  queries: Queries,
-  dispatcher: Dispatcher[F]
+    cassandraSession: CassandraSession,
+    queries: Queries,
+    dispatcher: Dispatcher[F]
 )(implicit materializer: Materializer)
     extends ScheduleEntryRepository[F] {
 
@@ -31,9 +31,11 @@ class CassandraScheduleEntryRepository[F[_]: Async](
   private val preparedSelectEntries = cassandraSession.prepare(queries.selectEntries)
   private val preparedSelectEntry = cassandraSession.prepare(queries.selectEntry)
 
-  override def insertScheduleEntry(id: ScheduleBucketId,
-                                   entryId: String,
-                                   dueDate: LocalDateTime): F[Unit] =
+  override def insertScheduleEntry(
+      id: ScheduleBucketId,
+      entryId: String,
+      dueDate: LocalDateTime
+  ): F[Unit] =
     Async[F]
       .fromFuture(Async[F].delay(preparedInsertEntry))
       .map(
@@ -78,9 +80,11 @@ class CassandraScheduleEntryRepository[F[_]: Async](
           ().pure[F]
       }
 
-  private def getBucket(timeBucket: TimeBucket,
-                        from: LocalDateTime,
-                        to: LocalDateTime): Source[ScheduleEntry, NotUsed] =
+  private def getBucket(
+      timeBucket: TimeBucket,
+      from: LocalDateTime,
+      to: LocalDateTime
+  ): Source[ScheduleEntry, NotUsed] =
     Source
       .single(())
       .mapAsync(1) { _ =>
@@ -98,8 +102,8 @@ class CassandraScheduleEntryRepository[F[_]: Async](
       .named(s"getBucket($timeBucket, $from, $to)")
 
   private def getEntries(
-    from: LocalDateTime,
-    to: LocalDateTime
+      from: LocalDateTime,
+      to: LocalDateTime
   ): Source[ScheduleEntryRepository.ScheduleEntry, NotUsed] =
     if (to isBefore from) {
       getEntries(to, from)
@@ -121,7 +125,7 @@ class CassandraScheduleEntryRepository[F[_]: Async](
     }
 
   override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
-    f: (ScheduleEntry) => F[Unit]
+      f: (ScheduleEntry) => F[Unit]
   ): F[Option[ScheduleEntry]] =
     Async[F].fromFuture {
       Async[F].delay {
@@ -142,13 +146,13 @@ class CassandraScheduleEntryRepository[F[_]: Async](
 }
 
 object CassandraScheduleEntryRepository {
-  def apply[F[_]: Async](cassandraSession: CassandraSession, queries: Queries)(
-    implicit materializer: Materializer
+  def apply[F[_]: Async](cassandraSession: CassandraSession, queries: Queries)(implicit
+      materializer: Materializer
   ): F[CassandraScheduleEntryRepository[F]] =
     Dispatcher[F].allocated
       .map(_._1)
-      .map(
-        dispatcher => new CassandraScheduleEntryRepository(cassandraSession, queries, dispatcher)
+      .map(dispatcher =>
+        new CassandraScheduleEntryRepository(cassandraSession, queries, dispatcher)
       )
 
   final case class TimeBucket(day: LocalDate, key: String) {

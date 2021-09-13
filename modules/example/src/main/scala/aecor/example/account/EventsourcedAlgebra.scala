@@ -10,8 +10,8 @@ import aecor.example.common.Amount
 import cats.Monad
 import cats.implicits._
 
-final class EventsourcedAlgebra[F[_]](
-  implicit F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]
+final class EventsourcedAlgebra[F[_]](implicit
+    F: MonadActionReject[F, Option[AccountState], AccountEvent, Rejection]
 ) extends Algebra[F] {
 
   import F._
@@ -63,9 +63,11 @@ object EventsourcedAlgebra {
   val tagging: Tagging[AccountId] = Tagging.const[AccountId](EventTag("Account"))
 
   final val rootAccountId: AccountId = AccountId("ROOT")
-  final case class AccountState(balance: Amount,
-                                processedTransactions: Set[AccountTransactionId],
-                                checkBalance: Boolean) {
+  final case class AccountState(
+      balance: Amount,
+      processedTransactions: Set[AccountTransactionId],
+      checkBalance: Boolean
+  ) {
     def hasProcessedTransaction(transactionId: AccountTransactionId): Boolean =
       processedTransactions.contains(transactionId)
     def hasFunds(amount: Amount): Boolean =

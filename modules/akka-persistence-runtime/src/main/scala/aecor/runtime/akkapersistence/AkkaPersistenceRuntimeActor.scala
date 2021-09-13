@@ -39,30 +39,31 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[M[_[_]], F[_]: Async, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
-    entityName: String,
-    behavior: EventsourcedBehavior[M, F, State, Event],
-    snapshotPolicy: SnapshotPolicy[State],
-    tagging: Tagging[I],
-    idleTimeout: FiniteDuration,
-    journalPluginId: String,
-    snapshotPluginId: String
+  def props[M[_[_]], F[
+      _
+  ]: Async, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
+      entityName: String,
+      behavior: EventsourcedBehavior[M, F, State, Event],
+      snapshotPolicy: SnapshotPolicy[State],
+      tagging: Tagging[I],
+      idleTimeout: FiniteDuration,
+      journalPluginId: String,
+      snapshotPluginId: String
   )(implicit M: WireProtocol[M]): F[Props] =
     Dispatcher[F].allocated
       .map(_._1)
-      .map(
-        dispatcher =>
-          Props(
-            new AkkaPersistenceRuntimeActor(
-              entityName,
-              behavior,
-              snapshotPolicy,
-              tagging,
-              idleTimeout,
-              journalPluginId,
-              snapshotPluginId,
-              dispatcher
-            )
+      .map(dispatcher =>
+        Props(
+          new AkkaPersistenceRuntimeActor(
+            entityName,
+            behavior,
+            snapshotPolicy,
+            tagging,
+            idleTimeout,
+            journalPluginId,
+            snapshotPluginId,
+            dispatcher
+          )
         )
       )
 
@@ -71,24 +72,28 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   case object Stop
 }
 
-/**
+/** Actor encapsulating state of event sourced entity behavior [Behavior]
   *
-  * Actor encapsulating state of event sourced entity behavior [Behavior]
-  *
-  * @param entityName entity name used as persistence prefix and as a tag for all events
-  * @param behavior entity behavior
-  * @param snapshotPolicy snapshot policy to use
-  * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
+  * @param entityName
+  *   entity name used as persistence prefix and as a tag for all events
+  * @param behavior
+  *   entity behavior
+  * @param snapshotPolicy
+  *   snapshot policy to use
+  * @param idleTimeout
+  *   - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
-  entityName: String,
-  behavior: EventsourcedBehavior[M, F, State, Event],
-  snapshotPolicy: SnapshotPolicy[State],
-  tagger: Tagging[I],
-  idleTimeout: FiniteDuration,
-  override val journalPluginId: String,
-  override val snapshotPluginId: String,
-  dispatcher: Dispatcher[F]
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[
+    _
+], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
+    entityName: String,
+    behavior: EventsourcedBehavior[M, F, State, Event],
+    snapshotPolicy: SnapshotPolicy[State],
+    tagger: Tagging[I],
+    idleTimeout: FiniteDuration,
+    override val journalPluginId: String,
+    override val snapshotPluginId: String,
+    dispatcher: Dispatcher[F]
 )(implicit M: WireProtocol[M], F: Async[F])
     extends PersistentActor
     with ActorLogging

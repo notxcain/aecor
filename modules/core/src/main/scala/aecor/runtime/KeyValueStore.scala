@@ -33,25 +33,25 @@ trait KeyValueStore[F[_], K, A] { self =>
 object KeyValueStore {
   implicit def catsTaglessFunctorKInstance[K, A]: FunctorK[KeyValueStore[*[_], K, A]] =
     new FunctorK[KeyValueStore[*[_], K, A]] {
-      override def mapK[F[_], G[_]](
-        mf: KeyValueStore[F, K, A]
-      )(fg: F ~> G): KeyValueStore[G, K, A] =
+      override def mapK[F[_], G[_]](mf: KeyValueStore[F, K, A])(
+          fg: F ~> G
+      ): KeyValueStore[G, K, A] =
         mf.mapK(fg)
     }
 
   implicit def catsInvariantInstance[F[_]: Functor, K]: Invariant[KeyValueStore[F, K, *]] =
     new Invariant[KeyValueStore[F, K, *]] {
-      override def imap[A, B](
-        fa: KeyValueStore[F, K, A]
-      )(f: A => B)(g: B => A): KeyValueStore[F, K, B] =
+      override def imap[A, B](fa: KeyValueStore[F, K, A])(f: A => B)(
+          g: B => A
+      ): KeyValueStore[F, K, B] =
         fa.imap(f)(g)
     }
 
   implicit def catsContravarianFunctor[F[_], A]: Contravariant[KeyValueStore[F, *, A]] =
     new Contravariant[KeyValueStore[F, *, A]] {
-      override def contramap[K1, K2](
-        fa: KeyValueStore[F, K1, A]
-      )(f: K2 => K1): KeyValueStore[F, K2, A] =
+      override def contramap[K1, K2](fa: KeyValueStore[F, K1, A])(
+          f: K2 => K1
+      ): KeyValueStore[F, K2, A] =
         fa.contramap(f)
     }
 }

@@ -14,19 +14,21 @@ import monocle.Lens
 
 object TestScheduleEntryRepository {
   def apply[F[_]: MonadState[*[_], S], S](
-    lens: Lens[S, Vector[ScheduleEntry]]
+      lens: Lens[S, Vector[ScheduleEntry]]
   ): ScheduleEntryRepository[F] =
     new TestScheduleEntryRepository(lens)
 }
 
 class TestScheduleEntryRepository[F[_]: MonadState[*[_], S], S](
-  lens: Lens[S, Vector[ScheduleEntry]]
+    lens: Lens[S, Vector[ScheduleEntry]]
 ) extends ScheduleEntryRepository[F] {
   val F = lens.transformMonadState(MonadState[F, S])
   implicit val monad = F.monad
-  override def insertScheduleEntry(scheduleBucketId: ScheduleBucketId,
-                                   entryId: String,
-                                   dueDate: LocalDateTime): F[Unit] =
+  override def insertScheduleEntry(
+      scheduleBucketId: ScheduleBucketId,
+      entryId: String,
+      dueDate: LocalDateTime
+  ): F[Unit] =
     F.modify { scheduleEntries =>
       scheduleEntries :+ ScheduleEntry(
         scheduleBucketId,
@@ -48,7 +50,7 @@ class TestScheduleEntryRepository[F[_]: MonadState[*[_], S], S](
     }
 
   override def processEntries(from: LocalDateTime, to: LocalDateTime, parallelism: Int)(
-    f: (ScheduleEntryRepository.ScheduleEntry) => F[Unit]
+      f: (ScheduleEntryRepository.ScheduleEntry) => F[Unit]
   ): F[Option[ScheduleEntryRepository.ScheduleEntry]] =
     F.get.flatMap { entries =>
       entries.foldLeft(none[ScheduleEntry].pure[F]) { (acc, entry) =>

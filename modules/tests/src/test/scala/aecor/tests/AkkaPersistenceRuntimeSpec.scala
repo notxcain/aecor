@@ -16,7 +16,8 @@ import org.scalatest.matchers.should.Matchers
 import scala.concurrent.duration._
 
 object AkkaPersistenceRuntimeSpec {
-  def conf: Config = ConfigFactory.parseString(s"""
+  def conf: Config = ConfigFactory
+    .parseString(s"""
         akka {
           cluster {
             seed-nodes = [
@@ -34,7 +35,9 @@ object AkkaPersistenceRuntimeSpec {
           }
         }
         aecor.generic-akka-runtime.idle-timeout = 1s
-     """).withFallback(CassandraLifecycle.config).withFallback(ConfigFactory.load())
+     """)
+    .withFallback(CassandraLifecycle.config)
+    .withFallback(ConfigFactory.load())
 }
 
 class AkkaPersistenceRuntimeSpec

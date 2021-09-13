@@ -8,8 +8,10 @@ import aecor.macros.boopickle.BoopickleWireProtocol
 import cats.tagless.{ Derive, FunctorK }
 import io.circe.{ Decoder, Encoder }
 
-final case class AccountTransactionId(baseTransactionId: TransactionId,
-                                      kind: AccountTransactionKind)
+final case class AccountTransactionId(
+    baseTransactionId: TransactionId,
+    kind: AccountTransactionKind
+)
 
 object AccountTransactionId extends AnyValCirceEncoding {
   implicit def decoder: Decoder[AccountTransactionId] = io.circe.generic.semiauto.deriveDecoder
