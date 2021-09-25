@@ -40,7 +40,7 @@ private[aecor] final class DistributedProcessingWorker[F[_]: Async](
 
   var killSwitch: Option[F[Unit]] = None
 
-  override def postStop: Unit =
+  override def postStop(): Unit =
     killSwitch.foreach(dispatcher.unsafeRunSync)
 
   def receive: Receive = { case KeepRunning(workerId) =>

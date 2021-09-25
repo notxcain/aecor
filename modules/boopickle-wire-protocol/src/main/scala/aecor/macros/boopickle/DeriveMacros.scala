@@ -162,6 +162,9 @@ class DeriveMacros(val c: blackbox.Context) {
           method
             .copy(rt = appliedType(symbolOf[Encoded[Any]].toType, outParams.last), body = body)
             .definition
+
+        case _ =>
+          c.abort(c.enclosingPosition, "Method was expected")
       }
       implement(appliedType(algebra, symbolOf[Encoded[Any]].toTypeConstructor), methods)
     }
@@ -194,6 +197,9 @@ class DeriveMacros(val c: blackbox.Context) {
               val members = toStringImpl :: overridableMethodsOf(Invocation).map {
                 case m @ Method(_, _, List(List(ValDef(_, ps, _, _))), _, _) =>
                   m.copy(body = runImplementation(ps)).definition
+
+                case _ =>
+                  c.abort(c.enclosingPosition, "Method was expected")
               }.toList
 
               val invocation = implement(Invocation, members)
@@ -215,6 +221,9 @@ class DeriveMacros(val c: blackbox.Context) {
                   """
 
               q"if (hint == ${name.name.toString}) $pair else $acc"
+
+            case _ =>
+              c.abort(c.enclosingPosition, "Method was expected")
           }
 
       val out = q"""

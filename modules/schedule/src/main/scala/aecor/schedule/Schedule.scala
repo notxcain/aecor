@@ -18,7 +18,6 @@ import akka.NotUsed
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import cats.effect.kernel.Async
-import cats.effect.LiftIO
 import cats.syntax.all._
 import com.datastax.driver.core.utils.UUIDs
 
@@ -45,7 +44,7 @@ object Schedule {
       consumerId: ConsumerId
   )
 
-  def start[F[_]: Async: LiftIO](
+  def start[F[_]: Async](
       entityName: String,
       dayZero: LocalDate,
       clock: Clock[F],

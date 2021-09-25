@@ -246,7 +246,7 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[
                 F.raiseError[ActionResult](error)
           }
       }
-      .pipeTo(self)(sender)
+      .pipeTo(self)(sender())
 
     context.become {
       case ActionResult(`opId`, events, resultBytes) =>

@@ -41,7 +41,7 @@ private[aecor] object GenericAkkaRuntimeActor {
   private[akkageneric] case object Stop
 }
 
-private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]: Async](
+private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]](
     createBehavior: K => F[M[F]],
     idleTimeout: FiniteDuration,
     dispatcher: Dispatcher[F]
@@ -123,7 +123,7 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]:
       .recover { case NonFatal(e) =>
         Result(opId, Failure(e))
       }
-      .pipeTo(self)(sender)
+      .pipeTo(self)(sender())
 
     become {
       case Result(`opId`, value) =>

@@ -3,7 +3,6 @@ package aecor.testkit
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
-import cats.Monad
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import cats.mtl.MonadState
@@ -57,7 +56,7 @@ object StateEventJournal {
     def init[I, E]: State[I, E] = State(Map.empty, Map.empty, Map.empty)
   }
 
-  def apply[F[_]: Monad: MonadState[*[_], A], K, A, E](
+  def apply[F[_]: MonadState[*[_], A], K, A, E](
       lens: Lens[A, State[K, E]],
       tagging: Tagging[K]
   ): StateEventJournal[F, K, A, E] =
@@ -65,7 +64,7 @@ object StateEventJournal {
 
 }
 
-final class StateEventJournal[F[_]: Monad, K, S, E](
+final class StateEventJournal[F[_], K, S, E](
     lens: Lens[S, State[K, E]],
     tagging: Tagging[K]
 )(implicit MS: MonadState[F, S])

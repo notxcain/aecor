@@ -1,4 +1,5 @@
 package aecor.data
+
 import aecor.data.Folded.syntax.{ impossible, _ }
 import aecor.data.Folded.{ Impossible, Next }
 import aecor.{ MonadActionLift, MonadActionLiftReject }
@@ -98,7 +99,7 @@ trait ActionTFunctions {
         fa.xmapEvents(to, from)
     }
 
-  def expandK[F[_]: Functor, S1, S2, E](
+  def expandK[F[_], S1, S2, E](
       update: (S2, S1) => S2
   )(extract: S2 => S1): ActionT[F, S1, E, *] ~> ActionT[F, S2, E, *] =
     new (ActionT[F, S1, E, *] ~> ActionT[F, S2, E, *]) {

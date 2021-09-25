@@ -6,7 +6,6 @@ import akka.NotUsed
 import akka.stream.Materializer
 import akka.stream.scaladsl.Source
 import cats.effect.kernel.Async
-import cats.effect.LiftIO
 import cats.effect.std.Dispatcher
 import cats.syntax.functor._
 
@@ -14,7 +13,7 @@ import scala.collection.immutable._
 import scala.concurrent.duration._
 
 object PeriodicProcessRuntime {
-  def apply[F[_]: Async: LiftIO](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(
+  def apply[F[_]: Async](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(
       implicit materializer: Materializer
   ): F[PeriodicProcessRuntime[F]] =
     Dispatcher[F].allocated
@@ -24,7 +23,7 @@ object PeriodicProcessRuntime {
       )
 }
 
-class PeriodicProcessRuntime[F[_]: Async: LiftIO](
+class PeriodicProcessRuntime[F[_]: Async](
     name: String,
     tickInterval: FiniteDuration,
     processCycle: F[Unit],

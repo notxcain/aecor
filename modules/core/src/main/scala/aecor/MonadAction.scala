@@ -1,7 +1,7 @@
 package aecor
 
 import cats.data.EitherT
-import cats.{ Applicative, Monad }
+import cats.Monad
 
 trait MonadAction[F[_], S, E] extends Monad[F] {
   def read: F[S]
@@ -15,7 +15,7 @@ trait MonadActionReject[F[_], S, E, R] extends MonadAction[F, S, E] {
 }
 
 object MonadActionReject {
-  implicit def eitherTMonadActionRejectInstance[I[_]: Applicative, S, E, R](implicit
+  implicit def eitherTMonadActionRejectInstance[I[_], S, E, R](implicit
       F: MonadAction[I, S, E],
       eitherTMonad: Monad[EitherT[I, R, *]]
   ): MonadActionReject[EitherT[I, R, *], S, E, R] =

@@ -16,7 +16,7 @@ import aecor.schedule.ScheduleState._
 import aecor.schedule.serialization.protobuf.msg
 import cats.implicits._
 import cats.kernel.Eq
-import cats.{ Functor, Monad }
+import cats.Monad
 
 import scala.util.{ Failure, Try }
 
@@ -27,7 +27,7 @@ object DefaultScheduleBucket {
     EventsourcedBehavior(new DefaultScheduleBucket(clock), ScheduleState.fold)
 }
 
-class DefaultScheduleBucket[I[_], F[_]: Functor](clock: F[ZonedDateTime])(implicit
+class DefaultScheduleBucket[I[_], F[_]](clock: F[ZonedDateTime])(implicit
     F: MonadActionLift[I, F, ScheduleState, ScheduleEvent]
 ) extends ScheduleBucket[I] {
 

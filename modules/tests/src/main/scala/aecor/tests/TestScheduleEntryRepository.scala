@@ -1,15 +1,13 @@
-package aecor.tests.e2e
+package aecor.tests
 
 import java.time.LocalDateTime
 
 import aecor.schedule.CassandraScheduleEntryRepository.TimeBucket
-import aecor.schedule.{ ScheduleBucketId, ScheduleEntryRepository }
 import aecor.schedule.ScheduleEntryRepository.ScheduleEntry
+import aecor.schedule.{ ScheduleBucketId, ScheduleEntryRepository }
 import aecor.testkit._
-import monocle.Lens
 import cats.mtl.MonadState
-import cats.implicits._
-
+import cats.syntax.all._
 import monocle.Lens
 
 object TestScheduleEntryRepository {

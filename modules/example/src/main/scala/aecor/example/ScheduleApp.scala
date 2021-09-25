@@ -37,7 +37,7 @@ object ScheduleApp extends IOApp {
         CassandraScheduleEntryRepository.init[F](scheduleEntryRepositoryQueries)
     )
 
-    def runSchedule[F[_]: Async: LiftIO](cassandraSession: CassandraSession) =
+    def runSchedule[F[_]: Async](cassandraSession: CassandraSession) =
       CassandraScheduleEntryRepository[F](cassandraSession, scheduleEntryRepositoryQueries).flatMap(
         scheduleEntryRepository =>
           Schedule.start(
@@ -81,7 +81,7 @@ object ScheduleApp extends IOApp {
           .runWith(Sink.ignore)
       }.void
 
-    def mkApp[F[_]: Async: LiftIO]: F[Unit] =
+    def mkApp[F[_]: Async]: F[Unit] =
       for {
         dispatcher <- Dispatcher[F].allocated.map(_._1)
         session <- createCassandraSession

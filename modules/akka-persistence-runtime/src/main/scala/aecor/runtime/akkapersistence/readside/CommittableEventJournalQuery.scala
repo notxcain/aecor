@@ -1,14 +1,13 @@
 package aecor.runtime.akkapersistence.readside
 
-import aecor.data.{ Committable, ConsumerId, EventTag, TagConsumer }
+import aecor.data.{Committable, ConsumerId, EventTag, TagConsumer}
 import aecor.runtime.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import cats.effect.kernel.Async
+import cats.effect.kernel.{Async, Resource}
 import cats.effect.std.Dispatcher
-import cats.syntax.functor._
 
-final class CommittableEventJournalQuery[F[_]: Async, O, K, E] private[akkapersistence] (
+final class CommittableEventJournalQuery[F[_], O, K, E] private[akkapersistence] (
     underlying: JournalQuery[O, K, E],
     offsetStore: KeyValueStore[F, TagConsumer, O],
     dispatcher: Dispatcher[F]
@@ -45,8 +44,7 @@ private[akkapersistence] object CommittableEventJournalQuery {
   def apply[F[_]: Async, Offset, K, E](
       underlying: JournalQuery[Offset, K, E],
       offsetStore: KeyValueStore[F, TagConsumer, Offset]
-  ): F[CommittableEventJournalQuery[F, Offset, K, E]] =
-    Dispatcher[F].allocated
-      .map(_._1)
+  ): Resource[F, CommittableEventJournalQuery[F, Offset, K, E]] =
+    Dispatcher[F]
       .map(dispatcher => new CommittableEventJournalQuery(underlying, offsetStore, dispatcher))
 }
