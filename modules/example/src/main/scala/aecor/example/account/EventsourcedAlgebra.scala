@@ -54,9 +54,13 @@ final class EventsourcedAlgebra[F[_]](implicit
 }
 
 object EventsourcedAlgebra {
-  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, Rejection, *[_]], F, Option[
-    AccountState
-  ], AccountEvent] =
+  def behavior[F[_]: Monad]: EventsourcedBehavior[EitherK[Algebra, Rejection, *[_]],
+                                                  F,
+                                                  Option[
+                                                    AccountState
+                                                  ],
+                                                  AccountEvent
+  ] =
     EventsourcedBehavior
       .rejectable(new EventsourcedAlgebra, AccountState.fold)
 

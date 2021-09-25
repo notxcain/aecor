@@ -33,9 +33,12 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
     system: ActorSystem,
     journalAdapter: JournalAdapter[O]
 ) {
-  def deploy[M[_[_]]: FunctorK, F[
-      _
-  ], State, Event: PersistentEncoder: PersistentDecoder, K: KeyEncoder: KeyDecoder](
+  def deploy[M[_[_]]: FunctorK,
+             F[_],
+             State,
+             Event: PersistentEncoder: PersistentDecoder,
+             K: KeyEncoder: KeyDecoder
+  ](
       typeName: String,
       behavior: EventsourcedBehavior[M, F, State, Event],
       tagging: Tagging[K],

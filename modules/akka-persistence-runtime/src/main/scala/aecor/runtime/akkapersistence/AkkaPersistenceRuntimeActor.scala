@@ -39,9 +39,12 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[M[_[_]], F[
-      _
-  ]: Async, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
+  def props[M[_[_]],
+            F[_]: Async,
+            I: KeyDecoder,
+            State,
+            Event: PersistentEncoder: PersistentDecoder
+  ](
       entityName: String,
       behavior: EventsourcedBehavior[M, F, State, Event],
       snapshotPolicy: SnapshotPolicy[State],
@@ -83,9 +86,15 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
   * @param idleTimeout
   *   - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[
-    _
-], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[
+    M[_[_]],
+    F[
+        _
+    ],
+    I: KeyDecoder,
+    State,
+    Event: PersistentEncoder: PersistentDecoder
+](
     entityName: String,
     behavior: EventsourcedBehavior[M, F, State, Event],
     snapshotPolicy: SnapshotPolicy[State],
