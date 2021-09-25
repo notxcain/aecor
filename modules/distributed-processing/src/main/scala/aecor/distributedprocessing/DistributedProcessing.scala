@@ -28,7 +28,7 @@ final class DistributedProcessing private (system: ActorSystem) {
       processes: List[Process[F]],
       settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)
   ): F[KillSwitch[F]] =
-    DistributedProcessingWorker.props(processes, name).map { childProps =>
+    DistributedProcessingWorker.props(processes, name).use { childProps =>
       val opts = BackoffOpts
         .onFailure(
           childProps,
@@ -61,12 +61,14 @@ final class DistributedProcessing private (system: ActorSystem) {
       )
       implicit val timeout = Timeout(settings.shutdownTimeout)
 
-      KillSwitch {
-        Async[F].fromFuture {
-          Async[F].delay {
-            regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
-          }
-        }.void
+      Async[F].delay {
+        KillSwitch {
+          Async[F].fromFuture {
+            Async[F].delay {
+              regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
+            }
+          }.void
+        }
       }
     }
 }

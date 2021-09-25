@@ -55,7 +55,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
         journalAdapter.writeJournalId,
         snapshotPolicy.pluginId
       )
-      .map { props =>
+      .use { props =>
         val extractEntityId: ShardRegion.ExtractEntityId = { case EntityCommand(entityId, bytes) =>
           (entityId, AkkaPersistenceRuntimeActor.HandleCommand(bytes))
         }
@@ -78,7 +78,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
 
         val keyEncoder = KeyEncoder[K]
 
-        key =>
+        F.delay { key =>
           M.encoder.mapK(new (Encoded ~> F) {
             implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
@@ -103,6 +103,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
                 }
             }
           })
+        }
       }
 
   def journal[K: KeyDecoder, E: PersistentDecoder]: JournalQuery[O, K, E] =

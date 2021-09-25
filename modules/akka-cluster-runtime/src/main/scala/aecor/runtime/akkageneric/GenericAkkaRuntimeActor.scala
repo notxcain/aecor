@@ -14,10 +14,9 @@ import akka.actor.{ Actor, ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import cats.effect.IO
-import cats.effect.kernel.Async
+import cats.effect.kernel.{ Async, Resource }
 import cats.effect.std.Dispatcher
 import cats.effect.unsafe.IORuntime
-import cats.syntax.all._
 
 import scala.concurrent.duration.FiniteDuration
 import scodec.bits.BitVector
@@ -31,9 +30,8 @@ private[aecor] object GenericAkkaRuntimeActor {
   def props[K: KeyDecoder, M[_[_]]: WireProtocol, F[_]: Async](
       createBehavior: K => F[M[F]],
       idleTimeout: FiniteDuration
-  ): F[Props] =
-    Dispatcher[F].allocated
-      .map(_._1)
+  ): Resource[F, Props] =
+    Dispatcher[F]
       .map(dispatcher =>
         Props(new GenericAkkaRuntimeActor[K, M, F](createBehavior, idleTimeout, dispatcher))
       )

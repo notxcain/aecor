@@ -31,7 +31,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
   )(implicit M: WireProtocol[M], F: Async[F]): F[K => M[F]] =
     GenericAkkaRuntimeActor
       .props[K, M, F](createBehavior, settings.idleTimeout)
-      .map { props =>
+      .use { props =>
         val extractEntityId: ShardRegion.ExtractEntityId = { case KeyedCommand(entityId, c) =>
           (entityId, GenericAkkaRuntimeActor.Command(c))
         }
@@ -54,7 +54,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
 
         val keyEncoder = KeyEncoder[K]
 
-        key =>
+        F.delay { key =>
           M.encoder.mapK(new (Encoded ~> F) {
             implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
@@ -75,5 +75,6 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
                 }
             }
           })
+        }
       }
 }

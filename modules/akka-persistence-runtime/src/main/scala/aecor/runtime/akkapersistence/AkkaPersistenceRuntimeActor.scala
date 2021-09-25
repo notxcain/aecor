@@ -24,7 +24,7 @@ import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.data.Chain
-import cats.effect.kernel.Async
+import cats.effect.kernel.{ Async, Resource }
 import cats.effect.std.Dispatcher
 import cats.effect.unsafe.IORuntime
 import cats.implicits._
@@ -52,9 +52,8 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
       idleTimeout: FiniteDuration,
       journalPluginId: String,
       snapshotPluginId: String
-  )(implicit M: WireProtocol[M]): F[Props] =
-    Dispatcher[F].allocated
-      .map(_._1)
+  )(implicit M: WireProtocol[M]): Resource[F, Props] =
+    Dispatcher[F]
       .map(dispatcher =>
         Props(
           new AkkaPersistenceRuntimeActor(
