@@ -2,7 +2,7 @@ import ReleaseTransformations._
 import sbtrelease.Version.Bump
 
 lazy val buildSettings = inThisBuild(
-  Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.6", "2.12.14"))
+  Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.6", "2.12.15"))
 )
 
 lazy val akkaVersion = "2.5.26"
