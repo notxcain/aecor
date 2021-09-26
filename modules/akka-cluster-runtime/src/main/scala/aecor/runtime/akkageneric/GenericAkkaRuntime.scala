@@ -10,7 +10,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern._
 import akka.util.Timeout
-import cats.effect.kernel.Async
+import cats.effect.kernel.{ Async, Resource }
 import cats.syntax.all._
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
@@ -28,10 +28,10 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
       typeName: String,
       createBehavior: K => F[M[F]],
       settings: GenericAkkaRuntimeSettings = GenericAkkaRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Async[F]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], F: Async[F]): Resource[F, K => M[F]] =
     GenericAkkaRuntimeActor
       .props[K, M, F](createBehavior, settings.idleTimeout)
-      .use { props =>
+      .map { props =>
         val extractEntityId: ShardRegion.ExtractEntityId = { case KeyedCommand(entityId, c) =>
           (entityId, GenericAkkaRuntimeActor.Command(c))
         }
@@ -54,7 +54,7 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
 
         val keyEncoder = KeyEncoder[K]
 
-        F.delay { key =>
+        key =>
           M.encoder.mapK(new (Encoded ~> F) {
             implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
@@ -75,6 +75,5 @@ final class GenericAkkaRuntime private (system: ActorSystem) {
                 }
             }
           })
-        }
       }
 }

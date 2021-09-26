@@ -3,6 +3,7 @@ package aecor.runtime.akkageneric
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.IO
+import cats.effect.kernel.Resource
 import cats.effect.unsafe.IORuntime
 import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
@@ -36,19 +37,22 @@ class GenericRuntimeSpec
   override def afterAll: Unit =
     TestKit.shutdownActorSystem(system)
 
-  def runCounters(name: String): IO[CounterId => Counter[IO]] =
+  def runCounters(name: String): Resource[IO, CounterId => Counter[IO]] =
     GenericAkkaRuntime(system)
       .runBehavior[CounterId, Counter, IO](name, (_: CounterId) => Counter.inmem[IO])
 
   test("routing") {
-    val program = for {
-      counters <- runCounters("CounterFoo")
-      first = counters(CounterId("1"))
-      second = counters(CounterId("2"))
-      _ <- first.increment
-      _2 <- second.increment
-      _1 <- first.increment
-    } yield (_1, _2)
+    val program =
+      runCounters("CounterFoo").use { counters =>
+        val first = counters(CounterId("1"))
+        val second = counters(CounterId("2"))
+
+        for {
+          _ <- first.increment
+          _2 <- second.increment
+          _1 <- first.increment
+        } yield (_1, _2)
+      }
 
     val (first, second) = program.unsafeRunSync()
     first shouldBe 2L
@@ -56,12 +60,15 @@ class GenericRuntimeSpec
   }
 
   test("passivation") {
-    val program = for {
-      counters <- runCounters("CounterBar")
-      first = counters(CounterId("1"))
-      _1 <- first.increment
-      afterPassivation <- IO.sleep(2.seconds) >> first.value
-    } yield (_1, afterPassivation)
+    val program =
+      runCounters("CounterBar").use { counters =>
+        val first = counters(CounterId("1"))
+
+        for {
+          _1 <- first.increment
+          afterPassivation <- IO.sleep(2.seconds) >> first.value
+        } yield (_1, afterPassivation)
+      }
 
     val (beforePassivation, afterPassivation) = program.unsafeRunSync()
     beforePassivation shouldBe 1

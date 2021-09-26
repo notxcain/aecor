@@ -17,11 +17,10 @@ import cats.effect.IO
 import cats.effect.kernel.{ Async, Resource }
 import cats.effect.std.Dispatcher
 import cats.effect.unsafe.IORuntime
-
-import scala.concurrent.duration.FiniteDuration
 import scodec.bits.BitVector
 import scodec.{ Attempt, Encoder }
 
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.ExecutionContext
 import scala.util.control.NonFatal
 import scala.util.{ Failure, Success, Try }
@@ -71,7 +70,7 @@ private[aecor] final class GenericAkkaRuntimeActor[K: KeyDecoder, M[_[_]], F[_]]
 
   setIdleTimeout()
 
-  createBehavior(key).unsafeToIO(dispatcher).unsafeToFuture() pipeTo self
+  dispatcher.unsafeToFuture(createBehavior(key)).map(Actions) pipeTo self
 
   override def receive: Receive = {
     case Actions(actions) =>

@@ -13,8 +13,8 @@ import scala.collection.immutable._
 import scala.concurrent.duration._
 
 object PeriodicProcessRuntime {
-  def apply[F[_]: Async](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(
-      implicit materializer: Materializer
+  def apply[F[_]: Async](name: String, tickInterval: FiniteDuration, processCycle: F[Unit])(implicit
+      materializer: Materializer
   ): F[PeriodicProcessRuntime[F]] =
     Dispatcher[F].allocated
       .map(_._1)

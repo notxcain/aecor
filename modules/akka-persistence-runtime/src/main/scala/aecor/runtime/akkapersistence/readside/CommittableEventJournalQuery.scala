@@ -1,10 +1,10 @@
 package aecor.runtime.akkapersistence.readside
 
-import aecor.data.{Committable, ConsumerId, EventTag, TagConsumer}
+import aecor.data.{ Committable, ConsumerId, EventTag, TagConsumer }
 import aecor.runtime.KeyValueStore
 import akka.NotUsed
 import akka.stream.scaladsl.Source
-import cats.effect.kernel.{Async, Resource}
+import cats.effect.kernel.{ Async, Resource }
 import cats.effect.std.Dispatcher
 
 final class CommittableEventJournalQuery[F[_], O, K, E] private[akkapersistence] (
