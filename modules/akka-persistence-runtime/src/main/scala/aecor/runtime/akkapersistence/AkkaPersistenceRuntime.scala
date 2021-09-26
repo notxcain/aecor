@@ -12,7 +12,7 @@ import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ShardRegion }
 import akka.pattern.ask
 import akka.util.Timeout
-import cats.effect.kernel.Async
+import cats.effect.kernel.{ Async, Resource }
 import cats.syntax.all._
 import cats.tagless.FunctorK
 import cats.tagless.syntax.functorK._
@@ -44,7 +44,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
       tagging: Tagging[K],
       snapshotPolicy: SnapshotPolicy[State] = SnapshotPolicy.never,
       settings: AkkaPersistenceRuntimeSettings = AkkaPersistenceRuntimeSettings.default(system)
-  )(implicit M: WireProtocol[M], F: Async[F]): F[K => M[F]] =
+  )(implicit M: WireProtocol[M], F: Async[F]): Resource[F, K => M[F]] =
     AkkaPersistenceRuntimeActor
       .props(
         typeName,
@@ -55,7 +55,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
         journalAdapter.writeJournalId,
         snapshotPolicy.pluginId
       )
-      .use { props =>
+      .map { props =>
         val extractEntityId: ShardRegion.ExtractEntityId = { case EntityCommand(entityId, bytes) =>
           (entityId, AkkaPersistenceRuntimeActor.HandleCommand(bytes))
         }
@@ -78,7 +78,7 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
 
         val keyEncoder = KeyEncoder[K]
 
-        F.delay { key =>
+        key =>
           M.encoder.mapK(new (Encoded ~> F) {
             implicit val askTimeout: Timeout = Timeout(settings.askTimeout)
 
@@ -103,7 +103,6 @@ class AkkaPersistenceRuntime[O] private[akkapersistence] (
                 }
             }
           })
-        }
       }
 
   def journal[K: KeyDecoder, E: PersistentDecoder]: JournalQuery[O, K, E] =

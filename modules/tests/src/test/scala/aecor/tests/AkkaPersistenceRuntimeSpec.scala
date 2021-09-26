@@ -8,6 +8,7 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
 import cats.effect.IO
+import cats.effect.kernel.Resource
 import com.typesafe.config.{ Config, ConfigFactory }
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuiteLike
@@ -60,23 +61,27 @@ class AkkaPersistenceRuntimeSpec
   val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
   test("Runtime should work") {
-    val deployCounters: IO[CounterId => Counter[IO]] =
+    val deployCounters: Resource[IO, CounterId => Counter[IO]] =
       runtime.deploy(
         "Counter",
         CounterBehavior.instance[IO],
         Tagging.const[CounterId](CounterEvent.tag)
       )
-    val program = for {
-      counters <- deployCounters
-      first = counters(CounterId("1"))
-      second = counters(CounterId("2"))
-      _ <- first.increment
-      _ <- second.increment
-      _2 <- second.value
-      _ <- first.decrement
-      _1 <- first.value
-      afterPassivation <- IO.sleep(2.seconds) >> second.value
-    } yield (_1, _2, afterPassivation)
+
+    val program =
+      deployCounters.use { counters =>
+        val first = counters(CounterId("1"))
+        val second = counters(CounterId("2"))
+
+        for {
+          _ <- first.increment
+          _ <- second.increment
+          _2 <- second.value
+          _ <- first.decrement
+          _1 <- first.value
+          afterPassivation <- IO.sleep(2.seconds) >> second.value
+        } yield (_1, _2, afterPassivation)
+      }
 
     program.unsafeRunSync() shouldEqual ((0L, 1L, 1L))
   }

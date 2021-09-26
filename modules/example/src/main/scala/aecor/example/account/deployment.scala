@@ -1,4 +1,5 @@
 package aecor.example.account
+
 import java.util.UUID
 
 import aecor.example.common.Timestamp
@@ -17,4 +18,6 @@ object deployment {
         EventsourcedAlgebra.tagging
       )
       .map(Eventsourced.Entities.rejectable(_))
+      .allocated
+      .map(_._1)
 }

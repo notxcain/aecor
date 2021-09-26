@@ -23,4 +23,6 @@ object deployment {
         EventsourcedAlgebra.tagging
       )
       .map(Eventsourced.Entities.rejectable(_))
+      .allocated
+      .map(_._1)
 }

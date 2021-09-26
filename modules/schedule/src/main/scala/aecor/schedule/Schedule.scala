@@ -111,10 +111,11 @@ object Schedule {
         .committable(offsetStore)
         .flatMap(j => DefaultSchedule(clock, buckets, settings.bucketLength, j, eventTag))
 
-    for {
-      buckets <- deployBuckets
-      _ <- startProcess(buckets)
-      schedule <- createSchedule(buckets)
-    } yield schedule
+    deployBuckets.use { buckets =>
+      for {
+        _ <- startProcess(buckets)
+        schedule <- createSchedule(buckets)
+      } yield schedule
+    }
   }
 }
