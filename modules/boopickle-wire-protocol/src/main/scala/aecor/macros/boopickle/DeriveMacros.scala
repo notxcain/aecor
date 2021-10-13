@@ -10,11 +10,13 @@ class DeriveMacros(val c: blackbox.Context) {
   import c.universe._
 
   /** A reified method definition with some useful methods for transforming it. */
-  case class Method(m: MethodSymbol,
-                    tps: List[TypeDef],
-                    pss: List[List[ValDef]],
-                    rt: Type,
-                    body: Tree) {
+  case class Method(
+      m: MethodSymbol,
+      tps: List[TypeDef],
+      pss: List[List[ValDef]],
+      rt: Type,
+      body: Tree
+  ) {
     def typeArgs: List[Type] = for (tp <- tps) yield typeRef(NoPrefix, tp.symbol, Nil)
     def paramLists(f: Type => Type): List[List[ValDef]] =
       for (ps <- pss)
@@ -31,23 +33,23 @@ class DeriveMacros(val c: blackbox.Context) {
   def overridableMembersOf(tpe: Type): Iterable[Symbol] = {
     import definitions._
     val exclude = Set[Symbol](AnyClass, AnyRefClass, AnyValClass, ObjectClass)
-    tpe.members.filterNot(
-      m =>
-        m.isConstructor || m.isFinal || m.isImplementationArtifact || m.isSynthetic || exclude(
-          m.owner
+    tpe.members.filterNot(m =>
+      m.isConstructor || m.isFinal || m.isImplementationArtifact || m.isSynthetic || exclude(
+        m.owner
       )
     )
   }
 
-  /** Temporarily refresh type parameter names, type-check the `tree` and restore the original names.
+  /** Temporarily refresh type parameter names, type-check the `tree` and restore the original
+    * names.
     *
     * The purpose is to avoid warnings about type parameter shadowing, which can be problematic when
-    * `-Xfatal-warnings` is enabled. We know the warnings are harmless because we deal with types directly.
-    * Unfortunately `c.typecheck(tree, silent = true)` does not suppress warnings.
+    * `-Xfatal-warnings` is enabled. We know the warnings are harmless because we deal with types
+    * directly. Unfortunately `c.typecheck(tree, silent = true)` does not suppress warnings.
     */
   def typeCheckWithFreshTypeParams(tree: Tree): Tree = {
-    val typeParams = tree.collect {
-      case method: DefDef => method.tparams.map(_.symbol)
+    val typeParams = tree.collect { case method: DefDef =>
+      method.tparams.map(_.symbol)
     }.flatten
 
     val originalNames = for (tp <- typeParams) yield {
@@ -64,7 +66,7 @@ class DeriveMacros(val c: blackbox.Context) {
 
   /** Delegate the definition of type members and aliases in `algebra`. */
   def delegateTypes(algebra: Type, members: Iterable[Symbol])(
-    rhs: (TypeSymbol, List[Type]) => Type
+      rhs: (TypeSymbol, List[Type]) => Type
   ): Iterable[Tree] =
     for (member <- members if member.isType) yield {
       val tpe = member.asType
@@ -80,9 +82,9 @@ class DeriveMacros(val c: blackbox.Context) {
         val method = member.asMethod
         val signature = method.typeSignatureIn(algebra)
         val typeParams = for (tp <- signature.typeParams) yield typeDef(tp)
-        val paramLists = for (ps <- signature.paramLists)
-          yield
-            for (p <- ps) yield {
+        val paramLists =
+          for (ps <- signature.paramLists)
+            yield for (p <- ps) yield {
               // Only preserve the implicit modifier (e.g. drop the default parameter flag).
               val modifiers = if (p.isImplicit) Modifiers(Flag.IMPLICIT) else Modifiers()
               ValDef(modifiers, p.name.toTermName, TypeTree(p.typeSignatureIn(algebra)), EmptyTree)
@@ -97,7 +99,8 @@ class DeriveMacros(val c: blackbox.Context) {
         )
       }
 
-  /** Type-check a definition of type `instance` with stubbed methods to gain more type information. */
+  /** Type-check a definition of type `instance` with stubbed methods to gain more type information.
+    */
   def declare(instance: Type): Tree = {
     val stubs =
       overridableMethodsOf(instance).map(_.definition)
@@ -123,16 +126,16 @@ class DeriveMacros(val c: blackbox.Context) {
     }
   }
 
-  /** Create a new instance of `typeClass` for `algebra`.
-    * `rhs` should define a mapping for each method (by name) to an implementation function based on type signature.
+  /** Create a new instance of `typeClass` for `algebra`. `rhs` should define a mapping for each
+    * method (by name) to an implementation function based on type signature.
     */
   def instantiate(typeClass: TypeSymbol, params: Type*)(rhs: (String, Type => Tree)*): Tree = {
     val impl = rhs.toMap
     val TcA = appliedType(typeClass, params: _*)
     val declaration @ ClassDef(_, _, _, Template(parents, self, members)) = declare(TcA)
-    val implementations = for (member <- members)
-      yield
-        member match {
+    val implementations =
+      for (member <- members)
+        yield member match {
           case dd: DefDef =>
             val method = member.symbol.asMethod
             impl
@@ -159,6 +162,9 @@ class DeriveMacros(val c: blackbox.Context) {
           method
             .copy(rt = appliedType(symbolOf[Encoded[Any]].toType, outParams.last), body = body)
             .definition
+
+        case _ =>
+          c.abort(c.enclosingPosition, "Method was expected")
       }
       implement(appliedType(algebra, symbolOf[Encoded[Any]].toTypeConstructor), methods)
     }
@@ -191,6 +197,9 @@ class DeriveMacros(val c: blackbox.Context) {
               val members = toStringImpl :: overridableMethodsOf(Invocation).map {
                 case m @ Method(_, _, List(List(ValDef(_, ps, _, _))), _, _) =>
                   m.copy(body = runImplementation(ps)).definition
+
+                case _ =>
+                  c.abort(c.enclosingPosition, "Method was expected")
               }.toList
 
               val invocation = implement(Invocation, members)
@@ -212,6 +221,9 @@ class DeriveMacros(val c: blackbox.Context) {
                   """
 
               q"if (hint == ${name.name.toString}) $pair else $acc"
+
+            case _ =>
+              c.abort(c.enclosingPosition, "Method was expected")
           }
 
       val out = q"""

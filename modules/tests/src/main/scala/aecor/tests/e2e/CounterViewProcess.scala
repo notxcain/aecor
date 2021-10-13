@@ -7,7 +7,7 @@ import cats.implicits._
 
 object CounterViewProcess {
   def apply[F[_]: Monad](
-    repo: CounterViewRepository[F]
+      repo: CounterViewRepository[F]
   ): EntityEvent[CounterId, CounterEvent] => F[Unit] = {
     case EntityEvent(id, _, CounterIncremented) =>
       for {

@@ -27,8 +27,8 @@ trait FunctionBuilderInstances {
         _.impossible
     }
 
-  implicit def hCons[A, HT <: HList, IT <: Coproduct, Out](
-    implicit tailBuilder: FunctionBuilder[HT, IT, Out]
+  implicit def hCons[A, HT <: HList, IT <: Coproduct, Out](implicit
+      tailBuilder: FunctionBuilder[HT, IT, Out]
   ): FunctionBuilder[(A => Out) :: HT, A :+: IT, Out] =
     new FunctionBuilder[(A => Out) :: HT, A :+: IT, Out] {
       def apply(handlers: (A => Out) :: HT): A :+: IT => Out =
@@ -40,9 +40,9 @@ trait LowerFunctionBuilderInstances {
   implicit def function[A, B]: FunctionBuilder[A => B, A, B] = new FunctionBuilder[A => B, A, B] {
     override def apply(handlers: (A) => B): (A) => B = handlers
   }
-  implicit def genBuilder[A, Repr, In, Out](
-    implicit gen: Generic.Aux[A, Repr],
-    fromRepr: FunctionBuilder[Repr, In, Out]
+  implicit def genBuilder[A, Repr, In, Out](implicit
+      gen: Generic.Aux[A, Repr],
+      fromRepr: FunctionBuilder[Repr, In, Out]
   ): FunctionBuilder[A, In, Out] =
     new FunctionBuilder[A, In, Out] {
       override def apply(f: A): (In) => Out =
