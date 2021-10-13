@@ -9,7 +9,8 @@ import cats.implicits._
 
 private[kafkadistributedprocessing] final case class Channel[F[_]](watch: F[CompletionCallback[F]],
                                                                    close: F[Unit],
-                                                                   call: F[Unit])
+                                                                   call: F[Unit]
+)
 
 private[kafkadistributedprocessing] object Channel {
   type CompletionCallback[F[_]] = F[Unit]
@@ -20,12 +21,12 @@ private[kafkadistributedprocessing] object Channel {
       close = closed.complete(()).void
       watch = deferredCallback.get
       call = Deferred[F, Unit]
-        .flatMap { deferredCompletion =>
-          deferredCallback
-            .complete(deferredCompletion.complete(()).attempt.void) >> deferredCompletion.get
-        }
-        .race(closed.get)
-        .void
+               .flatMap { deferredCompletion =>
+                 deferredCallback
+                   .complete(deferredCompletion.complete(()).attempt.void) >> deferredCompletion.get
+               }
+               .race(closed.get)
+               .void
 
     } yield internal.Channel(watch, close, call)
 }
