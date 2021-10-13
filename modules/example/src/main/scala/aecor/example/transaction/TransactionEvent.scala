@@ -10,10 +10,11 @@ import io.circe.generic.auto._
 sealed abstract class TransactionEvent extends Product with Serializable
 
 object TransactionEvent {
-  final case class TransactionCreated(fromAccount: From[AccountId],
-                                      toAccount: To[AccountId],
-                                      amount: Amount)
-      extends TransactionEvent
+  final case class TransactionCreated(
+      fromAccount: From[AccountId],
+      toAccount: To[AccountId],
+      amount: Amount
+  ) extends TransactionEvent
 
   final case object TransactionAuthorized extends TransactionEvent
 

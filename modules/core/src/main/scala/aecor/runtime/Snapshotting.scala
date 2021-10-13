@@ -5,11 +5,14 @@ import cats.Applicative
 import cats.implicits.none
 import cats.implicits._
 
-final class SnapshotEach[F[_]: Applicative, K, S](interval: Long,
-                                                  store: KeyValueStore[F, K, Versioned[S]])
-    extends Snapshotting[F, K, S] {
+final class SnapshotEach[F[_]: Applicative, K, S](
+    interval: Long,
+    store: KeyValueStore[F, K, Versioned[S]]
+) extends Snapshotting[F, K, S] {
   def snapshot(key: K, currentState: Versioned[S], nextState: Versioned[S]): F[Unit] =
-    if (nextState.version % interval == 0 || ((currentState.version / interval) - (nextState.version / interval)) > 0)
+    if (
+      nextState.version % interval == 0 || ((currentState.version / interval) - (nextState.version / interval)) > 0
+    )
       store.setValue(key, nextState)
     else
       ().pure[F]
@@ -33,8 +36,8 @@ trait Snapshotting[F[_], K, S] {
 
 object Snapshotting {
   def eachVersion[F[_]: Applicative, K, S](
-    interval: Long,
-    store: KeyValueStore[F, K, Versioned[S]]
+      interval: Long,
+      store: KeyValueStore[F, K, Versioned[S]]
   ): Snapshotting[F, K, S] =
     new SnapshotEach(interval, store)
 

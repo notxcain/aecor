@@ -1,4 +1,5 @@
 package aecor.example.transaction
+
 import java.util.UUID
 
 import aecor.example.common.Timestamp
@@ -6,13 +7,15 @@ import aecor.example.transaction.transaction.Transactions
 import aecor.runtime.Eventsourced
 import aecor.runtime.akkapersistence.AkkaPersistenceRuntime
 import aecor.util.Clock
+import cats.effect.kernel.Async
 import cats.implicits._
-import cats.effect.{ ContextShift, Effect }
 import scodec.codecs.implicits._
 
 object deployment {
-  def deploy[F[_]: Effect: ContextShift](runtime: AkkaPersistenceRuntime[UUID],
-                                         clock: Clock[F]): F[Transactions[F]] =
+  def deploy[F[_]: Async](
+      runtime: AkkaPersistenceRuntime[UUID],
+      clock: Clock[F]
+  ): F[Transactions[F]] =
     runtime
       .deploy(
         "Transaction",
@@ -20,4 +23,6 @@ object deployment {
         EventsourcedAlgebra.tagging
       )
       .map(Eventsourced.Entities.rejectable(_))
+      .allocated
+      .map(_._1)
 }

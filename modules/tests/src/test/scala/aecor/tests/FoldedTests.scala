@@ -59,9 +59,15 @@ class FoldedTests
   }
 
   test("Cokleisli associativity") {
-    forAll { (l: Folded[Long], f: Folded[Long] => Int, g: Folded[Int] => Char, h: Folded[Char] => String) =>
-      val isEq = CoflatMapLaws[Folded].cokleisliAssociativity(f, g, h, l)
-      isEq.lhs should ===(isEq.rhs)
+    forAll {
+      (
+          l: Folded[Long],
+          f: Folded[Long] => Int,
+          g: Folded[Int] => Char,
+          h: Folded[Char] => String
+      ) =>
+        val isEq = CoflatMapLaws[Folded].cokleisliAssociativity(f, g, h, l)
+        isEq.lhs should ===(isEq.rhs)
     }
   }
 

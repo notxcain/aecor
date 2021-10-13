@@ -5,8 +5,7 @@ import java.util.UUID
 abstract class KeyEncoder[A] { self =>
   def apply(a: A): String
 
-  /**
-    * Construct an instance for type `B` from an instance for type `A`.
+  /** Construct an instance for type `B` from an instance for type `A`.
     */
   final def contramap[B](f: B => A): KeyEncoder[B] = new KeyEncoder[B] {
     final def apply(key: B): String = self(f(key))

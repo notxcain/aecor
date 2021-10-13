@@ -37,8 +37,8 @@ object notification {
     }
   }
 
-  def notificationActions[F[_]](
-    implicit F: MonadAction[F, NotificationState, NotificationEvent]
+  def notificationActions[F[_]](implicit
+      F: MonadAction[F, NotificationState, NotificationEvent]
   ): Notification[F] = new Notification[F] {
     import F._
     override def create(counterId: CounterId): F[Unit] = append(NotificationCreated(counterId))
@@ -46,6 +46,6 @@ object notification {
   }
 
   def behavior[F[_]: Monad]
-    : EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent] =
+      : EventsourcedBehavior[Notification, F, NotificationState, NotificationEvent] =
     EventsourcedBehavior(notificationActions, Fold(NotificationState(false), _.applyEvent(_)))
 }

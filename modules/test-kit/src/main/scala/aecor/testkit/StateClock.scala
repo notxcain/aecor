@@ -17,7 +17,8 @@ class StateClock[F[_]: MonadState[*[_], S], S](zoneId: ZoneId, S: Lens[S, Instan
 }
 
 object StateClock {
-  def apply[F[_], S](zoneId: ZoneId,
-                     S: Lens[S, Instant])(implicit F0: MonadState[F, S]): StateClock[F, S] =
+  def apply[F[_], S](zoneId: ZoneId, S: Lens[S, Instant])(implicit
+      F0: MonadState[F, S]
+  ): StateClock[F, S] =
     new StateClock[F, S](zoneId, S)
 }

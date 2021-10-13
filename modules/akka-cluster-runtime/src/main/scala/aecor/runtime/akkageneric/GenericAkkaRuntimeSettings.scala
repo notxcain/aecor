@@ -7,17 +7,20 @@ import akka.cluster.sharding.ClusterShardingSettings
 
 import scala.concurrent.duration._
 
-final case class GenericAkkaRuntimeSettings(numberOfShards: Int,
-                                            idleTimeout: FiniteDuration,
-                                            askTimeout: FiniteDuration,
-                                            clusterShardingSettings: ClusterShardingSettings)
+final case class GenericAkkaRuntimeSettings(
+    numberOfShards: Int,
+    idleTimeout: FiniteDuration,
+    askTimeout: FiniteDuration,
+    clusterShardingSettings: ClusterShardingSettings
+)
 
 object GenericAkkaRuntimeSettings {
 
-  /**
-    * Reads config from `aecor.akka-runtime`, see reference.conf for details
-    * @param system Actor system to get config from
-    * @return default settings
+  /** Reads config from `aecor.akka-runtime`, see reference.conf for details
+    * @param system
+    *   Actor system to get config from
+    * @return
+    *   default settings
     */
   def default(system: ActorSystem): GenericAkkaRuntimeSettings = {
     val config = system.settings.config.getConfig("aecor.generic-akka-runtime")

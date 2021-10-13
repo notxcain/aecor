@@ -8,16 +8,17 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit
 import cats.effect.IO
-import cats.implicits._
+import cats.effect.kernel.Resource
 import com.typesafe.config.{ Config, ConfigFactory }
-import org.scalatest.matchers.should.Matchers
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuiteLike
+import org.scalatest.matchers.should.Matchers
 
 import scala.concurrent.duration._
 
 object AkkaPersistenceRuntimeSpec {
-  def conf: Config = ConfigFactory.parseString(s"""
+  def conf: Config = ConfigFactory
+    .parseString(s"""
         akka {
           cluster {
             seed-nodes = [
@@ -35,7 +36,9 @@ object AkkaPersistenceRuntimeSpec {
           }
         }
         aecor.generic-akka-runtime.idle-timeout = 1s
-     """).withFallback(CassandraLifecycle.config).withFallback(ConfigFactory.load())
+     """)
+    .withFallback(CassandraLifecycle.config)
+    .withFallback(ConfigFactory.load())
 }
 
 class AkkaPersistenceRuntimeSpec
@@ -43,14 +46,13 @@ class AkkaPersistenceRuntimeSpec
     with AnyFunSuiteLike
     with Matchers
     with ScalaFutures
-    with CassandraLifecycle {
+    with CassandraLifecycle
+    with IOSupport {
 
   override def systemName = system.name
 
   override implicit val patienceConfig = PatienceConfig(30.seconds, 150.millis)
 
-  val timer = IO.timer(system.dispatcher)
-  implicit val contextShift = IO.contextShift(system.dispatcher)
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll()
@@ -59,23 +61,27 @@ class AkkaPersistenceRuntimeSpec
   val runtime = AkkaPersistenceRuntime(system, CassandraJournalAdapter(system))
 
   test("Runtime should work") {
-    val deployCounters: IO[CounterId => Counter[IO]] =
+    val deployCounters: Resource[IO, CounterId => Counter[IO]] =
       runtime.deploy(
         "Counter",
         CounterBehavior.instance[IO],
         Tagging.const[CounterId](CounterEvent.tag)
       )
-    val program = for {
-      counters <- deployCounters
-      first = counters(CounterId("1"))
-      second = counters(CounterId("2"))
-      _ <- first.increment
-      _ <- second.increment
-      _2 <- second.value
-      _ <- first.decrement
-      _1 <- first.value
-      afterPassivation <- timer.sleep(2.seconds) >> second.value
-    } yield (_1, _2, afterPassivation)
+
+    val program =
+      deployCounters.use { counters =>
+        val first = counters(CounterId("1"))
+        val second = counters(CounterId("2"))
+
+        for {
+          _ <- first.increment
+          _ <- second.increment
+          _2 <- second.value
+          _ <- first.decrement
+          _1 <- first.value
+          afterPassivation <- IO.sleep(2.seconds) >> second.value
+        } yield (_1, _2, afterPassivation)
+      }
 
     program.unsafeRunSync() shouldEqual ((0L, 1L, 1L))
   }
