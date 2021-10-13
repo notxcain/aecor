@@ -19,14 +19,14 @@ object SnapshotPolicy {
   def never[E]: SnapshotPolicy[E] = Never
 
   def eachNumberOfEvents[E: PersistentEncoder: PersistentDecoder](
-    numberOfEvents: Int,
-    pluginId: String
+      numberOfEvents: Int,
+      pluginId: String
   ): SnapshotPolicy[E] = EachNumberOfEvents(numberOfEvents, pluginId)
 
   private[akkapersistence] case object Never extends SnapshotPolicy[Nothing]
 
   private[akkapersistence] final case class EachNumberOfEvents[
-    State: PersistentEncoder: PersistentDecoder
+      State: PersistentEncoder: PersistentDecoder
   ](numberOfEvents: Int, snapshotPluginId: String)
       extends SnapshotPolicy[State] {
     def encode(state: State): PersistentRepr = PersistentEncoder[State].encode(state)

@@ -28,7 +28,7 @@ class MessageSerializer(val system: ExtendedActorSystem)
     case HandleCommand(_)    => HandleCommandManifest
     case EntityCommand(_, _) => EntityCommandManifest
     case CommandResult(_)    => CommandResultManifest
-    case x                   => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
+    case x => throw new IllegalArgumentException(s"Serialization of [$x] is not supported")
   }
 
   override def toBinary(o: AnyRef): Array[Byte] = o match {

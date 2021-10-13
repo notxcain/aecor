@@ -6,10 +6,11 @@ import akka.actor.ActorSystem
 import akka.persistence.cassandra.query.scaladsl.CassandraReadJournal
 import akka.persistence.query.{ NoOffset, Offset, PersistenceQuery, TimeBasedUUID }
 
-final class CassandraJournalAdapter(system: ActorSystem,
-                                    val writeJournalId: String,
-                                    readJournalId: String)
-    extends JournalAdapter[UUID] {
+final class CassandraJournalAdapter(
+    system: ActorSystem,
+    val writeJournalId: String,
+    readJournalId: String
+) extends JournalAdapter[UUID] {
 
   override def createReadJournal: CassandraReadJournal =
     PersistenceQuery(system).readJournalFor[CassandraReadJournal](readJournalId)
@@ -28,8 +29,10 @@ final class CassandraJournalAdapter(system: ActorSystem,
 
 object CassandraJournalAdapter {
   val DefaultWriteJournalIdentifier: String = "cassandra-journal"
-  def apply(system: ActorSystem,
-            writeJournalId: String = DefaultWriteJournalIdentifier,
-            readJournalId: String = CassandraReadJournal.Identifier): CassandraJournalAdapter =
+  def apply(
+      system: ActorSystem,
+      writeJournalId: String = DefaultWriteJournalIdentifier,
+      readJournalId: String = CassandraReadJournal.Identifier
+  ): CassandraJournalAdapter =
     new CassandraJournalAdapter(system, writeJournalId, readJournalId)
 }
