@@ -13,14 +13,16 @@ private[aecor] trait EventsourcedState[F[_], K, S, E] {
 }
 
 private[aecor] object EventsourcedState {
-  def apply[F[_]: Sync, K, E, S](fold: Fold[Folded, S, E],
-                                 journal: EventJournal[F, K, E]): EventsourcedState[F, K, S, E] =
+  def apply[F[_]: Sync, K, E, S](
+      fold: Fold[Folded, S, E],
+      journal: EventJournal[F, K, E]
+  ): EventsourcedState[F, K, S, E] =
     new DefaultEventsourcedState(fold, journal)
 }
 
 private[aecor] final class DefaultEventsourcedState[F[_], K, E, S](
-  fold: Fold[Folded, S, E],
-  journal: EventJournal[F, K, E]
+    fold: Fold[Folded, S, E],
+    journal: EventJournal[F, K, E]
 )(implicit F: Sync[F])
     extends EventsourcedState[F, K, S, E] {
 
@@ -42,25 +44,27 @@ private[aecor] final class DefaultEventsourcedState[F[_], K, E, S](
       .lastOrError
   }
 
-  override def run[A](key: K,
-                      state: Versioned[S],
-                      action: ActionT[F, S, E, A]): F[(Versioned[S], A)] =
+  override def run[A](
+      key: K,
+      state: Versioned[S],
+      action: ActionT[F, S, E, A]
+  ): F[(Versioned[S], A)] =
     for {
       result <- action
-                 .expand[Versioned[S]]((versioned, s) => versioned.copy(value = s))(_.value)
-                 .zipWithRead
-                 .run(versionedFold.init(state))
+                  .expand[Versioned[S]]((versioned, s) => versioned.copy(value = s))(_.value)
+                  .zipWithRead
+                  .run(versionedFold.init(state))
       (es, (a, nextState)) <- result match {
-                               case Next(a) => a.pure[F]
-                               case Folded.Impossible =>
-                                 F.raiseError[(Chain[E], (A, Versioned[S]))](
-                                   new IllegalArgumentException(
-                                     s"Failed to run action [$action] against state [$state]"
-                                   )
-                                 )
-                             }
+                                case Next(a) => a.pure[F]
+                                case Folded.Impossible =>
+                                  F.raiseError[(Chain[E], (A, Versioned[S]))](
+                                    new IllegalArgumentException(
+                                      s"Failed to run action [$action] against state [$state]"
+                                    )
+                                  )
+                              }
       _ <- NonEmptyChain
-            .fromChain(es)
-            .traverse_(nes => journal.append(key, state.version + 1, nes))
+             .fromChain(es)
+             .traverse_(nes => journal.append(key, state.version + 1, nes))
     } yield (nextState, a)
 }

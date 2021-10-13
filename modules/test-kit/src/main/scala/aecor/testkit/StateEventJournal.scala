@@ -3,7 +3,6 @@ package aecor.testkit
 import aecor.data._
 import aecor.runtime.EventJournal
 import aecor.testkit.StateEventJournal.State
-import cats.Monad
 import cats.data.{ Chain, NonEmptyChain }
 import cats.implicits._
 import cats.mtl.MonadState
@@ -11,9 +10,11 @@ import fs2._
 import monocle.Lens
 
 object StateEventJournal {
-  final case class State[K, E](eventsByKey: Map[K, Chain[E]],
-                               eventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]],
-                               consumerOffsets: Map[(EventTag, ConsumerId), Int]) {
+  final case class State[K, E](
+      eventsByKey: Map[K, Chain[E]],
+      eventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]],
+      consumerOffsets: Map[(EventTag, ConsumerId), Int]
+  ) {
     def getConsumerOffset(tag: EventTag, consumerId: ConsumerId): Int =
       consumerOffsets.getOrElse(tag -> consumerId, 0)
 
@@ -39,21 +40,15 @@ object StateEventJournal {
         .updated(key, eventsByKey.getOrElse(key, Chain.empty) ++ events.map(_.event).toChain)
 
       val newEventsByTag: Map[EventTag, Chain[EntityEvent[K, E]]] = events.toChain.zipWithIndex
-        .flatMap {
-          case (e, idx) =>
-            Chain.fromSeq(e.tags.toSeq).map(t => t -> EntityEvent(key, idx + offset, e.event))
+        .flatMap { case (e, idx) =>
+          Chain.fromSeq(e.tags.toSeq).map(t => t -> EntityEvent(key, idx + offset, e.event))
         }
         .groupBy(_._1)
-        .map {
-          case (key, value) =>
-            key -> value.map(_._2).toChain
+        .map { case (key, value) =>
+          key -> value.map(_._2).toChain
         }
 
-      copy(
-        eventsByKey = updatedEventsById,
-        eventsByTag =
-          eventsByTag |+| newEventsByTag
-      )
+      copy(eventsByKey = updatedEventsById, eventsByTag = eventsByTag |+| newEventsByTag)
     }
   }
 
@@ -61,17 +56,19 @@ object StateEventJournal {
     def init[I, E]: State[I, E] = State(Map.empty, Map.empty, Map.empty)
   }
 
-  def apply[F[_]: Monad: MonadState[*[_], A], K, A, E](
-    lens: Lens[A, State[K, E]],
-    tagging: Tagging[K]
+  def apply[F[_]: MonadState[*[_], A], K, A, E](
+      lens: Lens[A, State[K, E]],
+      tagging: Tagging[K]
   ): StateEventJournal[F, K, A, E] =
     new StateEventJournal(lens, tagging)
 
 }
 
-final class StateEventJournal[F[_]: Monad, K, S, E](lens: Lens[S, State[K, E]], tagging: Tagging[K])(
-  implicit MS: MonadState[F, S]
-) extends EventJournal[F, K, E] {
+final class StateEventJournal[F[_], K, S, E](
+    lens: Lens[S, State[K, E]],
+    tagging: Tagging[K]
+)(implicit MS: MonadState[F, S])
+    extends EventJournal[F, K, E] {
   private final val F = lens.transformMonadState(MonadState[F, S])
 
   override def append(key: K, offset: Long, events: NonEmptyChain[E]): F[Unit] =
@@ -83,16 +80,17 @@ final class StateEventJournal[F[_]: Monad, K, S, E](lens: Lens[S, State[K, E]], 
       .flatMap(x => Stream(x.toVector: _*))
       .drop(offset)
 
-  def currentEventsByTag(tag: EventTag,
-                         consumerId: ConsumerId): Stream[F, Committable[F, EntityEvent[K, E]]] =
+  def currentEventsByTag(
+      tag: EventTag,
+      consumerId: ConsumerId
+  ): Stream[F, Committable[F, EntityEvent[K, E]]] =
     for {
       state <- Stream.eval(F.get)
       committedOffset = state.getConsumerOffset(tag, consumerId)
       result = state.getEventsByTag(tag, committedOffset)
-      a <- Stream(result.toVector: _*).map {
-            case (offset, e) =>
-              Committable(F.modify(_.setConsumerOffset(tag, consumerId, offset)), e)
-          }
+      a <- Stream(result.toVector: _*).map { case (offset, e) =>
+             Committable(F.modify(_.setConsumerOffset(tag, consumerId, offset)), e)
+           }
     } yield a
 
 }

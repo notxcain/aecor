@@ -4,9 +4,10 @@ import java.util.Properties
 
 import aecor.kafkadistributedprocessing.internal.Kafka
 import aecor.kafkadistributedprocessing.internal.Kafka._
-import cats.effect.{ ConcurrentEffect, ContextShift, Timer }
+import cats.effect.Temporal
 import cats.implicits._
-import cats.effect.implicits._
+import cats.effect.syntax.all._
+import cats.effect.kernel.Async
 import fs2.Stream
 import org.apache.kafka.clients.consumer.ConsumerConfig
 
@@ -35,8 +36,7 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
     * @param processes - list of processes to distribute
     *
     */
-  def start[F[_]: ConcurrentEffect: Timer: ContextShift](name: String,
-                                                         processes: List[F[Unit]]): F[Unit] =
+  def start[F[_]: Async: Temporal](name: String, processes: List[F[Unit]]): F[Unit] =
     Kafka
       .assignPartitions(
         settings.asProperties(name),
@@ -49,7 +49,7 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
           assignRange(processes.size, partitionCount, partition).fold(release) {
             case (offset, processCount) =>
               Stream
-                .range[F](offset, offset + processCount)
+                .range[F, Int](offset, offset + processCount)
                 .parEvalMapUnordered(processCount)(processes)
                 .compile
                 .drain

@@ -13,17 +13,16 @@ import io.circe.{ Decoder, Encoder, jawn }
 
 object persistentEncoderUtil {
   def circePersistentEncoder[A](implicit encoder: Encoder[A]): PersistentEncoder[A] =
-    PersistentEncoder.instance(
-      e => PersistentRepr("", encoder(e).noSpaces.getBytes(StandardCharsets.UTF_8))
+    PersistentEncoder.instance(e =>
+      PersistentRepr("", encoder(e).noSpaces.getBytes(StandardCharsets.UTF_8))
     )
 
   def circePersistentDecoder[A](implicit decoder: Decoder[A]): PersistentDecoder[A] =
-    PersistentDecoder.instance(
-      repr =>
-        jawn
-          .parseByteBuffer(ByteBuffer.wrap(repr.payload))
-          .flatMap(decoder.decodeJson)
-          .left
-          .map(DecodingFailure.fromThrowable)
+    PersistentDecoder.instance(repr =>
+      jawn
+        .parseByteBuffer(ByteBuffer.wrap(repr.payload))
+        .flatMap(decoder.decodeJson)
+        .left
+        .map(DecodingFailure.fromThrowable)
     )
 }

@@ -18,8 +18,8 @@ object E2eSupport {
 
   final class Runtime[F[_]] {
     def deploy[M[_[_]]: FunctorK, S, E, K](
-      behavior: EventsourcedBehavior[M, F, S, E],
-      journal: EventJournal[F, K, E]
+        behavior: EventsourcedBehavior[M, F, S, E],
+        journal: EventJournal[F, K, E]
     )(implicit F: Sync[F]): K => M[F] =
       Eventsourced[M, F, S, E, K](behavior, journal)
   }
@@ -36,10 +36,10 @@ object E2eSupport {
         _ <- items.sequence
         stateAfter <- F.get
         _ <- if (stateAfter == stateBefore) {
-              ().pure[F]
-            } else {
-              runProcesses
-            }
+               ().pure[F]
+             } else {
+               runProcesses
+             }
       } yield ()
 
     final def wireK[I, M[_[_]]: FunctorK](behavior: I => M[F]): I => M[F] =
@@ -69,13 +69,17 @@ trait E2eSupport {
 
   type F[A] = StateT[IO, SpecState, A]
 
-  final def mkJournal[I, E](lens: Lens[SpecState, StateEventJournal.State[I, E]],
-                            tagging: Tagging[I]): StateEventJournal[F, I, SpecState, E] =
+  final def mkJournal[I, E](
+      lens: Lens[SpecState, StateEventJournal.State[I, E]],
+      tagging: Tagging[I]
+  ): StateEventJournal[F, I, SpecState, E] =
     StateEventJournal[F, I, SpecState, E](lens, tagging)
 
-  final def wireProcess[In](process: In => F[Unit],
-                            source: Stream[F, Committable[F, In]],
-                            sources: Stream[F, Committable[F, In]]*)(implicit F: Sync[F]): F[Unit] =
+  final def wireProcess[In](
+      process: In => F[Unit],
+      source: Stream[F, Committable[F, In]],
+      sources: Stream[F, Committable[F, In]]*
+  )(implicit F: Sync[F]): F[Unit] =
     sources
       .fold(source)(_ ++ _)
       .evalMap(_.process(process))
