@@ -18,20 +18,20 @@ object Committable {
     B.contramap(_.value)
 
   implicit def catsMonadAndTraversInstance[F[_]: Applicative]
-    : Monad[Committable[F, *]] with Traverse[Committable[F, *]] =
+      : Monad[Committable[F, *]] with Traverse[Committable[F, *]] =
     new Monad[Committable[F, *]] with Traverse[Committable[F, *]] {
-      override def traverse[G[_], A, B](
-        fa: Committable[F, A]
-      )(f: (A) => G[B])(implicit evidence$1: Applicative[G]): G[Committable[F, B]] =
+      override def traverse[G[_], A, B](fa: Committable[F, A])(f: (A) => G[B])(implicit
+          evidence$1: Applicative[G]
+      ): G[Committable[F, B]] =
         fa.traverse(f)
 
-      override def flatMap[A, B](
-        fa: Committable[F, A]
-      )(f: (A) => Committable[F, B]): Committable[F, B] =
+      override def flatMap[A, B](fa: Committable[F, A])(
+          f: (A) => Committable[F, B]
+      ): Committable[F, B] =
         f(fa.value)
 
       override def tailRecM[A, B](
-        a: A
+          a: A
       )(f: (A) => Committable[F, Either[A, B]]): Committable[F, B] = {
         val c = f(a)
         c.value match {
@@ -44,7 +44,7 @@ object Committable {
         f(b, fa.value)
 
       override def foldRight[A, B](fa: Committable[F, A], lb: Eval[B])(
-        f: (A, Eval[B]) => Eval[B]
+          f: (A, Eval[B]) => Eval[B]
       ): Eval[B] = f(fa.value, lb)
 
       override def pure[A](x: A): Committable[F, A] = Committable.pure(x)
@@ -52,7 +52,7 @@ object Committable {
   def pure[F[_]: Applicative, A](a: A): Committable[F, A] = Committable(().pure[F], a)
   def unit[F[_]: Applicative]: Committable[F, Unit] = pure(())
   def collector[F[_], A, B](
-    pf: PartialFunction[A, B]
+      pf: PartialFunction[A, B]
   ): PartialFunction[Committable[F, A], Committable[F, B]] = {
     case c if pf.isDefinedAt(c.value) => c.map(pf)
   }

@@ -2,9 +2,9 @@ package aecor.runtime.akkageneric
 
 import aecor.encoding.{ KeyDecoder, KeyEncoder, WireProtocol }
 import aecor.macros.boopickle.BoopickleWireProtocol
+import cats.effect.kernel.Ref
 import cats.effect.Sync
-import cats.effect.concurrent.Ref
-import cats.implicits._
+import cats.syntax.all._
 import cats.tagless.FunctorK
 
 trait Counter[F[_]] {
