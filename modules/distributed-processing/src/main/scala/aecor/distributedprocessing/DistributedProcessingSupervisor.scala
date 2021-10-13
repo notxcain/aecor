@@ -20,10 +20,11 @@ object DistributedProcessingSupervisor {
     Props(new DistributedProcessingSupervisor(processCount, shardRegion, heartbeatInterval))
 }
 
-final class DistributedProcessingSupervisor(processCount: Int,
-                                            shardRegion: ActorRef,
-                                            heartbeatInterval: FiniteDuration)
-    extends Actor
+final class DistributedProcessingSupervisor(
+    processCount: Int,
+    shardRegion: ActorRef,
+    heartbeatInterval: FiniteDuration
+) extends Actor
     with ActorLogging {
 
   import context.dispatcher
@@ -49,11 +50,10 @@ final class DistributedProcessingSupervisor(processCount: Int,
       log.info(s"Performing graceful shutdown of [$shardRegion]")
       shardRegion ! ShardRegion.GracefulShutdown
       val replyTo = sender()
-      context.become {
-        case Terminated(`shardRegion`) =>
-          log.info(s"Graceful shutdown completed for [$shardRegion]")
-          context.stop(self)
-          replyTo ! ShutdownCompleted
+      context.become { case Terminated(`shardRegion`) =>
+        log.info(s"Graceful shutdown completed for [$shardRegion]")
+        context.stop(self)
+        replyTo ! ShutdownCompleted
       }
 
   }

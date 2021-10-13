@@ -1,7 +1,7 @@
 package aecor
 
 import cats.data.EitherT
-import cats.{ Applicative, Monad }
+import cats.Monad
 
 trait MonadAction[F[_], S, E] extends Monad[F] {
   def read: F[S]
@@ -15,9 +15,9 @@ trait MonadActionReject[F[_], S, E, R] extends MonadAction[F, S, E] {
 }
 
 object MonadActionReject {
-  implicit def eitherTMonadActionRejectInstance[I[_]: Applicative, S, E, R](
-    implicit F: MonadAction[I, S, E],
-    eitherTMonad: Monad[EitherT[I, R, *]]
+  implicit def eitherTMonadActionRejectInstance[I[_], S, E, R](implicit
+      F: MonadAction[I, S, E],
+      eitherTMonad: Monad[EitherT[I, R, *]]
   ): MonadActionReject[EitherT[I, R, *], S, E, R] =
     new MonadActionReject[EitherT[I, R, *], S, E, R] {
       override def reject[A](r: R): EitherT[I, R, A] = EitherT.leftT(r)
@@ -43,9 +43,9 @@ trait MonadActionLiftReject[I[_], F[_], S, E, R]
     with MonadActionReject[I, S, E, R]
 
 object MonadActionLiftReject {
-  implicit def eitherTMonadActionLiftRejectInstance[I[_], F[_], S, E, R](
-    implicit I: MonadActionLift[I, F, S, E],
-    eitherTMonad: Monad[EitherT[I, R, *]]
+  implicit def eitherTMonadActionLiftRejectInstance[I[_], F[_], S, E, R](implicit
+      I: MonadActionLift[I, F, S, E],
+      eitherTMonad: Monad[EitherT[I, R, *]]
   ): MonadActionLiftReject[EitherT[I, R, *], F, S, E, R] =
     new MonadActionLiftReject[EitherT[I, R, *], F, S, E, R] {
       override def reject[A](r: R): EitherT[I, R, A] = EitherT.leftT(r)

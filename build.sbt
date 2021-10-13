@@ -2,10 +2,7 @@ import ReleaseTransformations._
 import sbtrelease.Version.Bump
 
 lazy val buildSettings = inThisBuild(
-  Seq(
-    organization := "io.aecor",
-    crossScalaVersions := Seq("2.13.0", "2.12.8")
-  )
+  Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.6", "2.12.15"))
 )
 
 lazy val akkaVersion = "2.5.26"
@@ -13,41 +10,43 @@ lazy val akkaPersistenceCassandraVersion = "0.62"
 
 lazy val apacheKafkaClientsVersion = "2.3.0"
 
-lazy val catsVersion = "2.0.0"
-lazy val catsEffectVersion = "2.1.1"
+lazy val catsVersion = "2.6.1"
+lazy val catsEffectVersion = "3.2.9"
 
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.8.0"
 lazy val jsr305Version = "3.0.2"
 lazy val boopickleVersion = "1.3.1"
-lazy val monocleVersion = "2.0.0"
+lazy val monocleVersion = "2.1.0"
 
-lazy val fs2Version = "2.2.2"
+lazy val fs2Version = "3.1.3"
 lazy val scodecBitsVersion = "1.1.13"
 lazy val scodecCoreVersion = "1.11.4"
 
-lazy val catsTaglessVersion = "0.10"
+lazy val catsTaglessVersion = "0.14.0"
 
 lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.4"
 lazy val disciplineScalatestVersion = "1.0.0-RC1"
 lazy val embeddedKafkaVersion = "2.3.0"
-lazy val shapelessVersion = "2.3.7"
-lazy val kindProjectorVersion = "0.10.3"
+lazy val shapelessVersion = "2.3.3"
+lazy val kindProjectorVersion = "0.13.2"
 lazy val betterMonadicForVersion = "0.3.1"
 
 // Example dependencies
 
-lazy val circeVersion = "0.13.0"
-lazy val http4sVersion = "0.21.1"
-lazy val log4catsVersion = "0.3.0"
-lazy val catsMTLVersion = "0.7.0"
+lazy val circeVersion = "0.14.1"
+lazy val http4sVersion = "0.23.4"
+lazy val catsMTLVersion = "0.7.1"
 
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
-  addCompilerPlugin("org.typelevel" %% "kind-projector" % kindProjectorVersion),
+  scalacOptions ~= { opts => opts.filterNot(Set("-Xlint:nullary-override")) },
+    libraryDependencies ++= Seq(
+    compilerPlugin("org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full)
+  ),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
-  parallelExecution in Test := false,
+  parallelExecution in Test := false
 )
 
 lazy val macroSettings =
@@ -58,7 +57,7 @@ lazy val macroSettings =
         case Some((2, scalaMajor)) if scalaMajor >= 13 => Seq()
         // otherwise, quasiquotes are provided by macro paradise
         case _ =>
-          Seq(compilerPlugin("org.scalamacros" %% "paradise" % "2.1.0" cross CrossVersion.full))
+          Seq(compilerPlugin("org.scalamacros" %% "paradise" % "2.1.1" cross CrossVersion.full))
       }
     },
     libraryDependencies ++= Seq(
@@ -177,9 +176,8 @@ lazy val coreSettings = Seq(
   )
 )
 
-lazy val boopickleWireProtocolSettings = macroSettings ++ Seq(
-  libraryDependencies ++= Seq("io.suzaku" %% "boopickle" % boopickleVersion)
-)
+lazy val boopickleWireProtocolSettings =
+  macroSettings ++ Seq(libraryDependencies ++= Seq("io.suzaku" %% "boopickle" % boopickleVersion))
 
 lazy val scheduleSettings = Seq(
   libraryDependencies ++= Seq(
@@ -208,7 +206,7 @@ lazy val akkaPersistenceSettings = Seq(
     "com.typesafe.akka" %% "akka-cluster-sharding" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence" % akkaVersion,
     "com.typesafe.akka" %% "akka-persistence-query" % akkaVersion,
-    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion,
+    "com.typesafe.akka" %% "akka-persistence-cassandra" % akkaPersistenceCassandraVersion
   )
 )
 
@@ -253,7 +251,7 @@ lazy val testsSettings = Seq(
     "io.circe" %% "circe-generic" % circeVersion,
     "io.circe" %% "circe-parser" % circeVersion,
     "com.typesafe.akka" %% "akka-testkit" % akkaVersion % Test,
-    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test,
+    "com.typesafe.akka" %% "akka-persistence-cassandra-launcher" % akkaPersistenceCassandraVersion % Test
   )
 )
 

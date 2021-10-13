@@ -5,32 +5,33 @@ import java.nio.charset.StandardCharsets
 
 import aecor.distributedprocessing.DistributedProcessing.{ KillSwitch, Process }
 import aecor.distributedprocessing.DistributedProcessingWorker.KeepRunning
-import aecor.util.effect._
 import akka.actor.ActorSystem
 import akka.cluster.sharding.{ ClusterSharding, ClusterShardingSettings }
 import akka.pattern.{ BackoffOpts, BackoffSupervisor, ask }
 import akka.util.Timeout
-import cats.effect.Effect
-import cats.implicits._
+import cats.effect.kernel.Async
+import cats.syntax.functor._
 
-import scala.concurrent.duration.{ FiniteDuration, _ }
+import scala.concurrent.duration._
+
 final class DistributedProcessing private (system: ActorSystem) {
 
-  /**
-    * Starts `processes` distributed over underlying akka cluster.
+  /** Starts `processes` distributed over underlying akka cluster.
     *
-    * @param name - type name of underlying cluster sharding
-    * @param processes - list of processes to distribute
-    *
+    * @param name
+    *   - type name of underlying cluster sharding
+    * @param processes
+    *   - list of processes to distribute
     */
-  def start[F[_]: Effect](name: String,
-                          processes: List[Process[F]],
-                          settings: DistributedProcessingSettings =
-                            DistributedProcessingSettings.default(system)): F[KillSwitch[F]] =
-    Effect[F].delay {
+  def start[F[_]: Async](
+      name: String,
+      processes: List[Process[F]],
+      settings: DistributedProcessingSettings = DistributedProcessingSettings.default(system)
+  ): F[KillSwitch[F]] =
+    DistributedProcessingWorker.props(processes, name).use { childProps =>
       val opts = BackoffOpts
         .onFailure(
-          DistributedProcessingWorker.props(processes, name),
+          childProps,
           "worker",
           settings.minBackoff,
           settings.maxBackoff,
@@ -43,12 +44,12 @@ final class DistributedProcessing private (system: ActorSystem) {
         typeName = name,
         entityProps = props,
         settings = settings.clusterShardingSettings,
-        extractEntityId = {
-          case c @ KeepRunning(workerId) => (workerId.toString, c)
+        extractEntityId = { case c @ KeepRunning(workerId) =>
+          (workerId.toString, c)
         },
         extractShardId = {
           case KeepRunning(workerId) => (workerId % settings.numberOfShards).toString
-          case other                 => throw new IllegalArgumentException(s"Unexpected message [$other]")
+          case other => throw new IllegalArgumentException(s"Unexpected message [$other]")
         }
       )
 
@@ -59,10 +60,15 @@ final class DistributedProcessing private (system: ActorSystem) {
           .encode(name, StandardCharsets.UTF_8.name())
       )
       implicit val timeout = Timeout(settings.shutdownTimeout)
-      KillSwitch {
-        Effect[F].fromFuture {
-          regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
-        }.void
+
+      Async[F].delay {
+        KillSwitch {
+          Async[F].fromFuture {
+            Async[F].delay {
+              regionSupervisor ? DistributedProcessingSupervisor.GracefulShutdown
+            }
+          }.void
+        }
       }
     }
 }
@@ -74,13 +80,15 @@ object DistributedProcessing {
   final case class Process[F[_]](run: F[RunningProcess[F]]) extends AnyVal
 }
 
-final case class DistributedProcessingSettings(minBackoff: FiniteDuration,
-                                               maxBackoff: FiniteDuration,
-                                               randomFactor: Double,
-                                               shutdownTimeout: FiniteDuration,
-                                               numberOfShards: Int,
-                                               heartbeatInterval: FiniteDuration,
-                                               clusterShardingSettings: ClusterShardingSettings)
+final case class DistributedProcessingSettings(
+    minBackoff: FiniteDuration,
+    maxBackoff: FiniteDuration,
+    randomFactor: Double,
+    shutdownTimeout: FiniteDuration,
+    numberOfShards: Int,
+    heartbeatInterval: FiniteDuration,
+    clusterShardingSettings: ClusterShardingSettings
+)
 
 object DistributedProcessingSettings {
   def default(clusterShardingSettings: ClusterShardingSettings): DistributedProcessingSettings =

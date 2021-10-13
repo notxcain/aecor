@@ -33,7 +33,7 @@ class BoopickleWireProtocolTest extends AnyFunSuite with Matchers {
   }
 
   def server[M[_[_]], F[_]: Applicative](
-    actions: M[F]
+      actions: M[F]
   )(implicit M: WireProtocol[M]): BitVector => F[Attempt[BitVector]] = { in =>
     M.decoder
       .decodeValue(in) match {
@@ -49,7 +49,7 @@ class BoopickleWireProtocolTest extends AnyFunSuite with Matchers {
   type DecodingResultT[F[_], A] = F[Attempt[A]]
 
   def client[M[_[_]], F[_]: Functor](
-    server: BitVector => F[Attempt[BitVector]]
+      server: BitVector => F[Attempt[BitVector]]
   )(implicit M: WireProtocol[M], MI: FunctorK[M]): M[DecodingResultT[F, *]] =
     M.encoder
       .mapK[DecodingResultT[F, *]](new (WireProtocol.Encoded ~> DecodingResultT[F, *]) {

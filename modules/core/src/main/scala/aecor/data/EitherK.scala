@@ -10,8 +10,7 @@ import scodec.{ Codec, Decoder, Encoder }
 import scodec.codecs._
 import cats.tagless.syntax.functorK._
 
-/**
-  * Higher-kinded transformer for EitherT
+/** Higher-kinded transformer for EitherT
   */
 final case class EitherK[M[_[_]], A, F[_]](value: M[EitherT[F, A, *]]) extends AnyVal {
   def unwrap(implicit M: FunctorK[M]): M[λ[α => F[Either[A, α]]]] =
@@ -27,9 +26,9 @@ final case class EitherK[M[_[_]], A, F[_]](value: M[EitherT[F, A, *]]) extends A
 }
 
 object EitherK {
-  implicit def wireProtocol[M[_[_]]: FunctorK, A](
-    implicit M: WireProtocol[M],
-    aCodec: Codec[A]
+  implicit def wireProtocol[M[_[_]]: FunctorK, A](implicit
+      M: WireProtocol[M],
+      aCodec: Codec[A]
   ): WireProtocol[EitherK[M, A, *[_]]] =
     new WireProtocol[EitherK[M, A, *[_]]] {
 

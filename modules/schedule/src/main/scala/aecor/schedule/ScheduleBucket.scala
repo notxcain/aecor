@@ -14,8 +14,8 @@ private[aecor] trait ScheduleBucket[F[_]] {
 
 private[aecor] object ScheduleBucket {
   import boopickle.Default._
-  implicit val localDateTimePickler: Pickler[LocalDateTime] = transformPickler(
-    (ldt: (Long, Int)) => LocalDateTime.ofEpochSecond(ldt._1, ldt._2, ZoneOffset.UTC)
+  implicit val localDateTimePickler: Pickler[LocalDateTime] = transformPickler((ldt: (Long, Int)) =>
+    LocalDateTime.ofEpochSecond(ldt._1, ldt._2, ZoneOffset.UTC)
   )((ldt: LocalDateTime) => (ldt.toEpochSecond(ZoneOffset.UTC), ldt.getNano))
 
   implicit def functorK: FunctorK[ScheduleBucket] = Derive.functorK

@@ -18,18 +18,20 @@ import aecor.runtime.akkapersistence.serialization.{
   PersistentEncoder,
   PersistentRepr
 }
-import aecor.util.effect._
 import akka.actor.{ ActorLogging, Props, ReceiveTimeout, Stash, Status }
 import akka.cluster.sharding.ShardRegion
 import akka.pattern.pipe
 import akka.persistence.journal.Tagged
 import akka.persistence.{ PersistentActor, RecoveryCompleted, SnapshotOffer }
 import cats.data.Chain
-import cats.effect.Effect
+import cats.effect.kernel.{ Async, Resource }
+import cats.effect.std.Dispatcher
+import cats.effect.unsafe.IORuntime
 import cats.implicits._
 import scodec.bits.BitVector
 import scodec.{ Attempt, Encoder }
 
+import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 import scala.util.{ Left, Right }
 
@@ -37,55 +39,76 @@ private[akkapersistence] object AkkaPersistenceRuntimeActor {
 
   val PersistenceIdSeparator: String = "-"
 
-  def props[M[_[_]], F[_]: Effect, I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
-    entityName: String,
-    behavior: EventsourcedBehavior[M, F, State, Event],
-    snapshotPolicy: SnapshotPolicy[State],
-    tagging: Tagging[I],
-    idleTimeout: FiniteDuration,
-    journalPluginId: String,
-    snapshotPluginId: String
-  )(implicit M: WireProtocol[M]): Props =
-    Props(
-      new AkkaPersistenceRuntimeActor(
-        entityName,
-        behavior,
-        snapshotPolicy,
-        tagging,
-        idleTimeout,
-        journalPluginId,
-        snapshotPluginId
+  def props[M[_[_]],
+            F[_]: Async,
+            I: KeyDecoder,
+            State,
+            Event: PersistentEncoder: PersistentDecoder
+  ](
+      entityName: String,
+      behavior: EventsourcedBehavior[M, F, State, Event],
+      snapshotPolicy: SnapshotPolicy[State],
+      tagging: Tagging[I],
+      idleTimeout: FiniteDuration,
+      journalPluginId: String,
+      snapshotPluginId: String
+  )(implicit M: WireProtocol[M]): Resource[F, Props] =
+    Dispatcher[F]
+      .map(dispatcher =>
+        Props(
+          new AkkaPersistenceRuntimeActor(
+            entityName,
+            behavior,
+            snapshotPolicy,
+            tagging,
+            idleTimeout,
+            journalPluginId,
+            snapshotPluginId,
+            dispatcher
+          )
+        )
       )
-    )
 
   final case class HandleCommand(commandBytes: BitVector) extends Message
   final case class CommandResult(resultBytes: BitVector) extends Message
   case object Stop
 }
 
-/**
+/** Actor encapsulating state of event sourced entity behavior [Behavior]
   *
-  * Actor encapsulating state of event sourced entity behavior [Behavior]
-  *
-  * @param entityName entity name used as persistence prefix and as a tag for all events
-  * @param behavior entity behavior
-  * @param snapshotPolicy snapshot policy to use
-  * @param idleTimeout - time with no commands after which graceful actor shutdown is initiated
+  * @param entityName
+  *   entity name used as persistence prefix and as a tag for all events
+  * @param behavior
+  *   entity behavior
+  * @param snapshotPolicy
+  *   snapshot policy to use
+  * @param idleTimeout
+  *   - time with no commands after which graceful actor shutdown is initiated
   */
-private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], I: KeyDecoder, State, Event: PersistentEncoder: PersistentDecoder](
-  entityName: String,
-  behavior: EventsourcedBehavior[M, F, State, Event],
-  snapshotPolicy: SnapshotPolicy[State],
-  tagger: Tagging[I],
-  idleTimeout: FiniteDuration,
-  override val journalPluginId: String,
-  override val snapshotPluginId: String
-)(implicit M: WireProtocol[M], F: Effect[F])
+private[akkapersistence] final class AkkaPersistenceRuntimeActor[
+    M[_[_]],
+    F[
+        _
+    ],
+    I: KeyDecoder,
+    State,
+    Event: PersistentEncoder: PersistentDecoder
+](
+    entityName: String,
+    behavior: EventsourcedBehavior[M, F, State, Event],
+    snapshotPolicy: SnapshotPolicy[State],
+    tagger: Tagging[I],
+    idleTimeout: FiniteDuration,
+    override val journalPluginId: String,
+    override val snapshotPluginId: String,
+    dispatcher: Dispatcher[F]
+)(implicit M: WireProtocol[M], F: Async[F])
     extends PersistentActor
     with ActorLogging
     with Stash {
 
-  import context.dispatcher
+  private implicit val ioRuntime: IORuntime = IORuntime.global
+  private implicit val executionContext: ExecutionContext = ioRuntime.compute
 
   private case class ActionResult(opId: UUID, events: Chain[Event], resultBytes: BitVector)
 
@@ -187,34 +210,44 @@ private[akkapersistence] final class AkkaPersistenceRuntimeActor[M[_[_]], F[_], 
 
   def performInvocation[A](invocation: Invocation[M, A], resultEncoder: Encoder[A]): Unit = {
     println(invocation)
+
     val opId = UUID.randomUUID()
-    behavior
-      .run(state, invocation)
-      .flatMap {
-        case Next((events, result)) =>
-          F.delay(
-            log.info(
-              "[{}] [{}] produced reply [{}] and events [{}]",
-              persistenceId,
-              invocation,
-              result,
-              events
-            )
-          ) >> resultEncoder
-            .encode(result)
-            .map(a => ActionResult(opId, events, a))
-            .lift[F]
-        case Impossible =>
-          val error = new IllegalStateException(
-            s"[$persistenceId] Command [$invocation] produced illegal fold"
-          )
-          F.delay(
-            log.error(error, "[{}] Command [{}] produced illegal fold", persistenceId, invocation)
-          ) >>
-            F.raiseError[ActionResult](error)
+
+    dispatcher
+      .unsafeToFuture {
+        behavior
+          .run(state, invocation)
+          .flatMap {
+            case Next((events, result)) =>
+              F.delay(
+                log.info(
+                  "[{}] [{}] produced reply [{}] and events [{}]",
+                  persistenceId,
+                  invocation,
+                  result,
+                  events
+                )
+              ) >> resultEncoder
+                .encode(result)
+                .map(a => ActionResult(opId, events, a))
+                .lift[F]
+            case Impossible =>
+              val error = new IllegalStateException(
+                s"[$persistenceId] Command [$invocation] produced illegal fold"
+              )
+              F.delay(
+                log.error(
+                  error,
+                  "[{}] Command [{}] produced illegal fold",
+                  persistenceId,
+                  invocation
+                )
+              ) >>
+                F.raiseError[ActionResult](error)
+          }
       }
-      .unsafeToFuture()
-      .pipeTo(self)(sender)
+      .pipeTo(self)(sender())
+
     context.become {
       case ActionResult(`opId`, events, resultBytes) =>
         handleCommandResult(events, CommandResult(resultBytes))

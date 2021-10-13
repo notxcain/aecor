@@ -8,31 +8,25 @@ import scala.annotation.tailrec
 
 abstract class KeyDecoder[A] { self =>
 
-  /**
-    * Attempt to convert a String to a value.
+  /** Attempt to convert a String to a value.
     */
   def apply(key: String): Option[A]
 
   final def decode(key: String): Option[A] = apply(key)
 
-  /**
-    * Construct an instance for type `B` from an instance for type `A`.
+  /** Construct an instance for type `B` from an instance for type `A`.
     */
   final def map[B](f: A => B): KeyDecoder[B] = new KeyDecoder[B] {
     final def apply(key: String): Option[B] = self(key).map(f)
   }
 
-  /**
-    * Construct an instance for type `B` from an instance for type `A` given a
-    * monadic function.
+  /** Construct an instance for type `B` from an instance for type `A` given a monadic function.
     */
   final def flatMap[B](f: A => KeyDecoder[B]): KeyDecoder[B] = new KeyDecoder[B] {
     final def apply(key: String): Option[B] = self(key).flatMap(a => f(a)(key))
   }
 
-  /**
-    * Construct an instance for type `B` from an instance for type `A`
-    * by applying partial function.
+  /** Construct an instance for type `B` from an instance for type `A` by applying partial function.
     */
   def collect[B](f: PartialFunction[A, B]): KeyDecoder[B] = new KeyDecoder[B] {
     override def apply(key: String): Option[B] = self(key).collect(f)

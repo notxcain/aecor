@@ -70,8 +70,10 @@ trait FoldedInstances {
     with MonadError[Folded, Unit]
     with CoflatMap[Folded]
     with Alternative[Folded] =
-    new Traverse[Folded] with MonadError[Folded, Unit] with CoflatMap[Folded]
-    with Alternative[Folded] {
+    new Traverse[Folded]
+      with MonadError[Folded, Unit]
+      with CoflatMap[Folded]
+      with Alternative[Folded] {
 
       def empty[A]: Folded[A] = Impossible
 
@@ -96,8 +98,9 @@ trait FoldedInstances {
       override def map2[A, B, Z](fa: Folded[A], fb: Folded[B])(f: (A, B) => Z): Folded[Z] =
         fa.flatMap(a => fb.map(b => f(a, b)))
 
-      override def map2Eval[A, B, Z](fa: Folded[A],
-                                     fb: Eval[Folded[B]])(f: (A, B) => Z): Eval[Folded[Z]] =
+      override def map2Eval[A, B, Z](fa: Folded[A], fb: Eval[Folded[B]])(
+          f: (A, B) => Z
+      ): Eval[Folded[Z]] =
         fa match {
           case Impossible => Now(Impossible)
           case Next(a)    => fb.map(_.map(f(a, _)))

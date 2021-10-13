@@ -26,10 +26,12 @@ trait Algebra[F[_]] {
 
 object Algebra {
   import boopickle.Default._
-  final case class TransactionInfo(fromAccountId: From[AccountId],
-                                   toAccountId: To[AccountId],
-                                   amount: Amount,
-                                   succeeded: Option[Boolean])
+  final case class TransactionInfo(
+      fromAccountId: From[AccountId],
+      toAccountId: To[AccountId],
+      amount: Amount,
+      succeeded: Option[Boolean]
+  )
 
   implicit def functorK: FunctorK[Algebra] = Derive.functorK
   implicit def wireProtocol: WireProtocol[Algebra] = BoopickleWireProtocol.derive

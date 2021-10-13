@@ -13,9 +13,8 @@ object ScheduleBucketId {
       encoder(scheduleName, scheduleBucket)
   }
   implicit val keyDecoder: KeyDecoder[ScheduleBucketId] =
-    KeyDecoder[String].collect {
-      case encoder(scheduleName :: scheduleBucket :: Nil) =>
-        ScheduleBucketId(scheduleName, scheduleBucket)
+    KeyDecoder[String].collect { case encoder(scheduleName :: scheduleBucket :: Nil) =>
+      ScheduleBucketId(scheduleName, scheduleBucket)
     }
 
 }

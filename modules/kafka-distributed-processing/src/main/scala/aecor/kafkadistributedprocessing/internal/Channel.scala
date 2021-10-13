@@ -3,8 +3,8 @@ package aecor.kafkadistributedprocessing.internal
 import aecor.kafkadistributedprocessing.internal
 import aecor.kafkadistributedprocessing.internal.Channel.CompletionCallback
 import cats.effect.Concurrent
-import cats.effect.concurrent.Deferred
 import cats.effect.implicits._
+import cats.effect.kernel.Deferred
 import cats.implicits._
 
 private[kafkadistributedprocessing] final case class Channel[F[_]](watch: F[CompletionCallback[F]],
@@ -17,7 +17,7 @@ private[kafkadistributedprocessing] object Channel {
     for {
       deferredCallback <- Deferred[F, CompletionCallback[F]]
       closed <- Deferred[F, Unit]
-      close = closed.complete(())
+      close = closed.complete(()).void
       watch = deferredCallback.get
       call = Deferred[F, Unit]
         .flatMap { deferredCompletion =>

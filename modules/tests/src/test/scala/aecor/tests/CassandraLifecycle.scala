@@ -24,9 +24,11 @@ object CassandraLifecycle {
     akka.test.single-expect-default = 20s
     """)
 
-  def awaitPersistenceInit(system: ActorSystem,
-                           journalPluginId: String = "",
-                           snapshotPluginId: String = ""): Unit = {
+  def awaitPersistenceInit(
+      system: ActorSystem,
+      journalPluginId: String = "",
+      snapshotPluginId: String = ""
+  ): Unit = {
     val probe = TestProbe()(system)
     val t0 = System.nanoTime()
     var n = 0
@@ -49,21 +51,20 @@ object CassandraLifecycle {
     }
   }
 
-  class AwaitPersistenceInit(override val journalPluginId: String,
-                             override val snapshotPluginId: String)
-      extends PersistentActor {
+  class AwaitPersistenceInit(
+      override val journalPluginId: String,
+      override val snapshotPluginId: String
+  ) extends PersistentActor {
     def persistenceId: String = "persistenceInit"
 
-    def receiveRecover: Receive = {
-      case _ =>
+    def receiveRecover: Receive = { case _ =>
     }
 
-    def receiveCommand: Receive = {
-      case msg =>
-        persist(msg) { _ =>
-          sender() ! msg
-          context.stop(self)
-        }
+    def receiveCommand: Receive = { case msg =>
+      persist(msg) { _ =>
+        sender() ! msg
+        context.stop(self)
+      }
     }
   }
 }
