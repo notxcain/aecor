@@ -5,7 +5,7 @@ lazy val buildSettings = inThisBuild(
   Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.6", "2.12.15"))
 )
 
-lazy val akkaVersion = "2.5.26"
+lazy val akkaVersion = "2.6.1"
 lazy val akkaPersistenceCassandraVersion = "0.62"
 
 lazy val apacheKafkaClientsVersion = "2.3.0"
