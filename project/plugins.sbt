@@ -1,6 +1,6 @@
 logLevel := Level.Warn
 
-libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.9.6"
+libraryDependencies += "com.thesamet.scalapb" %% "compilerplugin" % "0.9.8"
 
 addSbtPlugin("com.github.gseitz" % "sbt-release" % "1.0.12")
 addSbtPlugin("com.typesafe.sbt" % "sbt-git" % "1.0.0")
