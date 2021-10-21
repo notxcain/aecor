@@ -29,12 +29,12 @@ final class DistributedProcessing(settings: DistributedProcessingSettings) {
     }
   }
 
-  /**
-    * Starts `processes` distributed over internal Kafka topic consumer.
+  /** Starts `processes` distributed over internal Kafka topic consumer.
     *
-    * @param name - used as groupId for underlying Kafka partition assignment machinery
-    * @param processes - list of processes to distribute
-    *
+    * @param name
+    *   - used as groupId for underlying Kafka partition assignment machinery
+    * @param processes
+    *   - list of processes to distribute
     */
   def start[F[_]: Async: Temporal](name: String, processes: List[F[Unit]]): F[Unit] =
     Kafka
@@ -73,7 +73,8 @@ final case class DistributedProcessingSettings(brokers: Set[String],
                                                topicName: String,
                                                pollingInterval: FiniteDuration = 500.millis,
                                                pollTimeout: FiniteDuration = 50.millis,
-                                               consumerSettings: Map[String, String] = Map.empty) {
+                                               consumerSettings: Map[String, String] = Map.empty
+) {
   def withClientId(clientId: String): DistributedProcessingSettings =
     withConsumerSetting(ConsumerConfig.CLIENT_ID_CONFIG, clientId)
 
@@ -84,8 +85,8 @@ final case class DistributedProcessingSettings(brokers: Set[String],
 
   def asProperties(groupId: String): Properties = {
     val properties = new Properties()
-    consumerSettings.foreach {
-      case (key, value) => properties.setProperty(key, value)
+    consumerSettings.foreach { case (key, value) =>
+      properties.setProperty(key, value)
     }
     properties.setProperty(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, brokers.mkString(","))
     properties.setProperty(ConsumerConfig.GROUP_ID_CONFIG, groupId)
