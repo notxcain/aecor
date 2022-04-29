@@ -94,7 +94,7 @@ import aecor.data.Folded.syntax._
 import SubscriptionState._
 
 final case class SubscriptionState(status: Status) {
-  def update(e: SubscriptionEvent): Folded[Subscription] = e match {
+  def update(e: SubscriptionEvent): Folded[SubscriptionState] = e match {
     case SubscriptionCreated(_, _, _) =>
       impossible
     case SubscriptionPaused =>
