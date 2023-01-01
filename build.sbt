@@ -11,7 +11,7 @@ lazy val akkaPersistenceCassandraVersion = "0.62"
 lazy val apacheKafkaClientsVersion = "2.3.0"
 
 lazy val catsVersion = "2.6.1"
-lazy val catsEffectVersion = "3.2.9"
+lazy val catsEffectVersion = "3.4.4"
 
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.8.0"
@@ -42,8 +42,10 @@ lazy val catsMTLVersion = "0.7.1"
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
   scalacOptions ~= { opts => opts.filterNot(Set("-Xlint:nullary-override")) },
-    libraryDependencies ++= Seq(
-    compilerPlugin("org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full)
+  libraryDependencies ++= Seq(
+    compilerPlugin(
+      "org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full
+    )
   ),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false
