@@ -23,7 +23,7 @@ lazy val fs2Version = "3.1.3"
 lazy val scodecBitsVersion = "1.1.13"
 lazy val scodecCoreVersion = "1.11.4"
 
-lazy val catsTaglessVersion = "0.14.0"
+lazy val catsTaglessVersion = "0.15.0"
 
 lazy val scalatestPlusScalaCheckVersion = "3.1.0.0-RC2"
 lazy val scalaCheckShapelessVersion = "1.2.4"
@@ -42,8 +42,10 @@ lazy val catsMTLVersion = "0.7.1"
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
   scalacOptions ~= { opts => opts.filterNot(Set("-Xlint:nullary-override")) },
-    libraryDependencies ++= Seq(
-    compilerPlugin("org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full)
+  libraryDependencies ++= Seq(
+    compilerPlugin(
+      "org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full
+    )
   ),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false
