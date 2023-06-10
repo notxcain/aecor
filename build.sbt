@@ -2,7 +2,7 @@ import ReleaseTransformations._
 import sbtrelease.Version.Bump
 
 lazy val buildSettings = inThisBuild(
-  Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.6", "2.12.15"))
+  Seq(organization := "io.aecor", crossScalaVersions := Seq("2.13.11", "2.12.15"))
 )
 
 lazy val akkaVersion = "2.5.26"
@@ -42,8 +42,10 @@ lazy val catsMTLVersion = "0.7.1"
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
   scalacOptions ~= { opts => opts.filterNot(Set("-Xlint:nullary-override")) },
-    libraryDependencies ++= Seq(
-    compilerPlugin("org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full)
+  libraryDependencies ++= Seq(
+    compilerPlugin(
+      "org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full
+    )
   ),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false
