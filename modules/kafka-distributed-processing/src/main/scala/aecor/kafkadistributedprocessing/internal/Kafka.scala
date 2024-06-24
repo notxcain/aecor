@@ -21,13 +21,14 @@ private[kafkadistributedprocessing] object Kafka {
   final case class AssignedPartition[F[_]](partition: Partition,
                                            partitionCount: Int,
                                            watchRevocation: F[CompletionCallback[F]],
-                                           release: F[Unit])
+                                           release: F[Unit]
+  )
 
   def watchRebalanceEvents[F[_]: Async](
-    consumer: KafkaConsumer[F, Unit, Unit],
-    topic: String,
-    pollingInterval: FiniteDuration,
-    pollTimeout: FiniteDuration
+      consumer: KafkaConsumer[F, Unit, Unit],
+      topic: String,
+      pollingInterval: FiniteDuration,
+      pollTimeout: FiniteDuration
   )(implicit T: Temporal[F]): Stream[F, Committable[F, RebalanceEvent]] =
     Stream
       .force(
@@ -42,10 +43,10 @@ private[kafkadistributedprocessing] object Kafka {
       )
 
   def assignPartitions[F[_]: Async: Temporal](
-    config: Properties,
-    topic: String,
-    pollingInterval: FiniteDuration,
-    pollTimeout: FiniteDuration
+      config: Properties,
+      topic: String,
+      pollingInterval: FiniteDuration,
+      pollTimeout: FiniteDuration
   ): Stream[F, AssignedPartition[F]] =
     Stream
       .resource(KafkaConsumer.create[F](config, new UnitDeserializer, new UnitDeserializer))
@@ -60,9 +61,12 @@ private[kafkadistributedprocessing] object Kafka {
                     case RebalanceEvent.PartitionsAssigned(partitions) =>
                       partitions.toList
                         .traverse { partition =>
-                          Channel.create[F].map {
-                            case Channel(watch, close, call) =>
-                              AssignedPartition(partition.partition(), partitionCount, watch, close) -> call
+                          Channel.create[F].map { case Channel(watch, close, call) =>
+                            AssignedPartition(partition.partition(),
+                                              partitionCount,
+                                              watch,
+                                              close
+                            ) -> call
                           }
                         }
                         .map { list =>
@@ -88,9 +92,8 @@ private[kafkadistributedprocessing] object Kafka {
                   handleEvent <* commit
               }
           }
-          .flatMap {
-            case (assignedPartitions, _) =>
-              Stream.emits(assignedPartitions)
+          .flatMap { case (assignedPartitions, _) =>
+            Stream.emits(assignedPartitions)
           }
       }
 

@@ -16,19 +16,21 @@ import scala.collection.JavaConverters._
 private[kafkadistributedprocessing] object RebalanceEvents {
   final class UsePartiallyApplied[F[_]] {
     def subscribe[A](
-      f: ConsumerRebalanceListener => F[Unit]
+        f: ConsumerRebalanceListener => F[Unit]
     )(implicit F: Async[F]): F[Stream[F, Committable[F, RebalanceEvent]]] =
       for {
         queue <- Queue.unbounded[F, Option[Committable[F, RebalanceEvent]]]
         dispatcher <- Dispatcher[F].allocated.map(_._1)
         listener = new Listener[F](
-          event =>
-            Deferred[F, Unit]
-              .flatMap { completion =>
-                queue.offer(Committable(completion.complete(()).void, event).some) >> completion.get
-            },
-          dispatcher
-        )
+                     event =>
+                       Deferred[F, Unit]
+                         .flatMap { completion =>
+                           queue.offer(
+                             Committable(completion.complete(()).void, event).some
+                           ) >> completion.get
+                         },
+                     dispatcher
+                   )
         _ <- f(listener)
       } yield Stream.fromQueueNoneTerminated(queue)
   }
@@ -42,8 +44,8 @@ private[kafkadistributedprocessing] object RebalanceEvents {
   }
 
   private final class Listener[F[_]: Async](processEvent: RebalanceEvent => F[Unit],
-                                            dispatcher: Dispatcher[F])
-      extends ConsumerRebalanceListener {
+                                            dispatcher: Dispatcher[F]
+  ) extends ConsumerRebalanceListener {
 
     override def onPartitionsRevoked(partitions: util.Collection[common.TopicPartition]): Unit =
       dispatcher.unsafeRunSync(

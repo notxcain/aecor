@@ -16,7 +16,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
 
 private[kafkadistributedprocessing] final class KafkaConsumer[F[_], K, V](
-  withConsumer: (Consumer[K, V] => *) ~> F
+    withConsumer: (Consumer[K, V] => *) ~> F
 ) {
 
   def subscribe(topics: Set[String], listener: ConsumerRebalanceListener): F[Unit] =
@@ -41,26 +41,24 @@ private[kafkadistributedprocessing] final class KafkaConsumer[F[_], K, V](
 private[kafkadistributedprocessing] object KafkaConsumer {
   final class Create[F[_]] {
     def apply[K, V](
-      config: Properties,
-      keyDeserializer: Deserializer[K],
-      valueDeserializer: Deserializer[V]
+        config: Properties,
+        keyDeserializer: Deserializer[K],
+        valueDeserializer: Deserializer[V]
     )(implicit F: Async[F]): Resource[F, KafkaConsumer[F, K, V]] = {
       val create = F.defer {
         val executor = Executors.newSingleThreadExecutor()
 
         def eval[A](a: => A): F[A] =
           F.async_[A] { cb =>
-              executor.execute(
-                () =>
-                  cb {
-                    try Right(a)
-                    catch {
-                      case e: Throwable => Left(e)
-                    }
+            executor.execute(() =>
+              cb {
+                try Right(a)
+                catch {
+                  case e: Throwable => Left(e)
                 }
-              )
-            }
-            .evalOn(ExecutionContext.fromExecutor(executor))
+              }
+            )
+          }.evalOn(ExecutionContext.fromExecutor(executor))
 
         eval {
           val original = Thread.currentThread.getContextClassLoader

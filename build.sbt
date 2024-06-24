@@ -42,8 +42,10 @@ lazy val catsMTLVersion = "0.7.1"
 lazy val commonSettings = Seq(
   scalacOptions += "-Xsource:2.13",
   scalacOptions ~= { opts => opts.filterNot(Set("-Xlint:nullary-override")) },
-    libraryDependencies ++= Seq(
-    compilerPlugin("org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full)
+  libraryDependencies ++= Seq(
+    compilerPlugin(
+      "org.typelevel" % "kind-projector" % kindProjectorVersion cross CrossVersion.full
+    )
   ),
   addCompilerPlugin("com.olegpy" %% "better-monadic-for" % betterMonadicForVersion),
   parallelExecution in Test := false

@@ -42,14 +42,14 @@ class KafkaTest extends AnyFunSuite with IOSupport with KafkaSupport {
       queue <- Queue.unbounded[IO, (Int, RebalanceEvent)]
 
       run = (n: Int) =>
-        watchRebalanceEvents
-          .evalMap { x =>
-            val e = n -> x.value
-            queue.enqueue1(e) >> x.commit
-          }
-          .compile
-          .drain
-          .start
+              watchRebalanceEvents
+                .evalMap { x =>
+                  val e = n -> x.value
+                  queue.enqueue1(e) >> x.commit
+                }
+                .compile
+                .drain
+                .start
 
       p1 <- run(1)
 
@@ -70,14 +70,13 @@ class KafkaTest extends AnyFunSuite with IOSupport with KafkaSupport {
     val (l1, l2, l3) = program.unsafeRunTimed(40.seconds).get
 
     def fold(list: List[(Int, RebalanceEvent)]): Map[Int, Set[Int]] =
-      list.foldLeft(Map.empty[Int, Set[Int]]) {
-        case (s, (c, e)) =>
-          e match {
-            case PartitionsRevoked(partitions) =>
-              s.updated(c, s.getOrElse(c, Set.empty[Int]) -- partitions.map(_.partition()))
-            case PartitionsAssigned(partitions) =>
-              s.updated(c, s.getOrElse(c, Set.empty[Int]) ++ partitions.map(_.partition()))
-          }
+      list.foldLeft(Map.empty[Int, Set[Int]]) { case (s, (c, e)) =>
+        e match {
+          case PartitionsRevoked(partitions) =>
+            s.updated(c, s.getOrElse(c, Set.empty[Int]) -- partitions.map(_.partition()))
+          case PartitionsAssigned(partitions) =>
+            s.updated(c, s.getOrElse(c, Set.empty[Int]) ++ partitions.map(_.partition()))
+        }
       }
 
     assert(fold(l1) == Map(1 -> Set(1, 0, 3, 2)))
