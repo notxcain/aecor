@@ -16,7 +16,7 @@ lazy val catsEffectVersion = "3.2.9"
 lazy val logbackVersion = "1.2.3"
 lazy val cassandraDriverExtrasVersion = "3.8.0"
 lazy val jsr305Version = "3.0.2"
-lazy val boopickleVersion = "1.3.1"
+lazy val boopickleVersion = "1.3.3"
 lazy val monocleVersion = "2.1.0"
 
 lazy val fs2Version = "3.1.3"
